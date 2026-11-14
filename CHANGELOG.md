@@ -2,6 +2,15 @@
 
 Each milestone from `docs/GDD.md` is a minor version.
 
+## 0.7.0: Milestone 7, animals, combat and minimap
+
+- Wildlife: rabbits and deer (run away), boars (fight back when hurt), wolves and bears (attack people nearby; more wolves at night). Populations refill over time, away from the village.
+- Combat: Space swings at the nearest animal; animals have HP bars when hurt. Player has 10 HP that regenerates; at 0 you wake up at the village and lose carried resources.
+- Carcasses hold meat: E takes it (weight permitting). Carcasses rot after a day.
+- Hunters (Cabana do caçador) track prey near the hut, shoot it, collect the meat and deliver it.
+- Villagers have HP, run home from attacking animals, heal over time and can be killed.
+- Minimap in the bottom-right corner (M toggles).
+
 ## 0.6.0: Milestone 6, jobs
 
 - Villagers have 1–5 star ratings in Corte de lenha, Cantaria, Mineração and Caça (tier sets the ratings; traits are now fully random).

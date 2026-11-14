@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { NPC_SPEED, WORKER_LOAD, WORKER_TIME_FACTOR } from '../config';
+import { HUNTER_RANGE, NPC_SPEED, WORKER_LOAD, WORKER_TIME_FACTOR } from '../config';
 import { BUILDING_DEFS, type Building, type Buildings } from '../game/buildings';
 import { NODE_DEFS } from '../game/gathering';
 import type { Resource } from '../game/inventory';
@@ -18,9 +18,25 @@ export interface NpcWorld {
   harvest(i: number): Resource | null;
   /** Adds resources to the central stockpile. */
   deposit(resource: Resource, n: number): void;
+  /** Position of an aggressive animal hunting near (gx, gy), if any. */
+  threat(gx: number, gy: number): { x: number; y: number } | null;
+  /** Nearest live prey (skittish animal) within `r` tiles of (cx, cy). */
+  findPrey(cx: number, cy: number, r: number): Prey | null;
+  prey(id: number): Prey | null;
+  /** A hunter's shot hits prey `id`. Returns true if it died. */
+  shoot(from: Npc, id: number, damage: number): boolean;
+  /** Nearest carcass with meat within `r` tiles of (cx, cy). */
+  findCarcass(cx: number, cy: number, r: number): Prey | null;
+  takeMeat(id: number, max: number): number;
 }
 
-type State = 'idle' | 'toNode' | 'working' | 'toDeposit';
+export interface Prey {
+  id: number;
+  gx: number;
+  gy: number;
+}
+
+type State = 'idle' | 'toNode' | 'working' | 'toDeposit' | 'hunt' | 'toCarcass';
 
 /** Footprint rectangle helpers. */
 const footprintOf = (b: Building) => ({ x: b.tx, y: b.ty, s: BUILDING_DEFS[b.type].size });
@@ -49,6 +65,10 @@ export class Npc {
   private workTimer = 0;
   private workAnim = 0;
   private carrying: { resource: Resource; n: number } | null = null;
+  private fleeing = false;
+  private preyId: number | null = null;
+  private shotTimer = 0;
+  private repath = 0;
   private readonly key: string;
   /** Vertical bob offset for the marker, animated by a tween. */
   private readonly bob = { v: 0 };
@@ -103,6 +123,11 @@ export class Npc {
       return;
     }
 
+    if (this.data.role === 'villager' && this.flee(dt, world)) {
+      this.sync();
+      return;
+    }
+
     const workplace = this.workplace(world);
     if (workplace && !world.isNight()) this.work(dt, world, workplace);
     else this.live(dt, world);
@@ -140,6 +165,135 @@ export class Npc {
   }
 
   // ---------- behaviours ----------
+
+  /** Runs home while an aggressive animal is hunting nearby. Returns true while fleeing. */
+  private flee(dt: number, world: NpcWorld): boolean {
+    const threat = world.threat(this.gx, this.gy);
+    if (!threat) {
+      if (this.fleeing) {
+        this.fleeing = false;
+        this.path = [];
+        this.state = 'idle';
+      }
+      return false;
+    }
+    const home = this.home(world);
+    if (!this.fleeing || this.path.length === 0) {
+      this.fleeing = true;
+      this.state = 'idle';
+      if (home && !this.isNextTo(home)) this.goNextTo(home, 4000);
+    }
+    this.status = 'Fugindo de um animal!';
+    if (this.path.length > 0) this.walk(dt * 1.4);
+    else this.stopWalking();
+    return true;
+  }
+
+  /** Hunter loop: shoot prey near the hut, collect meat from carcasses, deliver. */
+  private hunt(dt: number, world: NpcWorld, workplace: Building): void {
+    const job = BUILDING_DEFS[workplace.type].job!;
+    const f = footprintOf(workplace);
+    const cx = f.x + f.s / 2;
+    const cy = f.y + f.s / 2;
+    const load = this.carrying?.n ?? 0;
+
+    if (this.state === 'idle') {
+      if (load >= WORKER_LOAD) {
+        this.startDeposit(world);
+        return;
+      }
+      const carcass = world.findCarcass(cx, cy, job.radius);
+      if (carcass && this.goNear(carcass.gx, carcass.gy, 1)) {
+        this.preyId = carcass.id;
+        this.state = 'toCarcass';
+        this.status = null;
+        return;
+      }
+      if (load > 0) {
+        this.startDeposit(world);
+        return;
+      }
+      const prey = world.findPrey(cx, cy, job.radius);
+      if (prey) {
+        this.preyId = prey.id;
+        this.state = 'hunt';
+        this.repath = 0;
+        this.status = null;
+      } else {
+        this.status = 'Sem caça por perto';
+        this.live(dt, world);
+      }
+      return;
+    }
+
+    if (this.state === 'toDeposit') {
+      if (this.path.length > 0) this.walk(dt);
+      else {
+        if (this.carrying) world.deposit(this.carrying.resource, this.carrying.n);
+        this.carrying = null;
+        this.updateCarryIcon();
+        this.state = 'idle';
+      }
+      return;
+    }
+
+    if (this.state === 'toCarcass') {
+      if (this.path.length > 0) {
+        this.walk(dt);
+        return;
+      }
+      const got = this.preyId !== null ? world.takeMeat(this.preyId, WORKER_LOAD - load) : 0;
+      if (got > 0) {
+        this.carrying = { resource: 'meat', n: load + got };
+        this.updateCarryIcon();
+      }
+      this.state = 'idle';
+      return;
+    }
+
+    // hunt
+    const prey = this.preyId !== null ? world.prey(this.preyId) : null;
+    if (!prey) {
+      this.state = 'idle';
+      return;
+    }
+    const d = Math.hypot(prey.gx - this.gx, prey.gy - this.gy);
+    if (d <= HUNTER_RANGE) {
+      this.path = [];
+      this.stopWalking();
+      this.sprite.setFlipX(prey.gx - prey.gy < this.gx - this.gy);
+      this.shotTimer += dt * productivity(this.data, 'hunting');
+      if (this.shotTimer >= 2) {
+        this.shotTimer = 0;
+        if (world.shoot(this, prey.id, 1)) this.state = 'idle';
+      }
+      return;
+    }
+    this.repath -= dt;
+    if (this.path.length === 0 || this.repath <= 0) {
+      this.repath = 1;
+      if (!this.goNear(prey.gx, prey.gy, 2)) {
+        this.state = 'idle';
+        return;
+      }
+    }
+    this.walk(dt);
+  }
+
+  /** Path to any walkable tile within `r` tiles of (x, y). */
+  private goNear(x: number, y: number, r: number): boolean {
+    const tx = Math.floor(x);
+    const ty = Math.floor(y);
+    const p = findPath(
+      this.map,
+      this.tile,
+      (px, py) => Math.max(Math.abs(px - tx), Math.abs(py - ty)) <= r,
+      { x: tx, y: ty },
+      2500,
+    );
+    this.path = p ?? [];
+    return p !== null;
+  }
 
   private workplace(world: NpcWorld): Building | undefined {
     if (this.data.jobId === null) return undefined;
@@ -180,10 +334,8 @@ export class Npc {
 
   private work(dt: number, world: NpcWorld, workplace: Building): void {
     const job = BUILDING_DEFS[workplace.type].job!;
-    if (job.nodes.length === 0) {
-      // Hunters need animals (next milestone); wait at the workplace.
-      this.status = 'Esperando animais para caçar';
-      this.live(dt, world);
+    if (job.skill === 'hunting') {
+      this.hunt(dt, world, workplace);
       return;
     }
 

@@ -6,6 +6,7 @@ import { ambientAt, formatClock } from '../game/time';
 import { BuildingPanelUI } from '../ui/BuildingPanelUI';
 import { BuildMenuUI } from '../ui/BuildMenuUI';
 import { InventoryUI } from '../ui/InventoryUI';
+import { Minimap } from '../ui/Minimap';
 import { RecruitDialogUI } from '../ui/RecruitDialogUI';
 import type { PopupEvent, ToastEvent, WorldScene } from './WorldScene';
 
@@ -39,6 +40,9 @@ export class UIScene extends Phaser.Scene {
   private prompt!: Phaser.GameObjects.Text;
   private bar!: Phaser.GameObjects.Graphics;
   private inventory!: InventoryUI;
+  private minimap!: Minimap;
+  private hpBar!: Phaser.GameObjects.Graphics;
+  private hpText!: Phaser.GameObjects.Text;
   private buildMenu!: BuildMenuUI;
   private placeHint!: Phaser.GameObjects.Text;
   private dialog!: RecruitDialogUI;
@@ -80,7 +84,7 @@ export class UIScene extends Phaser.Scene {
     this.add.text(
       12,
       52,
-      'WASD: andar  Shift: correr  E: coletar/usar  B: construir  I/Tab: inventário  1-9: hotbar  T: acelerar tempo',
+      'WASD: andar  Shift: correr  E: usar  Espaço: atacar  B: construir  I/Tab: inventário  M: mapa  T: acelerar tempo',
       { ...TEXT, fontSize: '12px', backgroundColor: '#00000088', padding: { x: 8, y: 5 } },
     );
     this.debug = this.add.text(12, 80, '', { ...TEXT, fontSize: '11px', color: '#cfc3a8' });
@@ -98,6 +102,10 @@ export class UIScene extends Phaser.Scene {
       .text(0, 0, '', { ...TEXT, fontSize: '12px', backgroundColor: '#000000bb', padding: { x: 6, y: 3 } })
       .setDepth(95)
       .setVisible(false);
+
+    this.minimap = new Minimap(this, this.world);
+    this.hpBar = this.add.graphics();
+    this.hpText = this.add.text(0, 0, '', { ...TEXT, fontSize: '12px', stroke: '#000000', strokeThickness: 3 }).setOrigin(0, 1);
 
     this.dialog = new RecruitDialogUI(this, this.world, () => this.world.stopTalking());
     this.world.events.on('talk', (npc: NpcData) => {
@@ -138,7 +146,8 @@ export class UIScene extends Phaser.Scene {
       } else if (key === 'escape') {
         if (this.inventory.isOpen) this.toggleInventory();
         this.closeBuildMode();
-      } else if (key >= '1' && key <= '9') this.world.selectedHotbar = Number(key) - 1;
+      } else if (key === 'm') this.minimap.toggle();
+      else if (key >= '1' && key <= '9') this.world.selectedHotbar = Number(key) - 1;
     });
 
     // Placement clicks land on empty screen space (not on any UI element of this scene).
@@ -192,6 +201,8 @@ export class UIScene extends Phaser.Scene {
     this.drawInteraction();
     this.updatePopups(deltaMs / 1000);
     this.inventory.update(this.input.activePointer);
+    this.minimap.update(deltaMs / 1000);
+    this.drawHealth();
     this.buildMenu.update();
     this.updatePlaceHint();
     this.dialog.update();
@@ -212,6 +223,19 @@ export class UIScene extends Phaser.Scene {
       y += t.text.height + 4;
       return true;
     });
+  }
+
+  /** Player HP bar just above the left end of the hotbar. */
+  private drawHealth(): void {
+    const s = this.world.stats;
+    const x = Math.round((this.scale.width - 428) / 2);
+    const y = this.scale.height - 44 - 12 - 8;
+    const w = 120;
+    const ratio = s.hp / s.maxHp;
+    this.hpBar.clear();
+    this.hpBar.fillStyle(0x000000, 0.7).fillRect(x - 1, y - 1, w + 2, 7);
+    this.hpBar.fillStyle(ratio > 0.5 ? 0xd04838 : 0xff3020, 1).fillRect(x, y, Math.round(w * ratio), 5);
+    this.hpText.setText(`♥ ${s.hp}/${s.maxHp}`).setPosition(x, y - 3);
   }
 
   private closeBuildMode(): void {
@@ -285,5 +309,6 @@ export class UIScene extends Phaser.Scene {
     this.inventory.layout(width, height);
     this.dialog.layout(width, height);
     this.panel.layout(width, height);
+    this.minimap.layout(width, height);
   }
 }

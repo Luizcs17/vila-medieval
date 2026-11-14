@@ -1,4 +1,4 @@
-import { BEDS_PER_HOUSE, MAX_WANDERERS, WANDERER_FIRST_SPAWN, WANDERER_INTERVAL } from '../config';
+import { BEDS_PER_HOUSE, MAX_WANDERERS, VILLAGER_HP, WANDERER_FIRST_SPAWN, WANDERER_INTERVAL } from '../config';
 import { isWalkable, type WorldMap } from '../world/map';
 import { BUILDING_DEFS, type Building, type Buildings } from './buildings';
 import { type Amounts, type Inventory, RESOURCE_LABEL, RESOURCES } from './inventory';
@@ -137,6 +137,8 @@ export interface NpcData {
   homeId: number | null;
   /** Workplace building id, or null when unemployed. */
   jobId: number | null;
+  /** Hit points (animals can hurt villagers). */
+  hp: number;
   /** Game time (clock seconds) when a wanderer gives up and leaves. */
   leavesAt: number;
 }
@@ -169,6 +171,7 @@ export function generateWanderer(rng: Rng, id: number, leavesAt: number): NpcDat
     role: 'wanderer',
     homeId: null,
     jobId: null,
+    hp: VILLAGER_HP,
     leavesAt,
   };
 }

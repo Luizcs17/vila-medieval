@@ -407,7 +407,95 @@ function constructionSite(scene: Phaser.Scene, key: string, size: number): void 
   });
 }
 
+// ---------- animals (side view facing right; frame b moves the legs) ----------
+
+interface AnimalArt {
+  body: string[];
+  legsA: string[];
+  legsB: string[];
+  palette: Record<string, string>;
+}
+
+const ANIMAL_ART: Record<string, AnimalArt> = {
+  rabbit: {
+    body: ['......k.', '.....kwk', '..kkkkwk', '.kwwwwek', 'kwwwwwwk'],
+    legsA: ['.kwkkwk.', '..k..k..'],
+    legsB: ['.kwkkwk.', '.k....k.'],
+    palette: { k: '#2b1d14', w: '#b8a890', e: '#1a1a1a' },
+  },
+  deer: {
+    body: [
+      '...........k.k..',
+      '...........kak..',
+      '............kk..',
+      '...........kbbk.',
+      '...........kbebk',
+      '..kkkkkkkkkbbbk.',
+      '.kbbbbbbbbbbbk..',
+      'kwbbbbbbbbbbbk..',
+      '.kbbbbbbbbbbk...',
+      '..kbBkkkkkbBk...',
+    ],
+    legsA: ['..kbk....kbk....', '..kbk....kbk....', '..kk.....kk.....'],
+    legsB: ['.kbk......kbk...', '.kbk......kbk...', '.kk.......kk....'],
+    palette: { k: '#2b1d14', b: '#a0703a', B: '#7d5228', w: '#f0e8d8', e: '#1a1a1a', a: '#d8c8a0' },
+  },
+  boar: {
+    body: [
+      '..............',
+      '...kkkkkkk....',
+      '..kbbbbbbbkk..',
+      '.kbbbbbbbbbbk.',
+      'kbbbbbbbbbbebk',
+      'kbbbbbbbbbbbwk',
+      '.kbbbbbbbbbbk.',
+      '..kbkkkkkbk...',
+    ],
+    legsA: ['..kbk...kbk...', '..kk....kk....'],
+    legsB: ['.kbk.....kbk..', '.kk......kk...'],
+    palette: { k: '#1e140e', b: '#5a4030', e: '#1a1a1a', w: '#f0e8d8' },
+  },
+  wolf: {
+    body: [
+      '..........k.k.',
+      '.........kgkgk',
+      '.........kggek',
+      'k.kkkkkkkggggk',
+      'kgggggggggggk.',
+      '.kgggggggggk..',
+      '..kgGkkkkgGk..',
+    ],
+    legsA: ['..kgk....kgk..', '..kk.....kk...'],
+    legsB: ['.kgk......kgk.', '.kk.......kk..'],
+    palette: { k: '#1e1e24', g: '#8a8a90', G: '#6a6a70', e: '#ffd040' },
+  },
+  bear: {
+    body: [
+      '............k..k..',
+      '...........kbkkbk.',
+      '...kkkkkkkkbbbbbk.',
+      '..kbbbbbbbbbbbebk.',
+      '.kbbbbbbbbbbbbbbBk',
+      'kbbbbbbbbbbbbbbbk.',
+      'kbbbbbbbbbbbbbbk..',
+      'kbbbbbbbbbbbbbbk..',
+      '.kbbbbbbbbbbbbk...',
+      '..kbbkkkkkkbbk....',
+    ],
+    legsA: ['..kbbk....kbbk....', '..kbbk....kbbk....', '..kkkk....kkkk....'],
+    legsB: ['.kbbk......kbbk...', '.kbbk......kbbk...', '.kkkk......kkkk...'],
+    palette: { k: '#1a120c', b: '#5a3a22', B: '#3a2416', e: '#1a1a1a' },
+  },
+};
+
 export function createPlaceholderTextures(scene: Phaser.Scene): void {
+  for (const [name, art] of Object.entries(ANIMAL_ART)) {
+    fromRows(scene, `animal_${name}_a`, [...art.body, ...art.legsA], art.palette);
+    fromRows(scene, `animal_${name}_b`, [...art.body, ...art.legsB], art.palette);
+  }
+  // Melee swing arc.
+  fromRows(scene, 'slash', ['..wwww..', '.w....w.', 'w......w', '........'], { w: '#ffffff' });
+
   isoBuilding(scene, 'bld_house', 2, {
     wallL: '#e0d0a8',
     wallR: '#bfae86',

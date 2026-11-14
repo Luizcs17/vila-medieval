@@ -57,12 +57,12 @@ explorar → coletar → construir → recrutar → designar NPCs a prédios →
 ## Marcos de desenvolvimento
 
 1. ✅ **Andar pelo mapa**: mapa isométrico fixo, colisão, câmera, zoom
-2. ✅ **Coleta manual de recursos + estoque + HUD de recursos** (a carne aparece no HUD, mas só será obtida com a caça, no marco 8)
+2. ✅ **Coleta manual de recursos + estoque + HUD de recursos** (a carne vem da caça, marco 7)
 3. ✅ **Regeneração de recursos + ciclo de dia e noite + inventário estilo Minecraft**
 4. ✅ **Construção de prédios + limite de carga por peso** (os prédios de trabalho só ganham função no marco 6, com os aldeões)
 5. ✅ **NPCs aparecendo pelo mapa + recrutamento** (casa livre, pedidos por nível, traços definidos)
 6. ✅ **Notas de habilidade + designar aldeões a prédios + produção automática**
-7. Necessidades dos NPCs (fome, morte) + traços
-8. Animais (caça e perigosos)
-9. Evolução do protagonista
-10. Salvar e carregar
+7. ✅ **Animais neutros e agressivos + combate + caça + minimapa** (antecipado: a carne vem da caça e é a comida da vila)
+8. Necessidades dos NPCs (fome, morte) + efeitos dos traços
+9. Crafting de ferramentas e armas + evolução do protagonista
+10. Salvar e carregar + menu de pausa
