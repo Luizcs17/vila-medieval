@@ -64,5 +64,5 @@ explorar → coletar → construir → recrutar → designar NPCs a prédios →
 6. ✅ **Notas de habilidade + designar aldeões a prédios + produção automática**
 7. ✅ **Animais neutros e agressivos + combate + caça + minimapa** (antecipado: a carne vem da caça e é a comida da vila)
 8. ✅ **Fome dos aldeões, morte por fome e efeitos dos traços**
-9. Crafting de ferramentas e armas + evolução do protagonista
+9. ✅ **Crafting de ferramentas e armas + evolução do protagonista (XP e níveis)**
 10. Salvar e carregar + menu de pausa

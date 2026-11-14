@@ -1,4 +1,5 @@
 import type Phaser from 'phaser';
+import { ITEM_DEFS } from '../game/items';
 import { ITEM_LABEL, ITEM_WEIGHT, type SlotInventory, type Stack } from '../game/slots';
 
 const SLOT = 44;
@@ -20,6 +21,7 @@ class SlotView {
   readonly bg: Phaser.GameObjects.Rectangle;
   private readonly icon: Phaser.GameObjects.Image;
   private readonly count: Phaser.GameObjects.Text;
+  private readonly dur: Phaser.GameObjects.Rectangle;
 
   constructor(
     scene: Phaser.Scene,
@@ -28,12 +30,14 @@ class SlotView {
     this.bg = scene.add.rectangle(0, 0, SLOT, SLOT, 0x2a2118, 0.9).setOrigin(0).setStrokeStyle(2, BORDER);
     this.icon = scene.add.image(0, 0, 'icon_wood').setScale(3).setVisible(false);
     this.count = scene.add.text(0, 0, '', COUNT_STYLE).setOrigin(1, 1);
+    this.dur = scene.add.rectangle(0, 0, 0, 3, 0x8ae070).setOrigin(0).setVisible(false);
   }
 
   setPosition(x: number, y: number): void {
     this.bg.setPosition(x, y);
     this.icon.setPosition(x + SLOT / 2, y + SLOT / 2);
     this.count.setPosition(x + SLOT - 3, y + SLOT - 1);
+    this.dur.setPosition(x + 5, y + SLOT - 7);
   }
 
   render(stack: Stack | null, selected: boolean, visible: boolean): void {
@@ -41,12 +45,23 @@ class SlotView {
     this.icon.setVisible(visible && stack !== null);
     if (stack) this.icon.setTexture(`icon_${stack.item}`);
     this.count.setVisible(visible).setText(stack && stack.count > 1 ? String(stack.count) : '');
+    // Durability bar for tools.
+    const max = stack ? ITEM_DEFS[stack.item].tool?.durability : undefined;
+    const showDur = visible && stack?.durability !== undefined && max !== undefined;
+    this.dur.setVisible(showDur);
+    if (showDur) {
+      const r = stack!.durability! / max!;
+      this.dur
+        .setSize(Math.max(1, Math.round((SLOT - 10) * r)), 3)
+        .setFillStyle(r > 0.5 ? 0x8ae070 : r > 0.2 ? 0xffc060 : 0xff6050);
+    }
   }
 
   setDepth(d: number): void {
     this.bg.setDepth(d);
     this.icon.setDepth(d + 1);
     this.count.setDepth(d + 2);
+    this.dur.setDepth(d + 2);
   }
 }
 
@@ -137,10 +152,8 @@ export class InventoryUI {
   /** Opens or closes the panel. Closing puts any held stack back into the inventory. */
   toggle(): void {
     if (this.isOpen && this.held) {
-      const added = this.inv.add(this.held.item, this.held.count);
-      this.held.count -= added;
-      if (this.held.count > 0) return; // nowhere to put it: keep the panel open
-      this.held = null;
+      this.held = this.inv.stow(this.held);
+      if (this.held) return; // nowhere to put it: keep the panel open
     }
     this.isOpen = !this.isOpen;
     this.hovered = null;
@@ -218,8 +231,12 @@ export class InventoryUI {
     this.tooltip.setVisible(showTip);
     if (showTip && hoveredStack) {
       const unit = ITEM_WEIGHT[hoveredStack.item];
+      const tool = ITEM_DEFS[hoveredStack.item].tool;
+      const extra = tool ? `  ·  ${hoveredStack.durability}/${tool.durability} usos  ·  dano ${tool.damage}` : '';
       this.tooltip
-        .setText(`${ITEM_LABEL[hoveredStack.item]}  ${unit} kg cada (${unit * hoveredStack.count} kg)`)
+        .setText(
+          `${ITEM_LABEL[hoveredStack.item]}  ${unit} kg${hoveredStack.count > 1 ? ` cada (${unit * hoveredStack.count} kg)` : ''}${extra}`,
+        )
         .setPosition(pointer.x + 14, pointer.y + 10);
     }
     this.drawWeight();

@@ -104,8 +104,8 @@ export class Wildlife {
   }
 
   /** Player melee: hits the nearest live animal within reach. Returns the animal hit, if any. */
-  playerAttack(gx: number, gy: number, damage: number, player: Human): Animal | null {
-    const target = this.nearest(gx, gy, ATTACK_REACH, (a) => a.alive);
+  playerAttack(gx: number, gy: number, damage: number, player: Human, reachBonus = 0): Animal | null {
+    const target = this.nearest(gx, gy, ATTACK_REACH + reachBonus, (a) => a.alive);
     if (!target) return null;
     const killed = target.damage(damage, player, this.host.now());
     const s = target.sprite;

@@ -11,6 +11,9 @@ export interface NodeDef {
   depletesTo: Obj;
   /** Game seconds until a depleted node grows back (trees pass through a sapling stage at half time). */
   regrowSeconds: number;
+  /** Which tool speeds this up; `needsTool` means bare hands can't do it. */
+  tool: 'axe' | 'pick';
+  needsTool?: boolean;
   /** UI words, e.g. "Cortar árvore". */
   verb: string;
   name: string;
@@ -24,6 +27,7 @@ export const NODE_DEFS: Partial<Record<Obj, NodeDef>> = {
     secondsPerUnit: 0.9,
     depletesTo: Obj.Stump,
     regrowSeconds: 240,
+    tool: 'axe',
     verb: 'Cortar',
     name: 'árvore',
   },
@@ -33,6 +37,7 @@ export const NODE_DEFS: Partial<Record<Obj, NodeDef>> = {
     secondsPerUnit: 1.0,
     depletesTo: Obj.Stump,
     regrowSeconds: 300,
+    tool: 'axe',
     verb: 'Cortar',
     name: 'pinheiro',
   },
@@ -42,6 +47,7 @@ export const NODE_DEFS: Partial<Record<Obj, NodeDef>> = {
     secondsPerUnit: 1.2,
     depletesTo: Obj.None,
     regrowSeconds: 480,
+    tool: 'pick',
     verb: 'Quebrar',
     name: 'pedra',
   },
@@ -51,6 +57,8 @@ export const NODE_DEFS: Partial<Record<Obj, NodeDef>> = {
     secondsPerUnit: 1.8,
     depletesTo: Obj.None,
     regrowSeconds: 720,
+    tool: 'pick',
+    needsTool: true,
     verb: 'Minerar',
     name: 'ferro',
   },
