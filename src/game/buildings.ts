@@ -24,7 +24,8 @@ export type BuildingType =
   | 'palisade'
   | 'gate'
   | 'tower'
-  | 'barracks';
+  | 'barracks'
+  | 'embassy';
 
 export interface BuildingDef {
   name: string;
@@ -57,7 +58,7 @@ export interface BuildingDef {
 export const BUILDING_DEFS: Record<BuildingType, BuildingDef> = {
   stockpile: {
     claim: 9,
-    maxHp: 250,
+    maxHp: 500,
     name: 'Estoque central',
     size: 1,
     cost: {},
@@ -181,6 +182,17 @@ export const BUILDING_DEFS: Record<BuildingType, BuildingDef> = {
     buildable: true,
     maxHp: 150,
     job: { skill: 'combat', slots: 4, nodes: [], radius: 10, title: { f: 'Soldada', m: 'Soldado' } },
+  },
+  embassy: {
+    claim: 4,
+    name: 'Embaixada',
+    size: 2,
+    cost: { wood: 20, stone: 10 },
+    buildSeconds: 18,
+    description: 'Diplomatas viajam às outras vilas (V → Diplomacia).',
+    buildable: true,
+    maxHp: 100,
+    job: { skill: 'diplomacy', slots: 2, nodes: [], radius: 0, title: { f: 'Diplomata', m: 'Diplomata' } },
   },
 };
 
