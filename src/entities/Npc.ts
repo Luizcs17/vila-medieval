@@ -3,6 +3,7 @@ import { HUNTER_RANGE, NPC_SPEED, WORKER_LOAD, WORKER_TIME_FACTOR } from '../con
 import { BUILDING_DEFS, type Building, type Buildings } from '../game/buildings';
 import { NODE_DEFS } from '../game/gathering';
 import type { Resource } from '../game/inventory';
+import { isStarving } from '../game/needs';
 import { type NpcData, productivity, TIER_COLOR } from '../game/npcs';
 import { npcSpriteKey } from '../gfx/textures';
 import { gridToScreen } from '../iso';
@@ -56,6 +57,7 @@ export class Npc {
   private readonly shadow: Phaser.GameObjects.Image;
   private marker?: Phaser.GameObjects.Image;
   private carryIcon?: Phaser.GameObjects.Image;
+  private hungerIcon?: Phaser.GameObjects.Image;
   private path: Tile[] = [];
   private idle = 1 + Math.random() * 2;
   private anchor: Tile;
@@ -147,12 +149,8 @@ export class Npc {
 
   /** Fades out and removes the NPC. */
   leave(onDone: () => void): void {
-    const targets = [
-      this.sprite,
-      this.shadow,
-      ...(this.marker ? [this.marker] : []),
-      ...(this.carryIcon ? [this.carryIcon] : []),
-    ];
+    const extras = [this.marker, this.carryIcon, this.hungerIcon].filter((o): o is Phaser.GameObjects.Image => o !== undefined);
+    const targets = [this.sprite, this.shadow, ...extras];
     this.scene.tweens.add({
       targets,
       alpha: 0,
@@ -165,6 +163,11 @@ export class Npc {
   }
 
   // ---------- behaviours ----------
+
+  /** Productivity, halved while starving. */
+  private workRate(skill: Parameters<typeof productivity>[1]): number {
+    return productivity(this.data, skill) * (isStarving(this.data) ? 0.5 : 1);
+  }
 
   /** Runs home while an aggressive animal is hunting nearby. Returns true while fleeing. */
   private flee(dt: number, world: NpcWorld): boolean {
@@ -262,7 +265,7 @@ export class Npc {
       this.path = [];
       this.stopWalking();
       this.sprite.setFlipX(prey.gx - prey.gy < this.gx - this.gy);
-      this.shotTimer += dt * productivity(this.data, 'hunting');
+      this.shotTimer += dt * this.workRate('hunting');
       if (this.shotTimer >= 2) {
         this.shotTimer = 0;
         if (world.shoot(this, prey.id, 1)) this.state = 'idle';
@@ -376,7 +379,7 @@ export class Npc {
       }
       this.faceTile(this.node);
       this.animateWork(dt);
-      this.workTimer += dt * productivity(this.data, job.skill);
+      this.workTimer += dt * this.workRate(job.skill);
       if (this.workTimer >= def.secondsPerUnit * WORKER_TIME_FACTOR) {
         this.workTimer = 0;
         const got = world.harvest(this.node);
@@ -541,5 +544,14 @@ export class Npc {
     this.shadow.setPosition(s.x, s.y).setDepth(s.y - 0.5);
     this.marker?.setPosition(s.x, Math.round(s.y - 19 + this.bob.v)).setDepth(s.y + 0.1);
     this.carryIcon?.setPosition(s.x, s.y - 17).setDepth(s.y + 0.1);
+    // Starving villagers show a red meat icon over their head.
+    const starving = this.data.role === 'villager' && isStarving(this.data);
+    if (starving && !this.hungerIcon)
+      this.hungerIcon = this.scene.add.image(0, 0, 'icon_meat').setOrigin(0.5, 1).setTint(0xff6050);
+    if (!starving && this.hungerIcon) {
+      this.hungerIcon.destroy();
+      this.hungerIcon = undefined;
+    }
+    this.hungerIcon?.setPosition(s.x + 6, s.y - 18).setDepth(s.y + 0.2);
   }
 }

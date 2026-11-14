@@ -139,6 +139,10 @@ export interface NpcData {
   jobId: number | null;
   /** Hit points (animals can hurt villagers). */
   hp: number;
+  /** Satiety 0–100 (see needs.ts). */
+  food: number;
+  /** Game seconds spent at zero satiety. */
+  starving: number;
   /** Game time (clock seconds) when a wanderer gives up and leaves. */
   leavesAt: number;
 }
@@ -172,6 +176,8 @@ export function generateWanderer(rng: Rng, id: number, leavesAt: number): NpcDat
     homeId: null,
     jobId: null,
     hp: VILLAGER_HP,
+    food: 100,
+    starving: 0,
     leavesAt,
   };
 }

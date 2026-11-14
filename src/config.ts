@@ -49,6 +49,8 @@ export const PLAYER_REGEN_DELAY = 8;
 export const ATTACK_COOLDOWN = 0.45;
 export const ATTACK_REACH = 1.3;
 export const VILLAGER_HP = 6;
+/** HP restored by eating one meat (F). */
+export const MEAT_HEAL = 2;
 export const ANIMAL_SPAWN_INTERVAL = 30;
 /** Animals spawn at least this far from the village centre and the player. */
 export const ANIMAL_SPAWN_DISTANCE = 14;

@@ -8,6 +8,7 @@ import {
   INTERACT_REACH,
   INVENTORY_SLOTS,
   MAX_CARRY_WEIGHT,
+  MEAT_HEAL,
   NPC_REACH,
   PLAYER_RADIUS,
   TILE_H,
@@ -21,6 +22,7 @@ import { Player } from '../entities/Player';
 import { BUILDING_DEFS, type Building, Buildings, type BuildingType, type PlaceCheck } from '../game/buildings';
 import { Gatherer, NODE_DEFS, nearestTile, ResourceNodes } from '../game/gathering';
 import { Inventory, RESOURCE_LABEL, RESOURCES, type Resource } from '../game/inventory';
+import { isStarving, updateNeeds } from '../game/needs';
 import { compass, generateWanderer, jobTitle, type NpcData, Population, pickSpawnTile, WandererSpawner } from '../game/npcs';
 import { PlayerStats } from '../game/player';
 import { SlotInventory } from '../game/slots';
@@ -127,7 +129,7 @@ export class WorldScene extends Phaser.Scene {
   private nodes!: ResourceNodes;
   private readonly gatherer = new Gatherer();
   private keys!: Record<
-    'W' | 'A' | 'S' | 'D' | 'UP' | 'DOWN' | 'LEFT' | 'RIGHT' | 'SHIFT' | 'E' | 'T' | 'SPACE',
+    'W' | 'A' | 'S' | 'D' | 'UP' | 'DOWN' | 'LEFT' | 'RIGHT' | 'SHIFT' | 'E' | 'T' | 'SPACE' | 'F',
     Phaser.Input.Keyboard.Key
   >;
   private readonly objectImages = new Map<number, Phaser.GameObjects.Image>();
@@ -175,7 +177,7 @@ export class WorldScene extends Phaser.Scene {
     this.player = new Player(this, this.map, this.map.spawn.x, this.map.spawn.y);
 
     const kb = this.input.keyboard!;
-    this.keys = kb.addKeys('W,A,S,D,UP,DOWN,LEFT,RIGHT,SHIFT,E,T,SPACE') as typeof this.keys;
+    this.keys = kb.addKeys('W,A,S,D,UP,DOWN,LEFT,RIGHT,SHIFT,E,T,SPACE,F') as typeof this.keys;
     this.slash = this.add.image(0, 0, 'slash').setVisible(false).setDepth(900_002);
 
     this.wildlife = new Wildlife({
@@ -227,6 +229,7 @@ export class WorldScene extends Phaser.Scene {
     this.updateNpcs(worldDt);
     this.attackCd -= dt;
     if (!frozen && !this.placement && Phaser.Input.Keyboard.JustDown(k.SPACE)) this.attack();
+    if (!frozen && Phaser.Input.Keyboard.JustDown(k.F)) this.eat();
     this.selection.clear();
     if (this.placement) this.updatePlacement();
     else this.updateInteraction(dt, x !== 0 || y !== 0);
@@ -280,12 +283,29 @@ export class WorldScene extends Phaser.Scene {
     npc.sprite.setTint(0xff7060);
     this.time.delayedCall(150, () => npc.sprite.clearTint());
     this.popup(npc.sprite.x, npc.sprite.y - npc.sprite.height, `-${damage}`, '#ff6a5a');
-    if (npc.data.hp <= 0) {
-      this.npcs.delete(npc.data.id);
-      this.population.remove(npc.data.id);
-      npc.leave(() => {});
-      this.toast(`${npc.data.name} foi morto por um ${animal.def.name.toLowerCase()}.`, '#ff8a7a');
+    if (npc.data.hp <= 0) this.removeVillager(npc.data.id, `${npc.data.name} foi morto por um ${animal.def.name.toLowerCase()}.`);
+  }
+
+  /** A villager dies: frees their bed and job, fades them out, tells the player. */
+  private removeVillager(id: number, message: string): void {
+    const npc = this.npcs.get(id);
+    this.npcs.delete(id);
+    this.population.remove(id);
+    if (this.talkingTo?.id === id) this.talkingTo = null;
+    npc?.leave(() => {});
+    this.toast(message, '#ff8a7a');
+  }
+
+  /** F: eat one meat you carry to heal. */
+  private eat(): void {
+    const p = this.player.sprite;
+    if (this.stats.hp >= this.stats.maxHp) return;
+    if (this.inventory.remove('meat', 1) === 0) {
+      this.popup(p.x, p.y - p.height, 'Sem carne na mochila', '#cfc3a8');
+      return;
     }
+    this.stats.heal(MEAT_HEAL);
+    this.popup(p.x, p.y - p.height, `+${MEAT_HEAL} ♥`, '#a8ffa8');
   }
 
   /** The player's HP hit zero: wake up at the village, losing carried resources (tools are kept). */
@@ -316,11 +336,16 @@ export class WorldScene extends Phaser.Scene {
   private updateNpcs(worldDt: number): void {
     if (this.spawner.update(worldDt, this.population.wanderers.length)) this.spawnWanderer();
 
+    for (const e of updateNeeds(this.population.villagers, this.stockpile, worldDt)) {
+      if (e.type === 'starving') this.toast(`${e.npc.name} está com fome! Falta carne no estoque.`, '#ffb070');
+      else this.removeVillager(e.npc.id, `${e.npc.name} morreu de fome.`);
+    }
+
     this.villagerRegen += worldDt;
     const regen = this.villagerRegen >= 30;
     if (regen) this.villagerRegen = 0;
     for (const npc of [...this.npcs.values()]) {
-      if (regen && npc.data.hp < VILLAGER_HP) npc.data.hp++;
+      if (regen && npc.data.hp < VILLAGER_HP && !isStarving(npc.data)) npc.data.hp++;
       const talking = this.talkingTo?.id === npc.data.id;
       npc.update(worldDt, this.npcWorld, talking, talking ? this.player.sprite.x : undefined);
       if (npc.data.role === 'wanderer' && !talking && this.clock.seconds >= npc.data.leavesAt) {
