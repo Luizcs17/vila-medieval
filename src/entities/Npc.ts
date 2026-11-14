@@ -147,6 +147,16 @@ export class Npc {
     this.idle = 0.5;
   }
 
+  /** Loaded villager: live around `home` without walking there first. */
+  settleAt(home: Building): void {
+    this.scene.tweens.killTweensOf(this.bob);
+    this.marker?.destroy();
+    this.marker = undefined;
+    const f = footprintOf(home);
+    this.anchor = { x: f.x + Math.floor(f.s / 2), y: f.y + f.s };
+    this.roam = 3;
+  }
+
   /** Fades out and removes the NPC. */
   leave(onDone: () => void): void {
     const extras = [this.marker, this.carryIcon, this.hungerIcon].filter((o): o is Phaser.GameObjects.Image => o !== undefined);

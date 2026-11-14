@@ -223,6 +223,16 @@ export class Population {
     return this.nextId++;
   }
 
+  snapshot(): { npcs: NpcData[]; nextId: number } {
+    return { npcs: this.npcs.map((n) => structuredClone(n)), nextId: this.nextId };
+  }
+
+  restore(s: { npcs: NpcData[]; nextId: number }): void {
+    this.npcs.length = 0;
+    for (const n of s.npcs) this.npcs.push(structuredClone(n));
+    this.nextId = s.nextId;
+  }
+
   get villagers(): NpcData[] {
     return this.npcs.filter((n) => n.role === 'villager');
   }

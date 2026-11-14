@@ -54,6 +54,14 @@ export class PlayerStats {
     return gained;
   }
 
+  snapshot(): { hp: number; maxHp: number; level: number; xp: number } {
+    return { hp: this.hp, maxHp: this.maxHp, level: this.level, xp: this.xp };
+  }
+
+  restore(s: { hp: number; maxHp: number; level: number; xp: number }): void {
+    Object.assign(this, s);
+  }
+
   heal(amount: number): void {
     this.hp = Math.min(this.maxHp, this.hp + amount);
   }

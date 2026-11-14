@@ -176,6 +176,25 @@ export class Buildings {
     return b;
   }
 
+  snapshot(): { list: Building[]; nextId: number } {
+    return { list: this.list.map((b) => ({ ...b })), nextId: this.nextId };
+  }
+
+  /** Replaces all buildings (map tiles under them become Obj.Building). */
+  restore(s: { list: Building[]; nextId: number }): void {
+    this.list.length = 0;
+    this.byTile.clear();
+    for (const b of s.list) {
+      const copy = { ...b };
+      for (const i of this.footprint(copy.type, copy.tx, copy.ty)) {
+        this.map.objects[i] = Obj.Building;
+        this.byTile.set(i, copy);
+      }
+      this.list.push(copy);
+    }
+    this.nextId = s.nextId;
+  }
+
   /** Adds construction work. Returns true on the call that finishes the building. */
   work(b: Building, dt: number): boolean {
     if (b.built) return false;

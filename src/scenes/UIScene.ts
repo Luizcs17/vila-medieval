@@ -10,6 +10,7 @@ import { BuildMenuUI } from '../ui/BuildMenuUI';
 import { CraftingUI } from '../ui/CraftingUI';
 import { InventoryUI } from '../ui/InventoryUI';
 import { Minimap } from '../ui/Minimap';
+import { PauseMenuUI } from '../ui/PauseMenuUI';
 import { RecruitDialogUI } from '../ui/RecruitDialogUI';
 import type { PopupEvent, ToastEvent, WorldScene } from './WorldScene';
 
@@ -44,6 +45,7 @@ export class UIScene extends Phaser.Scene {
   private bar!: Phaser.GameObjects.Graphics;
   private inventory!: InventoryUI;
   private minimap!: Minimap;
+  private pause!: PauseMenuUI;
   private crafting!: CraftingUI;
   private levelText!: Phaser.GameObjects.Text;
   private hpBar!: Phaser.GameObjects.Graphics;
@@ -62,6 +64,11 @@ export class UIScene extends Phaser.Scene {
 
   create(): void {
     this.world = this.scene.get('World') as WorldScene;
+    // This scene restarts whenever the world does (loading a save). The world's event emitter
+    // survives restarts, so drop listeners from the previous run before adding new ones.
+    for (const e of ['popup', 'toast', 'talk', 'building']) this.world.events.off(e);
+    this.popups = [];
+    this.toasts = [];
 
     // Full-screen tint for the day/night cycle. Created first so it sits under all HUD elements.
     this.night = this.add.rectangle(0, 0, 10, 10, 0x000000, 0).setOrigin(0);
@@ -132,8 +139,13 @@ export class UIScene extends Phaser.Scene {
 
     const kb = this.input.keyboard!;
     kb.addCapture('TAB');
+    this.pause = new PauseMenuUI(this, this.world);
     kb.on('keydown', (e: KeyboardEvent) => {
       const key = e.key.toLowerCase();
+      if (this.pause.isOpen) {
+        if (key === 'escape') this.pause.close();
+        return;
+      }
       if (this.panel.isOpen) {
         if (key === 'escape' || key === 'e') this.panel.close();
         return;
@@ -157,7 +169,11 @@ export class UIScene extends Phaser.Scene {
         this.closeBuildMode();
         if (!wasOpen) this.buildMenu.setOpen(true);
       } else if (key === 'escape') {
+        // Esc closes whatever is open; with nothing open it pauses the game.
+        const anyOpen = this.inventory.isOpen || this.buildMenu.isOpen || this.crafting.isOpen || this.world.placement !== null;
+        if (!anyOpen) this.pause.open();
         if (this.inventory.isOpen) this.toggleInventory();
+        this.crafting.setOpen(false);
         this.closeBuildMode();
       } else if (key === 'm') this.minimap.toggle();
       else if (key >= '1' && key <= '9') this.world.selectedHotbar = Number(key) - 1;
@@ -193,7 +209,9 @@ export class UIScene extends Phaser.Scene {
     });
 
     this.layout();
-    this.scale.on('resize', () => this.layout());
+    const onResize = () => this.layout();
+    this.scale.on('resize', onResize);
+    this.events.once('shutdown', () => this.scale.off('resize', onResize));
   }
 
   update(_t: number, deltaMs: number): void {
@@ -335,5 +353,6 @@ export class UIScene extends Phaser.Scene {
     this.dialog.layout(width, height);
     this.panel.layout(width, height);
     this.minimap.layout(width, height);
+    this.pause?.layout(width, height);
   }
 }

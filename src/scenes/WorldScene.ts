@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import {
   ATTACK_COOLDOWN,
+  AUTOSAVE_SECONDS,
   BEDS_PER_HOUSE,
   DEFAULT_ZOOM_INDEX,
   FAST_FORWARD,
@@ -27,6 +28,7 @@ import { ITEM_DEFS, type ItemId, type Recipe, type ToolType } from '../game/item
 import { isStarving, updateNeeds } from '../game/needs';
 import { compass, generateWanderer, jobTitle, type NpcData, Population, pickSpawnTile, WandererSpawner } from '../game/npcs';
 import { PER_LEVEL, PlayerStats, XP } from '../game/player';
+import { clearSave, readSave, SAVE_VERSION, type SaveData, writeSave } from '../game/save';
 import { SlotInventory } from '../game/slots';
 import { GameClock } from '../game/time';
 import { createPlaceholderTextures } from '../gfx/textures';
@@ -86,6 +88,12 @@ export interface PopupEvent {
   color?: string;
 }
 
+/** Scene start data: load a specific save, or force a fresh game (otherwise the last save is loaded). */
+export interface WorldInit {
+  save?: SaveData | null;
+  fresh?: boolean;
+}
+
 /** Emitted on `scene.events` as 'toast' for screen-level notifications. */
 export interface ToastEvent {
   text: string;
@@ -105,9 +113,9 @@ export class WorldScene extends Phaser.Scene {
   map!: WorldMap;
   player!: Player;
   buildings!: Buildings;
-  readonly inventory = new SlotInventory(INVENTORY_SLOTS, HOTBAR_SLOTS, MAX_CARRY_WEIGHT);
-  readonly stockpile = new Inventory();
-  readonly clock = new GameClock();
+  inventory!: SlotInventory;
+  stockpile!: Inventory;
+  clock!: GameClock;
   interaction: InteractionView | null = null;
   placement: PlacementView | null = null;
   population!: Population;
@@ -122,22 +130,25 @@ export class WorldScene extends Phaser.Scene {
   selectedHotbar = 0;
   /** True while world time is being fast-forwarded (T held). */
   fastForward = false;
-  readonly stats = new PlayerStats();
+  stats!: PlayerStats;
   wildlife!: Wildlife;
   private attackCd = 0;
   private villagerRegen = 0;
   private slash!: Phaser.GameObjects.Image;
 
   private nodes!: ResourceNodes;
-  private readonly gatherer = new Gatherer();
+  private gatherer!: Gatherer;
   private keys!: Record<
     'W' | 'A' | 'S' | 'D' | 'UP' | 'DOWN' | 'LEFT' | 'RIGHT' | 'SHIFT' | 'E' | 'T' | 'SPACE' | 'F',
     Phaser.Input.Keyboard.Key
   >;
-  private readonly objectImages = new Map<number, Phaser.GameObjects.Image>();
-  private readonly buildingViews = new Map<number, BuildingView>();
-  private readonly npcs = new Map<number, Npc>();
-  private readonly spawner = new WandererSpawner(Math.random);
+  private objectImages!: Map<number, Phaser.GameObjects.Image>;
+  private buildingViews!: Map<number, BuildingView>;
+  private npcs!: Map<number, Npc>;
+  private spawner!: WandererSpawner;
+  private initData: WorldInit = {};
+  private autosaveTimer = 0;
+  private lastSaveDay = 0;
   private selection!: Phaser.GameObjects.Graphics;
   private ghost!: Phaser.GameObjects.Image;
   private placeTile = { x: 0, y: 0 };
@@ -147,9 +158,40 @@ export class WorldScene extends Phaser.Scene {
     super('World');
   }
 
+  /**
+   * Runs before every create(), including scene restarts (loading a save, new game): Phaser reuses
+   * this instance, so all per-game state is rebuilt here rather than in field initialisers.
+   */
+  init(data: WorldInit = {}): void {
+    this.initData = data;
+    this.inventory = new SlotInventory(INVENTORY_SLOTS, HOTBAR_SLOTS, MAX_CARRY_WEIGHT);
+    this.stockpile = new Inventory();
+    this.clock = new GameClock();
+    this.stats = new PlayerStats();
+    this.gatherer = new Gatherer();
+    this.objectImages = new Map();
+    this.buildingViews = new Map();
+    this.npcs = new Map();
+    this.spawner = new WandererSpawner(Math.random);
+    this.interaction = null;
+    this.placement = null;
+    this.talkingTo = null;
+    this.panelBuilding = null;
+    this.inventoryOpen = false;
+    this.selectedHotbar = 0;
+    this.fastForward = false;
+    this.attackCd = 0;
+    this.villagerRegen = 0;
+    this.autosaveTimer = 0;
+    this.placeTile = { x: 0, y: 0 };
+    this.zoomIndex = DEFAULT_ZOOM_INDEX;
+  }
+
   create(): void {
     createPlaceholderTextures(this);
+    const save = this.initData.fresh ? null : (this.initData.save ?? readSave());
     this.map = generateMap();
+    if (save) this.map.objects.splice(0, this.map.objects.length, ...save.objects);
     this.nodes = new ResourceNodes(this.map);
     this.buildings = new Buildings(this.map);
     this.population = new Population(this.buildings);
@@ -167,12 +209,19 @@ export class WorldScene extends Phaser.Scene {
       takeMeat: (id, max) => this.wildlife.takeMeat(id, max),
     };
 
+    if (save) {
+      this.nodes.restore(save.nodes);
+      this.buildings.restore(save.buildings);
+    }
     this.drawMap();
 
-    // The central stockpile stands in the spawn clearing, next to where the player starts.
-    const sx = Math.floor(this.map.spawn.x);
-    const sy = Math.floor(this.map.spawn.y);
-    this.addBuildingView(this.buildings.place('stockpile', sx + 2, sy - 1, true));
+    if (save) for (const b of this.buildings.list) this.addBuildingView(b);
+    else {
+      // The central stockpile stands in the spawn clearing, next to where the player starts.
+      const sx = Math.floor(this.map.spawn.x);
+      const sy = Math.floor(this.map.spawn.y);
+      this.addBuildingView(this.buildings.place('stockpile', sx + 2, sy - 1, true));
+    }
 
     this.selection = this.add.graphics().setDepth(GROUND_DEPTH + 1);
     this.ghost = this.add.image(0, 0, 'bld_house').setOrigin(0.5, 1).setAlpha(0.65).setDepth(1_000_000).setVisible(false);
@@ -192,7 +241,9 @@ export class WorldScene extends Phaser.Scene {
       onHumanHit: (t, dmg, a) => this.onHumanHit(t, dmg, a),
       popup: (x, y, text, color) => this.popup(x, y, text, color),
     });
-    this.wildlife.populate();
+    if (save) this.applySave(save);
+    else this.wildlife.populate();
+    this.lastSaveDay = this.clock.day;
 
     const cam = this.cameras.main;
     const left = gridToScreen(0, this.map.h).x;
@@ -208,7 +259,90 @@ export class WorldScene extends Phaser.Scene {
       cam.setZoom(ZOOM_LEVELS[this.zoomIndex]);
     });
 
+    // Save when the page is closed or hidden.
+    const onHide = () => {
+      if (document.visibilityState === 'hidden') this.saveGame(true);
+    };
+    const onUnload = () => this.saveGame(true);
+    document.addEventListener('visibilitychange', onHide);
+    window.addEventListener('beforeunload', onUnload);
+    this.events.once('shutdown', () => {
+      document.removeEventListener('visibilitychange', onHide);
+      window.removeEventListener('beforeunload', onUnload);
+    });
+
     this.scene.launch('UI');
+    if (save) this.time.delayedCall(300, () => this.toast(`Jogo carregado: dia ${this.clock.day}.`, '#a8ffa8'));
+  }
+
+  // ---------- save / load ----------
+
+  /** Writes the game to browser storage. `quiet` skips the toast (autosave on close). */
+  saveGame(quiet = false): boolean {
+    const data: SaveData = {
+      version: SAVE_VERSION,
+      savedAt: new Date().toISOString(),
+      clock: this.clock.seconds,
+      objects: [...this.map.objects],
+      nodes: this.nodes.snapshot(),
+      buildings: this.buildings.snapshot(),
+      stockpile: { ...this.stockpile.items },
+      inventory: this.inventory.slots.map((s) => (s ? { ...s } : null)),
+      selectedHotbar: this.selectedHotbar,
+      player: { gx: this.player.gx, gy: this.player.gy, ...this.stats.snapshot() },
+      population: this.population.snapshot(),
+      npcPositions: [...this.npcs.values()].map((n) => [n.data.id, n.gx, n.gy]),
+      animals: this.wildlife.snapshot(),
+    };
+    const ok = writeSave(data);
+    if (!quiet) this.toast(ok ? 'Jogo salvo.' : 'Não foi possível salvar neste navegador.', ok ? '#a8ffa8' : '#ff8a7a');
+    return ok;
+  }
+
+  /** Restarts the world from a save (or the last saved game). */
+  loadGame(save: SaveData | null = readSave()): boolean {
+    if (!save) return false;
+    this.scene.restart({ save } satisfies WorldInit);
+    return true;
+  }
+
+  /** Discards the saved game and starts over. */
+  newGame(): void {
+    clearSave();
+    this.scene.restart({ fresh: true } satisfies WorldInit);
+  }
+
+  private applySave(save: SaveData): void {
+    this.clock.seconds = save.clock;
+    Object.assign(this.stockpile.items, save.stockpile);
+    save.inventory.forEach((s, i) => {
+      if (i < this.inventory.slots.length) this.inventory.slots[i] = s ? { ...s } : null;
+    });
+    this.selectedHotbar = save.selectedHotbar;
+    this.stats.restore(save.player);
+    this.inventory.maxWeight = this.stats.carryWeight;
+    this.player.gx = save.player.gx;
+    this.player.gy = save.player.gy;
+    this.population.restore(save.population);
+    const pos = new Map(save.npcPositions.map(([id, x, y]) => [id, { x, y }]));
+    for (const data of this.population.npcs) {
+      const p = pos.get(data.id) ?? this.villageCenter;
+      const npc = new Npc(this, this.map, data, { x: Math.floor(p.x), y: Math.floor(p.y) });
+      const home = data.homeId !== null ? this.buildings.list.find((b) => b.id === data.homeId) : undefined;
+      if (home) npc.settleAt(home);
+      this.npcs.set(data.id, npc);
+    }
+    this.wildlife.restore(save.animals);
+  }
+
+  /** Autosave every few real minutes and at each new day. */
+  private autosave(dt: number): void {
+    this.autosaveTimer += dt;
+    if (this.autosaveTimer >= AUTOSAVE_SECONDS || this.clock.day !== this.lastSaveDay) {
+      this.autosaveTimer = 0;
+      this.lastSaveDay = this.clock.day;
+      this.saveGame(true);
+    }
   }
 
   update(_time: number, deltaMs: number): void {
@@ -237,6 +371,7 @@ export class WorldScene extends Phaser.Scene {
     else this.updateInteraction(dt, x !== 0 || y !== 0);
     this.sortBuildingsAroundPlayer();
     this.fadeObjectsInFrontOfPlayer();
+    this.autosave(dt);
   }
 
   // ---------- combat ----------
