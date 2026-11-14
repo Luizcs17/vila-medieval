@@ -1,19 +1,20 @@
-import { type Amounts, emptyAmounts, RESOURCE_LABEL, RESOURCES, type Resource } from './inventory';
+import { type Amounts, emptyAmounts, RESOURCES, type Resource } from './inventory';
+import { ALL_ITEMS, ITEM_DEFS, type ItemId } from './items';
 
-/** Anything that can sit in an inventory slot. Only resources for now; tools come later. */
-export type ItemId = Resource;
+export type { ItemId } from './items';
 
 export interface Stack {
   item: ItemId;
   count: number;
+  /** Uses left, for tools and weapons. */
+  durability?: number;
 }
 
-export const ITEM_LABEL: Record<ItemId, string> = RESOURCE_LABEL;
-
-export const MAX_STACK: Record<ItemId, number> = { wood: 20, stone: 20, iron: 20, meat: 20 };
-
+const table = <T>(f: (i: ItemId) => T) => Object.fromEntries(ALL_ITEMS.map((i) => [i, f(i)])) as Record<ItemId, T>;
+export const ITEM_LABEL = table((i) => ITEM_DEFS[i].label);
+export const MAX_STACK = table((i) => ITEM_DEFS[i].maxStack);
 /** Weight of one unit, in kg. What the player can carry is limited by total weight. */
-export const ITEM_WEIGHT: Record<ItemId, number> = { wood: 2, stone: 3, iron: 4, meat: 1 };
+export const ITEM_WEIGHT = table((i) => ITEM_DEFS[i].weight);
 
 const isResource = (item: ItemId): item is Resource => (RESOURCES as readonly string[]).includes(item);
 
@@ -67,11 +68,34 @@ export class SlotInventory {
     for (let i = 0; i < this.slots.length && left > 0; i++) {
       if (this.slots[i] === null) {
         const put = Math.min(left, max);
-        this.slots[i] = { item, count: put };
+        const tool = ITEM_DEFS[item].tool;
+        this.slots[i] = tool ? { item, count: put, durability: tool.durability } : { item, count: put };
         left -= put;
       }
     }
     return wanted - left;
+  }
+
+  /** Puts a stack taken out with the mouse back into the first place it fits. Returns what didn't fit (or null). */
+  stow(stack: Stack): Stack | null {
+    if (MAX_STACK[stack.item] === 1) {
+      const i = this.slots.indexOf(null);
+      if (i < 0) return stack;
+      this.slots[i] = stack;
+      return null;
+    }
+    stack.count -= this.add(stack.item, stack.count);
+    return stack.count > 0 ? stack : null;
+  }
+
+  /** Wears the tool in slot `i` by one use. Returns true if it broke (and was removed). */
+  wear(i: number): boolean {
+    const s = this.slots[i];
+    if (s?.durability === undefined) return false;
+    s.durability -= 1;
+    if (s.durability > 0) return false;
+    this.slots[i] = null;
+    return true;
   }
 
   /** Removes up to `n` units, taking from the last slots first. Returns units removed. */
@@ -111,7 +135,7 @@ export class SlotInventory {
       this.slots[i] = held;
       return null;
     }
-    if (s.item === held.item) {
+    if (s.item === held.item && MAX_STACK[s.item] > 1) {
       const put = Math.min(held.count, MAX_STACK[s.item] - s.count);
       s.count += put;
       held.count -= put;
@@ -123,6 +147,9 @@ export class SlotInventory {
 
   /** Right click: pick up half a stack, or put down a single unit. Different items swap. */
   rightClick(i: number, held: Stack | null): Stack | null {
+    // Unstackable items (tools) move whole, keeping their durability.
+    const unstackable = (held && MAX_STACK[held.item] === 1) || (!held && this.slots[i] && MAX_STACK[this.slots[i]!.item] === 1);
+    if (unstackable) return this.leftClick(i, held);
     const s = this.slots[i];
     if (!held) {
       if (!s) return null;
@@ -164,7 +191,7 @@ export class SlotInventory {
     }
     for (let j = from; j < to && s.count > 0; j++) {
       if (this.slots[j] === null) {
-        this.slots[j] = { item: s.item, count: s.count };
+        this.slots[j] = { ...s };
         s.count = 0;
       }
     }

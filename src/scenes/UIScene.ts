@@ -3,9 +3,11 @@ import type { Building } from '../game/buildings';
 import { RESOURCE_LABEL, RESOURCES, type Resource } from '../game/inventory';
 import { foodDays } from '../game/needs';
 import type { NpcData } from '../game/npcs';
+import { MAX_LEVEL, xpToNext } from '../game/player';
 import { ambientAt, formatClock } from '../game/time';
 import { BuildingPanelUI } from '../ui/BuildingPanelUI';
 import { BuildMenuUI } from '../ui/BuildMenuUI';
+import { CraftingUI } from '../ui/CraftingUI';
 import { InventoryUI } from '../ui/InventoryUI';
 import { Minimap } from '../ui/Minimap';
 import { RecruitDialogUI } from '../ui/RecruitDialogUI';
@@ -42,6 +44,8 @@ export class UIScene extends Phaser.Scene {
   private bar!: Phaser.GameObjects.Graphics;
   private inventory!: InventoryUI;
   private minimap!: Minimap;
+  private crafting!: CraftingUI;
+  private levelText!: Phaser.GameObjects.Text;
   private hpBar!: Phaser.GameObjects.Graphics;
   private hpText!: Phaser.GameObjects.Text;
   private buildMenu!: BuildMenuUI;
@@ -85,7 +89,7 @@ export class UIScene extends Phaser.Scene {
     this.add.text(
       12,
       52,
-      'WASD: andar  Shift: correr  E: usar  Espaço: atacar  F: comer  B: construir  I/Tab: inventário  M: mapa  T: acelerar',
+      'WASD andar · E usar · Espaço atacar · F comer · B construir · C criar · I inventário · 1-9 ferramenta · M mapa · T acelerar',
       { ...TEXT, fontSize: '12px', backgroundColor: '#00000088', padding: { x: 8, y: 5 } },
     );
     this.debug = this.add.text(12, 80, '', { ...TEXT, fontSize: '11px', color: '#cfc3a8' });
@@ -105,6 +109,10 @@ export class UIScene extends Phaser.Scene {
       .setVisible(false);
 
     this.minimap = new Minimap(this, this.world);
+    this.crafting = new CraftingUI(this, this.world);
+    this.levelText = this.add
+      .text(0, 0, '', { ...TEXT, fontSize: '12px', color: '#ffe08a', stroke: '#000000', strokeThickness: 3 })
+      .setOrigin(1, 1);
     this.hpBar = this.add.graphics();
     this.hpText = this.add.text(0, 0, '', { ...TEXT, fontSize: '12px', stroke: '#000000', strokeThickness: 3 }).setOrigin(0, 1);
 
@@ -139,8 +147,12 @@ export class UIScene extends Phaser.Scene {
       if (key === 'i' || key === 'tab') {
         this.closeBuildMode();
         this.toggleInventory();
+      } else if (key === 'c') {
+        this.closeBuildMode();
+        this.crafting.setOpen(!this.crafting.isOpen);
       } else if (key === 'b') {
         if (this.inventory.isOpen) this.toggleInventory();
+        this.crafting.setOpen(false);
         const wasOpen = this.buildMenu.isOpen || this.world.placement !== null;
         this.closeBuildMode();
         if (!wasOpen) this.buildMenu.setOpen(true);
@@ -209,6 +221,7 @@ export class UIScene extends Phaser.Scene {
     this.updatePopups(deltaMs / 1000);
     this.inventory.update(this.input.activePointer);
     this.minimap.update(deltaMs / 1000);
+    this.crafting.update();
     this.drawHealth();
     this.buildMenu.update();
     this.updatePlaceHint();
@@ -243,6 +256,11 @@ export class UIScene extends Phaser.Scene {
     this.hpBar.fillStyle(0x000000, 0.7).fillRect(x - 1, y - 1, w + 2, 7);
     this.hpBar.fillStyle(ratio > 0.5 ? 0xd04838 : 0xff3020, 1).fillRect(x, y, Math.round(w * ratio), 5);
     this.hpText.setText(`♥ ${s.hp}/${s.maxHp}`).setPosition(x, y - 3);
+    // Level and XP (thin gold bar under the HP bar).
+    const xpRatio = s.level >= MAX_LEVEL ? 1 : s.xp / xpToNext(s.level);
+    this.hpBar.fillStyle(0x000000, 0.7).fillRect(x - 1, y + 6, w + 2, 4);
+    this.hpBar.fillStyle(0xffd040, 1).fillRect(x, y + 7, Math.round(w * xpRatio), 2);
+    this.levelText.setText(`Nv ${s.level}`).setPosition(x + w, y - 3);
   }
 
   private closeBuildMode(): void {

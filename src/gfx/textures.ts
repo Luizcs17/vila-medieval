@@ -488,7 +488,27 @@ const ANIMAL_ART: Record<string, AnimalArt> = {
   },
 };
 
+const TOOL_SHAPES = {
+  axe: ['...kgg..', '..kgggk.', '..kbggk.', '..kb.k..', '.kb.....', '.kb.....', 'kb......', 'k.......'],
+  pick: ['.kgggk..', 'kg.b.gk.', 'k..b..k.', '...b....', '...b....', '...b....', '...b....', '........'],
+  spear: ['......kg', '.....kgk', '....kbk.', '...kbk..', '..kbk...', '.kbk....', 'kbk.....', 'kk......'],
+  sword: ['......kg', '.....kgk', '....kgk.', '...kgk..', '.k.gk...', '..kk....', '.kbk....', 'k.k.....'],
+};
+const STONE = '#a8a39b';
+const IRON = '#d8dde4';
+const TOOL_ICONS: Record<string, [keyof typeof TOOL_SHAPES, string]> = {
+  stone_axe: ['axe', STONE],
+  iron_axe: ['axe', IRON],
+  stone_pick: ['pick', STONE],
+  iron_pick: ['pick', IRON],
+  spear: ['spear', STONE],
+  iron_sword: ['sword', IRON],
+};
+
 export function createPlaceholderTextures(scene: Phaser.Scene): void {
+  for (const [item, [shape, metal]] of Object.entries(TOOL_ICONS)) {
+    fromRows(scene, `icon_${item}`, TOOL_SHAPES[shape], { k: '#2b1d14', g: metal, b: '#8a5a2b' });
+  }
   for (const [name, art] of Object.entries(ANIMAL_ART)) {
     fromRows(scene, `animal_${name}_a`, [...art.body, ...art.legsA], art.palette);
     fromRows(scene, `animal_${name}_b`, [...art.body, ...art.legsB], art.palette);

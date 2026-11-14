@@ -2,6 +2,14 @@
 
 Each milestone from `docs/GDD.md` is a minor version.
 
+## 0.9.0: Milestone 9, crafting and progression
+
+- Crafting menu (C): stone/iron axes and pickaxes, a spear and an iron sword. Materials come from what you carry first, then the stockpile.
+- Tools work from the selected hotbar slot (1–9): axes speed up wood, pickaxes stone and iron (1.6× stone, 2.4× iron). Iron now needs a pickaxe.
+- Weapons and tools deal more damage (spear 3 with longer reach, sword 5). Everything has durability and breaks.
+- Tools don't stack, keep their durability when moved, and are never lost when you deposit or get knocked out.
+- Player XP from gathering, building, recruiting, crafting and hunting. Each level: +1 max HP, +3 kg carry, +5% gathering speed (up to level 15). Level and XP bar shown by the HP bar.
+
 ## 0.8.0: Milestone 8, villager needs
 
 - Villagers get hungry (satiety 0–100, empty after a day) and eat meat straight from the stockpile, about 2 per day. Frugal eats 30% less, Apetite grande 40% more.

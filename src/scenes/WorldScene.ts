@@ -20,11 +20,13 @@ import type { Animal, Human } from '../entities/Animal';
 import { Npc, type NpcWorld } from '../entities/Npc';
 import { Player } from '../entities/Player';
 import { BUILDING_DEFS, type Building, Buildings, type BuildingType, type PlaceCheck } from '../game/buildings';
+import { type CraftCheck, craft } from '../game/crafting';
 import { Gatherer, NODE_DEFS, nearestTile, ResourceNodes } from '../game/gathering';
 import { Inventory, RESOURCE_LABEL, RESOURCES, type Resource } from '../game/inventory';
+import { ITEM_DEFS, type ItemId, type Recipe, type ToolType } from '../game/items';
 import { isStarving, updateNeeds } from '../game/needs';
 import { compass, generateWanderer, jobTitle, type NpcData, Population, pickSpawnTile, WandererSpawner } from '../game/npcs';
-import { PlayerStats } from '../game/player';
+import { PER_LEVEL, PlayerStats, XP } from '../game/player';
 import { SlotInventory } from '../game/slots';
 import { GameClock } from '../game/time';
 import { createPlaceholderTextures } from '../gfx/textures';
@@ -249,7 +251,8 @@ export class WorldScene extends Phaser.Scene {
 
   /** Damage the player deals with a melee swing. Weapons raise it (crafting). */
   playerDamage(): number {
-    return 1;
+    const s = this.inventory.slots[this.selectedHotbar];
+    return (s && ITEM_DEFS[s.item].tool?.damage) || 1;
   }
 
   private attack(): void {
@@ -263,8 +266,14 @@ export class WorldScene extends Phaser.Scene {
       .setVisible(true)
       .setAlpha(1);
     this.tweens.add({ targets: this.slash, alpha: 0, duration: 160, onComplete: () => this.slash.setVisible(false) });
-    const hit = this.wildlife.playerAttack(this.player.gx, this.player.gy, this.playerDamage(), this.humans()[0]);
-    if (hit) this.player.face(hit.sprite.x);
+    const held = this.inventory.slots[this.selectedHotbar];
+    const reach = (held && ITEM_DEFS[held.item].tool?.reach) || 0;
+    const hit = this.wildlife.playerAttack(this.player.gx, this.player.gy, this.playerDamage(), this.humans()[0], reach);
+    if (hit) {
+      this.player.face(hit.sprite.x);
+      if (held?.durability !== undefined) this.wearTool(this.selectedHotbar);
+      if (!hit.alive) this.gainXp(hit.def.hp * XP.killPerHp);
+    }
   }
 
   private onHumanHit(target: Human, damage: number, animal: Animal): void {
@@ -388,6 +397,7 @@ export class WorldScene extends Phaser.Scene {
     if (!npc) return false;
     const home = this.population.recruit(npc.data, this.inventory, this.stockpile);
     if (!home) return false;
+    this.gainXp(XP.recruit);
     npc.becomeVillager(home);
     this.toast(`${npc.data.name} entrou para a vila!`, '#a8ffa8');
     return true;
@@ -521,19 +531,61 @@ export class WorldScene extends Phaser.Scene {
     const anchorX = img?.x ?? 0;
     const anchorY = img ? img.y - img.height - 2 : 0;
     const def = NODE_DEFS[obj]!;
+    const tool = this.selectedTool(def.tool);
     const full = this.inventory.space(def.resource) <= 0;
-    const active = this.keys.E.isDown && !moving && !full;
+    const missingTool = def.needsTool && !tool;
+    const active = this.keys.E.isDown && !moving && !full && !missingTool;
     if (active) this.player.face(anchorX);
 
-    if (this.gatherer.tick(dt, target, active, def.secondsPerUnit)) this.harvest(target);
+    const seconds = def.secondsPerUnit / (this.stats.gatherSpeed * (tool ? ITEM_DEFS[tool.item].tool!.speed : 1));
+    if (this.gatherer.tick(dt, target, active, seconds)) this.harvest(target, tool?.slot);
 
     const left = this.nodes.remainingAt(target);
-    this.interaction = {
-      x: anchorX,
-      y: anchorY,
-      text: full ? 'Peso máximo! Leve ao estoque' : `[segure E] ${def.verb} ${def.name} (${left})`,
-      progress: active ? this.gatherer.progress / def.secondsPerUnit : null,
-    };
+    const toolName = tool ? ` · ${ITEM_DEFS[tool.item].label}` : '';
+    let text = `[segure E] ${def.verb} ${def.name} (${left})${toolName}`;
+    if (full) text = 'Peso máximo! Leve ao estoque';
+    if (missingTool) text = `Precisa de uma picareta na hotbar (C: criar)`;
+    this.interaction = { x: anchorX, y: anchorY, text, progress: active ? this.gatherer.progress / seconds : null };
+  }
+
+  /** The tool of `type` in the selected hotbar slot, if any. */
+  private selectedTool(type: ToolType): { item: ItemId; slot: number } | null {
+    const s = this.inventory.slots[this.selectedHotbar];
+    if (!s || ITEM_DEFS[s.item].tool?.type !== type) return null;
+    return { item: s.item, slot: this.selectedHotbar };
+  }
+
+  /** Wears the tool in `slot`; announces it if it breaks. */
+  private wearTool(slot: number): void {
+    const s = this.inventory.slots[slot];
+    if (!s) return;
+    const name = ITEM_DEFS[s.item].label;
+    if (this.inventory.wear(slot)) this.toast(`${name} quebrou!`, '#ffb070');
+  }
+
+  /** Grants XP and announces level-ups (max HP and carry weight grow). */
+  gainXp(amount: number): void {
+    const levels = this.stats.addXp(amount);
+    this.inventory.maxWeight = this.stats.carryWeight;
+    if (levels > 0) {
+      this.toast(
+        `Nível ${this.stats.level}! +${PER_LEVEL.hp} de vida máxima, +${PER_LEVEL.carry} kg de carga, coleta mais rápida.`,
+        '#ffe08a',
+      );
+    }
+  }
+
+  /** Crafts a recipe (from the C menu). Returns the result for the UI. */
+  craftItem(recipe: Recipe): CraftCheck {
+    const result = craft(recipe, this.inventory, this.stockpile);
+    const p = this.player.sprite;
+    if (result === 'ok') {
+      this.popup(p.x, p.y - p.height, `+ ${ITEM_DEFS[recipe.item].label}`, '#ffe08a');
+      this.gainXp(XP.craft);
+    } else {
+      this.popup(p.x, p.y - p.height, result === 'cost' ? 'Faltam materiais' : 'Sem espaço no inventário', '#ff8a7a');
+    }
+    return result;
   }
 
   private interactWithBuilding(b: Building, dt: number, moving: boolean): void {
@@ -548,6 +600,7 @@ export class WorldScene extends Phaser.Scene {
       if (active) {
         this.player.face(x);
         if (this.buildings.work(b, dt)) {
+          this.gainXp(XP.build);
           this.refreshBuildingView(b);
           this.events.emit('popup', { x, y, text: `${def.name} construída!`, color: '#ffe08a' } satisfies PopupEvent);
         }
@@ -599,10 +652,12 @@ export class WorldScene extends Phaser.Scene {
     return result.resource;
   }
 
-  private harvest(i: number): void {
+  private harvest(i: number, toolSlot?: number): void {
     const result = this.nodes.harvest(i);
     if (!result) return;
     this.inventory.add(result.resource);
+    if (toolSlot !== undefined) this.wearTool(toolSlot);
+    this.gainXp(XP.gather);
 
     const img = this.objectImages.get(i);
     if (img) {
