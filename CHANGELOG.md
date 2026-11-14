@@ -2,6 +2,11 @@
 
 Each milestone from `docs/GDD.md` is a minor version.
 
+## 1.2.0: Milestone 12, territory map and village management
+
+- M opens a full-screen map: terrain, each village's territory in its colour with strong borders, buildings, village names, villagers and wanderers, you, and a legend with population and land per village. The minimap is now toggled with N.
+- V opens village management with tabs: Summary (population, beds, jobs, food days, territory, stock, rival villages), Villagers (table with job, skill ratings, hunger, HP; click opens the card) and Buildings (state and people; click opens the panel). Diplomacy and Dynasty tabs are reserved for the next milestones.
+
 ## 1.1.0: Milestone 11, rival towns and territory
 
 - The map is now 128×128 with three rival villages (Pedra Alta, Vale Azul, Pinhal Dourado), each with a hall flying its colour, houses, workplaces and six villagers who work, eat and live with the same AI as yours. Rival towns build houses as they grow and staff their workplaces.

@@ -12,7 +12,8 @@ const CONTROLS = [
   'Espaço: atacar   F: comer carne',
   '1–9: escolher ferramenta da hotbar',
   'B: construir   C: criar   I/Tab: inventário',
-  'M: minimapa   T (segurar): acelerar tempo',
+  'V: gestão da vila   M: mapa   N: minimapa',
+  'T (segurar): acelerar tempo',
 ];
 
 /** Esc menu: pauses the world; continue, save, load the last save, or start a new game. */

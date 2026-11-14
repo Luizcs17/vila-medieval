@@ -129,6 +129,8 @@ export class WorldScene extends Phaser.Scene {
   /** Building whose panel is open in UIScene (workers / residents). Freezes the player. */
   panelBuilding: Building | null = null;
   npcWorld!: NpcWorld;
+  /** Set by UIScene while a full-screen panel (map, management) is open: freezes the player. */
+  modalOpen = false;
   factions!: Faction[];
   territory!: Territory;
   private townTimer = 0;
@@ -186,6 +188,7 @@ export class WorldScene extends Phaser.Scene {
     this.talkingTo = null;
     this.panelBuilding = null;
     this.inventoryOpen = false;
+    this.modalOpen = false;
     this.selectedHotbar = 0;
     this.fastForward = false;
     this.attackCd = 0;
@@ -380,7 +383,7 @@ export class WorldScene extends Phaser.Scene {
 
   update(_time: number, deltaMs: number): void {
     const k = this.keys;
-    const frozen = this.inventoryOpen || this.talkingTo !== null || this.panelBuilding !== null;
+    const frozen = this.inventoryOpen || this.modalOpen || this.talkingTo !== null || this.panelBuilding !== null;
     const x = frozen ? 0 : (k.D.isDown || k.RIGHT.isDown ? 1 : 0) - (k.A.isDown || k.LEFT.isDown ? 1 : 0);
     const y = frozen ? 0 : (k.S.isDown || k.DOWN.isDown ? 1 : 0) - (k.W.isDown || k.UP.isDown ? 1 : 0);
     // Clamp huge frame gaps (e.g. tab switch) so the player never tunnels through walls.
@@ -856,6 +859,33 @@ export class WorldScene extends Phaser.Scene {
       this.panelBuilding = b;
       this.events.emit('building', b);
     }
+  }
+
+  /** Diplomatic status with a rival village, for the UI (diplomacy arrives in milestone 15). */
+  relationLabel(_faction: number): string {
+    return 'Paz';
+  }
+
+  /** Age for the UI (families arrive in milestone 14). */
+  ageLabel(_n: NpcData): string {
+    return '—';
+  }
+
+  /** Building condition for the UI (building HP arrives in milestone 13). */
+  buildingHealthLabel(_b: Building): string {
+    return 'pronto';
+  }
+
+  /** Opens a villager's card from another panel (management screen). */
+  openNpcCard(n: NpcData): void {
+    this.talkingTo = n;
+    this.events.emit('talk', n);
+  }
+
+  /** Opens a building's panel from another panel (management screen). */
+  openBuildingPanel(b: Building): void {
+    this.panelBuilding = b;
+    this.events.emit('building', b);
   }
 
   /** Why a villager isn't working (e.g. no resources nearby), or null. */

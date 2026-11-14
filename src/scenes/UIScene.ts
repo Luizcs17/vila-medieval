@@ -8,7 +8,9 @@ import { ambientAt, formatClock } from '../game/time';
 import { BuildingPanelUI } from '../ui/BuildingPanelUI';
 import { BuildMenuUI } from '../ui/BuildMenuUI';
 import { CraftingUI } from '../ui/CraftingUI';
+import { FullMapUI } from '../ui/FullMapUI';
 import { InventoryUI } from '../ui/InventoryUI';
+import { ManagementUI } from '../ui/ManagementUI';
 import { Minimap } from '../ui/Minimap';
 import { PauseMenuUI } from '../ui/PauseMenuUI';
 import { RecruitDialogUI } from '../ui/RecruitDialogUI';
@@ -45,6 +47,8 @@ export class UIScene extends Phaser.Scene {
   private bar!: Phaser.GameObjects.Graphics;
   private inventory!: InventoryUI;
   private minimap!: Minimap;
+  private fullMap!: FullMapUI;
+  private management!: ManagementUI;
   private pause!: PauseMenuUI;
   private crafting!: CraftingUI;
   private levelText!: Phaser.GameObjects.Text;
@@ -96,7 +100,7 @@ export class UIScene extends Phaser.Scene {
     this.add.text(
       12,
       52,
-      'WASD andar · E usar · Espaço atacar · F comer · B construir · C criar · I inventário · 1-9 ferramenta · M mapa · T acelerar',
+      'WASD andar · E usar · Espaço atacar · F comer · B construir · C criar · I inventário · V vila · M mapa · T acelerar',
       { ...TEXT, fontSize: '12px', backgroundColor: '#00000088', padding: { x: 8, y: 5 } },
     );
     this.debug = this.add.text(12, 80, '', { ...TEXT, fontSize: '11px', color: '#cfc3a8' });
@@ -140,6 +144,13 @@ export class UIScene extends Phaser.Scene {
     const kb = this.input.keyboard!;
     kb.addCapture('TAB');
     this.pause = new PauseMenuUI(this, this.world);
+    this.fullMap = new FullMapUI(this, this.world);
+    this.management = new ManagementUI(
+      this,
+      this.world,
+      (n) => this.world.openNpcCard(n),
+      (b) => this.world.openBuildingPanel(b),
+    );
     kb.on('keydown', (e: KeyboardEvent) => {
       const key = e.key.toLowerCase();
       if (this.pause.isOpen) {
@@ -151,9 +162,28 @@ export class UIScene extends Phaser.Scene {
         return;
       }
       if (this.dialog.isOpen) {
-        // The dialog is modal: only its own keys work.
         if (key === 'enter') this.dialog.confirm();
         else if (key === 'escape' || key === 'e') this.dialog.close();
+        return;
+      }
+      if (this.fullMap.isOpen) {
+        if (key === 'escape' || key === 'm') this.fullMap.close();
+        return;
+      }
+      if (this.management.isOpen) {
+        if (key === 'escape' || key === 'v') this.management.close();
+        return;
+      }
+      if (key === 'm') {
+        this.closeBuildMode();
+        if (this.inventory.isOpen) this.toggleInventory();
+        this.fullMap.open();
+        return;
+      }
+      if (key === 'v') {
+        this.closeBuildMode();
+        if (this.inventory.isOpen) this.toggleInventory();
+        this.management.open();
         return;
       }
       if (key === 'i' || key === 'tab') {
@@ -175,7 +205,7 @@ export class UIScene extends Phaser.Scene {
         if (this.inventory.isOpen) this.toggleInventory();
         this.crafting.setOpen(false);
         this.closeBuildMode();
-      } else if (key === 'm') this.minimap.toggle();
+      } else if (key === 'n') this.minimap.toggle();
       else if (key >= '1' && key <= '9') this.world.selectedHotbar = Number(key) - 1;
     });
 
@@ -240,6 +270,8 @@ export class UIScene extends Phaser.Scene {
     this.inventory.update(this.input.activePointer);
     this.minimap.update(deltaMs / 1000);
     this.crafting.update();
+    this.fullMap.update(deltaMs / 1000);
+    this.management.update(deltaMs / 1000);
     this.drawHealth();
     this.buildMenu.update();
     this.updatePlaceHint();
@@ -354,5 +386,7 @@ export class UIScene extends Phaser.Scene {
     this.panel.layout(width, height);
     this.minimap.layout(width, height);
     this.pause?.layout(width, height);
+    this.fullMap?.layout();
+    this.management?.layout();
   }
 }

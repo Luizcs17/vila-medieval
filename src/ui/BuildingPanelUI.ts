@@ -155,7 +155,7 @@ export class BuildingPanelUI {
     y += 28 + PAD;
 
     const bg = s.add.rectangle(0, 0, W, y, 0x1a140e, 0.96).setOrigin(0).setStrokeStyle(2, 0x5a4630).setInteractive();
-    const c = s.add.container(0, 0, [bg, ...items]).setDepth(150);
+    const c = s.add.container(0, 0, [bg, ...items]).setDepth(280);
     c.setData('height', y);
     this.container = c;
     this.layout(s.scale.width, s.scale.height);
