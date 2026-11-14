@@ -33,6 +33,16 @@ export interface NpcWorld {
   findHostile(faction: number, gx: number, gy: number, r: number): Target | null;
   /** A soldier's blow lands on `target`. */
   strike(from: Npc, target: Target, damage: number): void;
+  atWar(a: number, b: number): boolean;
+  /** Nearest building of village `target` for a raiding soldier, or null. */
+  raidTarget(npc: Npc, target: number): Building | null;
+  attackBuilding(npc: Npc, b: Building, damage: number): void;
+  /** Diplomatic mission of this diplomat, if any. */
+  mission(id: number): { phase: 'going' | 'talking' | 'returning'; target: number } | null;
+  missionArrived(id: number): void;
+  missionDone(id: number): void;
+  missionFailed(id: number): void;
+  factionCenter(faction: number): { x: number; y: number };
 }
 
 /** Something a soldier or tower can attack. */
@@ -145,8 +155,9 @@ export class Npc {
       return;
     }
 
-    // Soldiers stand guard day and night; everyone else works by day.
-    if (workplace && (soldier || !world.isNight())) this.work(dt, world, workplace);
+    // Soldiers stand guard day and night, diplomats travel on; everyone else works by day.
+    const busyAtNight = soldier || world.mission(this.data.id) !== null;
+    if (workplace && (busyAtNight || !world.isNight())) this.work(dt, world, workplace);
     else this.live(dt, world);
     this.sync();
   }
@@ -311,31 +322,17 @@ export class Npc {
   /** Soldier loop: patrol around the barracks; charge and fight hostiles that come close. */
   private guard(dt: number, world: NpcWorld, barracks: Building): void {
     this.attackCd -= dt;
+    if (this.data.order) {
+      this.raid(dt, world);
+      return;
+    }
     const f = footprintOf(barracks);
     const cx = f.x + f.s / 2;
     const cy = f.y + f.s / 2;
     const target = world.findHostile(this.data.faction, this.gx, this.gy, GUARD_RANGE);
     const inLeash = target && Math.hypot(target.gx - cx, target.gy - cy) < GUARD_LEASH;
     if (target && inLeash) {
-      this.status = 'Combatendo!';
-      const d = Math.hypot(target.gx - this.gx, target.gy - this.gy);
-      if (d <= 0.95) {
-        this.path = [];
-        this.stopWalking();
-        this.sprite.setFlipX(target.gx - target.gy < this.gx - this.gy);
-        if (this.attackCd <= 0) {
-          this.attackCd = 1.1;
-          world.strike(this, target, soldierDamage(this.data));
-          this.scene.tweens.add({ targets: this.sprite, scaleX: 1.15, duration: 70, yoyo: true });
-        }
-        return;
-      }
-      this.repath -= dt;
-      if (this.path.length === 0 || this.repath <= 0) {
-        this.repath = 0.6;
-        this.goNear(target.gx, target.gy, 0);
-      }
-      this.walk(dt * 1.3);
+      this.fight(dt, world, target);
       return;
     }
     this.status = null;
@@ -354,8 +351,113 @@ export class Npc {
     }
   }
 
+  /** Close in on `target` and hit it on cooldown. */
+  private fight(dt: number, world: NpcWorld, target: Target): void {
+    this.status = 'Combatendo!';
+    const d = Math.hypot(target.gx - this.gx, target.gy - this.gy);
+    if (d <= 0.95) {
+      this.path = [];
+      this.stopWalking();
+      this.sprite.setFlipX(target.gx - target.gy < this.gx - this.gy);
+      if (this.attackCd <= 0) {
+        this.attackCd = 1.1;
+        world.strike(this, target, soldierDamage(this.data));
+        this.scene.tweens.add({ targets: this.sprite, scaleX: 1.15, duration: 70, yoyo: true });
+      }
+      return;
+    }
+    this.repath -= dt;
+    if (this.path.length === 0 || this.repath <= 0) {
+      this.repath = 0.6;
+      this.goNear(target.gx, target.gy, 0);
+    }
+    this.walk(dt * 1.3);
+  }
+
+  /** Campaign: march on the enemy village, fight its defenders and batter its buildings. */
+  private raid(dt: number, world: NpcWorld): void {
+    const order = this.data.order!;
+    if (!world.atWar(this.data.faction, order.target) || this.data.hp <= 3) {
+      this.data.order = null; // war over, or badly hurt: back to the barracks
+      this.path = [];
+      return;
+    }
+    const enemy = world.findHostile(this.data.faction, this.gx, this.gy, 5);
+    if (enemy) {
+      this.fight(dt, world, enemy);
+      return;
+    }
+    const b = world.raidTarget(this, order.target);
+    if (!b) {
+      this.data.order = null;
+      return;
+    }
+    this.status = 'Atacando!';
+    if (this.isNextTo(b)) {
+      this.path = [];
+      this.stopWalking();
+      const f = footprintOf(b);
+      this.sprite.setFlipX(f.x - f.y < this.gx - this.gy);
+      if (this.attackCd <= 0) {
+        this.attackCd = 1.4;
+        world.attackBuilding(this, b, soldierDamage(this.data) * 2);
+        this.scene.tweens.add({ targets: this.sprite, scaleX: 1.15, duration: 70, yoyo: true });
+      }
+      return;
+    }
+    this.repath -= dt;
+    if (this.path.length === 0 || this.repath <= 0) {
+      this.repath = 3;
+      this.goNextTo(b, 30000);
+    }
+    this.walk(dt * 1.1);
+  }
+
+  /** Diplomat loop: wait at the embassy; on a mission walk to the other village, talk, come back. */
+  private diplomat(dt: number, world: NpcWorld, embassy: Building): void {
+    const m = world.mission(this.data.id);
+    if (!m) {
+      this.status = null;
+      this.live(dt, world);
+      return;
+    }
+    if (m.phase === 'talking') {
+      this.status = 'Negociando…';
+      this.path = [];
+      this.stopWalking();
+      return;
+    }
+    if (m.phase === 'going') {
+      this.status = 'Viajando em missão';
+      const c = world.factionCenter(m.target);
+      if (Math.hypot(c.x + 0.5 - this.gx, c.y + 0.5 - this.gy) < 3.5) {
+        this.path = [];
+        world.missionArrived(this.data.id);
+        return;
+      }
+      if (this.path.length === 0 && !this.goNear(c.x, c.y, 2, 40000)) {
+        world.missionFailed(this.data.id);
+        return;
+      }
+      this.walk(dt);
+      return;
+    }
+    // returning
+    this.status = 'Voltando da missão';
+    if (this.isNextTo(embassy)) {
+      this.path = [];
+      world.missionDone(this.data.id);
+      return;
+    }
+    if (this.path.length === 0 && !this.goNextTo(embassy, 40000)) {
+      world.missionDone(this.data.id);
+      return;
+    }
+    this.walk(dt);
+  }
+
   /** Path to any walkable tile within `r` tiles of (x, y). */
-  private goNear(x: number, y: number, r: number): boolean {
+  private goNear(x: number, y: number, r: number, budget = 2500): boolean {
     const tx = Math.floor(x);
     const ty = Math.floor(y);
     const p = findPath(
@@ -363,7 +465,7 @@ export class Npc {
       this.tile,
       (px, py) => Math.max(Math.abs(px - tx), Math.abs(py - ty)) <= r,
       { x: tx, y: ty },
-      2500,
+      budget,
     );
     this.path = p ?? [];
     return p !== null;
@@ -414,6 +516,10 @@ export class Npc {
     }
     if (job.skill === 'combat') {
       this.guard(dt, world, workplace);
+      return;
+    }
+    if (job.skill === 'diplomacy') {
+      this.diplomat(dt, world, workplace);
       return;
     }
 

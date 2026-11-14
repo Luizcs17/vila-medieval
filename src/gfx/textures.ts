@@ -615,6 +615,16 @@ export function createPlaceholderTextures(scene: Phaser.Scene): void {
     door: true,
     window: true,
   });
+  isoBuilding(scene, 'bld_embassy', 2, {
+    wallL: '#e0dcea',
+    wallR: '#bcb6cc',
+    roofL: '#4a5aa0',
+    roofR: '#38457e',
+    wallH: 18,
+    roofH: 22,
+    door: true,
+    window: true,
+  });
   palisade(scene, 'bld_palisade', false);
   palisade(scene, 'bld_gate', true);
   constructionSite(scene, 'site_1', 1);

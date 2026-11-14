@@ -2,6 +2,15 @@
 
 Each milestone from `docs/GDD.md` is a minor version.
 
+## 1.5.0: Milestone 15, diplomacy, war and conquest
+
+- Relations with every village (-100..100; peace, alliance, war). They drift toward neutral, shared borders cause friction, and the AI declares wars, makes peace and forms alliances among the villages. Toward you it only proposes; answer in V → Diplomacia.
+- Embaixada (new building) employs diplomats, who walk to the other village: carry a gift (raises relation, more with a better Diplomacia rating), propose an alliance (needs +40) or peace. The success chance is shown. Diplomats on a mission are never attacked.
+- Declaring war is instant, and allies on both sides join. Warring villages send their soldiers on raids; you can send yours (Attack / Recall). Raiders take out towers first, then batter buildings. Reaching your hall loots 30% of your stockpile; taking a rival's hall **conquers** it (buildings, villagers and stock become the winner's). AI villages can conquer each other.
+- Rival villages start with a barracks and soldiers (8 villagers), build barracks when threatened, and react immediately to war. Halls have 500 HP.
+- Fix: rival workplaces now respect their slot limits.
+- Save format v4.
+
 ## 1.4.0: Milestone 14, families and dynasties
 
 - One game day is one year. Everyone has a surname and an age; wanderers arrive as adults (16–45). Children are drawn smaller, eat half and can't be hired until 16. After 65, villagers may die of old age.

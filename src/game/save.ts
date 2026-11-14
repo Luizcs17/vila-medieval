@@ -1,5 +1,6 @@
 import type { AnimalData } from './animals';
 import type { Building } from './buildings';
+import type { MissionKind, Proposal, Relation } from './diplomacy';
 import type { NodesSnapshot } from './gathering';
 import type { Amounts } from './inventory';
 import type { PopulationSnapshot } from './npcs';
@@ -7,7 +8,7 @@ import type { Stack } from './slots';
 
 export const SAVE_KEY = 'vila-medieval-save';
 /** Bump when the shape changes; older saves are then ignored instead of half-loaded. */
-export const SAVE_VERSION = 3;
+export const SAVE_VERSION = 4;
 
 /** Everything needed to rebuild a game. The map layout itself comes from the fixed seed. */
 export interface SaveData {
@@ -25,6 +26,8 @@ export interface SaveData {
   player: { gx: number; gy: number; hp: number; maxHp: number; level: number; xp: number };
   population: PopulationSnapshot;
   families: { affinity: Record<string, number>; chattedOn: Record<number, number> };
+  diplomacy: { rel: Record<string, Relation>; pending: Proposal[] };
+  missions: { diplomatId: number; kind: MissionKind; target: number; phase: 'going' | 'talking' | 'returning'; timer: number }[];
   /** NPC positions by id. */
   npcPositions: [number, number, number][];
   animals: AnimalData[];

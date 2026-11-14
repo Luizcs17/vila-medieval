@@ -14,6 +14,7 @@ import {
   MEAT_HEAL,
   NPC_REACH,
   PLAYER_RADIUS,
+  RAID_INTERVAL,
   REPAIR_RATE,
   TILE_H,
   TILE_W,
@@ -25,8 +26,18 @@ import { Npc, type NpcWorld, type Target } from '../entities/Npc';
 import { Player } from '../entities/Player';
 import { BUILDING_DEFS, type Building, Buildings, type BuildingType, type PlaceCheck } from '../game/buildings';
 import { type CraftCheck, craft } from '../game/crafting';
+import {
+  ALLIANCE_MIN,
+  Diplomacy,
+  GIFT_COST,
+  giftValue,
+  MISSION_LABEL,
+  type MissionKind,
+  missionChance,
+  type Proposal,
+} from '../game/diplomacy';
 import { createFactions, type Faction, PLAYER_FACTION } from '../game/factions';
-import { ageOf, Families, fullName, PLAYER_ID } from '../game/families';
+import { ageOf, Families, fullName, isAdult, PLAYER_ID } from '../game/families';
 import { Gatherer, NODE_DEFS, nearestTile, ResourceNodes } from '../game/gathering';
 import { Inventory, RESOURCE_LABEL, RESOURCES, type Resource } from '../game/inventory';
 import { ITEM_DEFS, type ItemId, type Recipe, type ToolType } from '../game/items';
@@ -81,6 +92,7 @@ const BUILDING_KEY: Record<BuildingType, string> = {
   gate: 'bld_gate',
   tower: 'bld_tower',
   barracks: 'bld_barracks',
+  embassy: 'bld_embassy',
 };
 
 /** Ground is drawn beneath everything; objects and characters are depth-sorted by their screen y. */
@@ -113,6 +125,15 @@ export interface PopupEvent {
 export interface WorldInit {
   save?: SaveData | null;
   fresh?: boolean;
+}
+
+/** A diplomat's trip: going → talking → returning. */
+export interface Mission {
+  diplomatId: number;
+  kind: MissionKind;
+  target: number;
+  phase: 'going' | 'talking' | 'returning';
+  timer: number;
 }
 
 /** Emitted on `scene.events` as 'toast' for screen-level notifications. */
@@ -151,6 +172,11 @@ export class WorldScene extends Phaser.Scene {
   territory!: Territory;
   private townTimer = 0;
   families!: Families;
+  diplomacy!: Diplomacy;
+  /** Diplomatic missions in progress, by diplomat id. */
+  missions = new Map<number, Mission>();
+  private diploTimer = 0;
+  private raidTimers = new Map<string, number>();
   private towerCd = new Map<number, number>();
   private buildingFx!: Phaser.GameObjects.Graphics;
   private repairAcc = 0;
@@ -228,6 +254,10 @@ export class WorldScene extends Phaser.Scene {
     this.population = new Population(this.buildings);
     this.population.now = () => this.clock.seconds;
     this.families = new Families(this.population);
+    this.diplomacy = new Diplomacy();
+    this.missions = new Map();
+    this.raidTimers = new Map();
+    this.diploTimer = 0;
     this.factions = createFactions(this.map.sites, this.stockpile);
     this.territory = new Territory(this.map);
     this.npcWorld = {
@@ -243,6 +273,24 @@ export class WorldScene extends Phaser.Scene {
       findCarcass: (cx, cy, r) => this.wildlife.findCarcass(cx, cy, r),
       takeMeat: (id, max) => this.wildlife.takeMeat(id, max),
       findHostile: (f, gx, gy, r) => this.findHostile(f, gx, gy, r),
+      atWar: (a, b) => this.atWar(a, b),
+      raidTarget: (npc, target) => this.raidTarget(npc, target),
+      attackBuilding: (npc, b, dmg) => this.damageBuilding(b, dmg, npc.data.faction),
+      mission: (id) => this.missions.get(id) ?? null,
+      missionArrived: (id) => {
+        const m = this.missions.get(id);
+        if (m) {
+          m.phase = 'talking';
+          m.timer = 6;
+        }
+      },
+      missionDone: (id) => this.missions.delete(id),
+      missionFailed: (id) => {
+        const n = this.population.person(id);
+        this.missions.delete(id);
+        this.toast(`${n?.name ?? 'O diplomata'} não encontrou caminho até a outra vila.`, '#ffb070');
+      },
+      factionCenter: (f) => this.factions[f].center,
       strike: (from, target, dmg) =>
         this.strikeTarget(target, dmg, `um soldado de ${this.factions[from.data.faction].name}`, {
           kind: 'npc',
@@ -294,12 +342,16 @@ export class WorldScene extends Phaser.Scene {
     if (save) this.applySave(save);
     else {
       this.wildlife.populate();
+      this.diplomacy.init(
+        this.factions.map((f) => f.id),
+        Math.random,
+      );
       for (const f of this.factions) {
         if (f.isPlayer) continue;
-        f.stock.add('wood', 20);
-        f.stock.add('stone', 10);
+        f.stock.add('wood', 40);
+        f.stock.add('stone', 25);
         f.stock.add('meat', 20);
-        for (const n of populateTown(this.population, this.buildings, f, Math.random, 6, this.clock.seconds))
+        for (const n of populateTown(this.population, this.buildings, f, Math.random, 8, this.clock.seconds))
           this.spawnVillagerEntity(n);
       }
     }
@@ -359,6 +411,8 @@ export class WorldScene extends Phaser.Scene {
       player: { gx: this.player.gx, gy: this.player.gy, ...this.stats.snapshot() },
       population: this.population.snapshot(),
       families: { affinity: { ...this.families.affinity }, chattedOn: { ...this.families.chattedOn } },
+      diplomacy: this.diplomacy.snapshot(),
+      missions: [...this.missions.values()].map((m) => ({ ...m })),
       npcPositions: [...this.npcs.values()].map((n) => [n.data.id, n.gx, n.gy]),
       animals: this.wildlife.snapshot(),
     };
@@ -394,6 +448,8 @@ export class WorldScene extends Phaser.Scene {
     this.population.restore(save.population);
     this.families.affinity = { ...save.families.affinity };
     this.families.chattedOn = { ...save.families.chattedOn };
+    this.diplomacy.restore(save.diplomacy);
+    for (const m of save.missions) this.missions.set(m.diplomatId, { ...m });
     const pos = new Map(save.npcPositions.map(([id, x, y]) => [id, { x, y }]));
     for (const data of this.population.npcs) this.spawnVillagerEntity(data, pos.get(data.id) ?? this.villageCenter);
     this.wildlife.restore(save.animals);
@@ -549,8 +605,228 @@ export class WorldScene extends Phaser.Scene {
   }
 
   /** Are two factions at war? (Diplomacy arrives in milestone 15.) */
-  atWar(_a: number, _b: number): boolean {
-    return false;
+  atWar(a: number, b: number): boolean {
+    return this.diplomacy.atWar(a, b);
+  }
+
+  // ---------- diplomacy & war ----------
+
+  /** Diplomats (at your embassies) who are free for a mission, best Diplomacia rating first. */
+  freeDiplomats(): NpcData[] {
+    const embassies = this.buildings.list.filter((b) => b.faction === PLAYER_FACTION && b.type === 'embassy' && b.built);
+    return embassies
+      .flatMap((e) => this.population.workers(e.id))
+      .filter((n) => !this.missions.has(n.id) && this.npcs.has(n.id))
+      .sort((a, b) => b.skills.diplomacy - a.skills.diplomacy);
+  }
+
+  /** Your soldiers (Quartel workers). */
+  soldiers(faction = PLAYER_FACTION): NpcData[] {
+    const barracks = this.buildings.list.filter((b) => b.faction === faction && b.type === 'barracks');
+    return barracks.flatMap((b) => this.population.workers(b.id));
+  }
+
+  /** Sends the best free diplomat on a mission. Returns a message for the UI. */
+  sendMission(kind: MissionKind, target: number): string {
+    const d = this.freeDiplomats()[0];
+    const f = this.factions[target];
+    if (!d) return 'Nenhum diplomata livre. Construa uma Embaixada e designe um aldeão.';
+    const rel = this.diplomacy.get(PLAYER_FACTION, target);
+    if (kind === 'alliance' && (rel.status !== 'peace' || rel.score < ALLIANCE_MIN))
+      return `Precisa de paz e relação de pelo menos +${ALLIANCE_MIN}.`;
+    if (kind === 'peace' && rel.status !== 'war') return 'Vocês não estão em guerra.';
+    if (kind === 'gift' && !payFrom(GIFT_COST, this.inventory, this.stockpile)) return 'Faltam recursos para o presente.';
+    this.missions.set(d.id, { diplomatId: d.id, kind, target, phase: 'going', timer: 0 });
+    const msg = `${d.name} partiu para ${f.name}: ${MISSION_LABEL[kind].toLowerCase()}.`;
+    this.toast(msg, '#a8c8ff');
+    return msg;
+  }
+
+  declareWarOn(target: number): void {
+    const ids = this.factions.filter((f) => f.alive).map((f) => f.id);
+    for (const e of this.diplomacy.declareWar(PLAYER_FACTION, target, ids, 'declarada por você'))
+      if (e.type === 'war') this.announceWar(e.a, e.b);
+  }
+
+  /** Orders every healthy soldier of yours to march on `target`. Returns how many went. */
+  orderAttack(target: number): number {
+    let n = 0;
+    for (const s of this.soldiers()) {
+      if (s.hp > 3 && isAdult(s, this.clock.seconds)) {
+        s.order = { kind: 'raid', target };
+        n++;
+      }
+    }
+    if (n > 0) this.toast(`${n} soldado(s) marchando contra ${this.factions[target].name}!`, '#ffb070');
+    return n;
+  }
+
+  recallSoldiers(): void {
+    for (const s of this.soldiers()) s.order = null;
+    this.toast('Seus soldados estão voltando ao quartel.', '#cfc3a8');
+  }
+
+  answerProposal(p: Proposal, accept: boolean): void {
+    this.diplomacy.answer(p, accept);
+    const name = this.factions[p.from].name;
+    if (!accept) this.toast(`Você recusou a proposta de ${name}.`, '#cfc3a8');
+    else this.toast(p.kind === 'alliance' ? `Aliança com ${name}!` : `Paz com ${name}.`, '#a8ffa8');
+  }
+
+  private announceWar(a: number, b: number): void {
+    this.townTimer = DAY_SECONDS; // villages react (barracks, soldiers) right away
+    const fa = this.factions[a];
+    const fb = this.factions[b];
+    if (b === PLAYER_FACTION) this.toast(`${fa.name} declarou guerra contra você!`, '#ff6a5a');
+    else if (a === PLAYER_FACTION) this.toast(`Você está em guerra com ${fb.name}.`, '#ff8a7a');
+    else this.toast(`${fa.name} e ${fb.name} entraram em guerra.`, '#ffb070');
+  }
+
+  /**
+   * What a raiding soldier attacks next in village `target`: a watchtower shooting nearby first,
+   * then the nearest building (walls in the way get battered on the route to the hall).
+   */
+  private raidTarget(npc: Npc, target: number): Building | null {
+    let best: Building | null = null;
+    let bestD = Infinity;
+    for (const b of this.buildings.list) {
+      if (b.faction !== target) continue;
+      const tower = BUILDING_DEFS[b.type].defense !== undefined;
+      const d = Math.hypot(b.tx - npc.gx, b.ty - npc.gy) - (tower && Math.hypot(b.tx - npc.gx, b.ty - npc.gy) < 12 ? 100 : 0);
+      if (d < bestD) {
+        bestD = d;
+        best = b;
+      }
+    }
+    return best;
+  }
+
+  /** `winner` takes over `loser`: buildings, villagers and stock change hands. */
+  private conquer(loser: number, winner: number): void {
+    const lf = this.factions[loser];
+    const wf = this.factions[winner];
+    for (const b of this.buildings.list) {
+      if (b.faction !== loser) continue;
+      b.faction = winner;
+      b.hp = Math.max(b.hp, Math.round(BUILDING_DEFS[b.type].maxHp / 2));
+      if (this.buildingViews.has(b.id)) this.refreshBuildingView(b);
+    }
+    for (const n of this.population.npcs) {
+      if (n.faction === loser && n.role === 'villager') n.faction = winner;
+      if (n.order?.target === loser) n.order = null;
+    }
+    for (const r of RESOURCES) wf.stock.add(r, lf.stock.items[r]);
+    lf.alive = false;
+    lf.rulerId = null;
+    this.diplomacy.forget(loser);
+    this.territory.recompute(this.buildings.list);
+    if (winner === PLAYER_FACTION) {
+      this.toast(`Você conquistou ${lf.name}! Os prédios e aldeões de lá agora são seus.`, '#ffe08a');
+      if (this.factions.every((f) => f.isPlayer || !f.alive))
+        this.toast('Todas as vilas são suas. Você unificou a região!', '#ffe08a');
+    } else this.toast(`${wf.name} conquistou ${lf.name}.`, '#ffb070');
+  }
+
+  /** A raid reached your hall: they loot a share of the stockpile and leave. */
+  private plunder(attacker: number, hall: Building): void {
+    const af = this.factions[attacker];
+    const taken: string[] = [];
+    for (const r of RESOURCES) {
+      const n = Math.floor(this.stockpile.items[r] * 0.3);
+      if (n <= 0) continue;
+      this.stockpile.items[r] -= n;
+      af.stock.add(r, n);
+      taken.push(`${n} ${RESOURCE_LABEL[r]}`);
+    }
+    hall.hp = Math.round(BUILDING_DEFS[hall.type].maxHp / 2);
+    for (const n of this.population.npcs) if (n.faction === attacker && n.order?.target === PLAYER_FACTION) n.order = null;
+    this.toast(`${af.name} saqueou seu estoque${taken.length ? `: ${taken.join(', ')}` : ''}!`, '#ff6a5a');
+  }
+
+  private updateDiplomacy(worldDt: number): void {
+    // Missions: talks take a few hours, then the outcome.
+    for (const m of [...this.missions.values()]) {
+      const d = this.population.npcs.find((n) => n.id === m.diplomatId);
+      if (!d || !this.factions[m.target].alive) {
+        this.missions.delete(m.diplomatId);
+        continue;
+      }
+      if (m.phase !== 'talking') continue;
+      m.timer -= worldDt;
+      if (m.timer > 0) continue;
+      m.phase = 'returning';
+      const f = this.factions[m.target];
+      const rel = this.diplomacy.get(PLAYER_FACTION, m.target);
+      const rating = d.skills.diplomacy;
+      if (m.kind === 'gift') {
+        const v = giftValue(rating);
+        this.diplomacy.adjust(PLAYER_FACTION, m.target, v);
+        this.toast(`${f.name} aceitou o presente de ${d.name} (+${v}).`, '#a8ffa8');
+      } else if (Math.random() < missionChance(m.kind, rating, rel.score)) {
+        if (m.kind === 'alliance') this.diplomacy.makeAlliance(PLAYER_FACTION, m.target);
+        else this.diplomacy.makePeace(PLAYER_FACTION, m.target);
+        this.toast(
+          m.kind === 'alliance' ? `${d.name} selou uma aliança com ${f.name}!` : `${d.name} negociou a paz com ${f.name}.`,
+          '#a8ffa8',
+        );
+      } else {
+        this.diplomacy.adjust(PLAYER_FACTION, m.target, -5);
+        this.toast(`${f.name} recusou a proposta de ${d.name}.`, '#ffb070');
+      }
+    }
+
+    // Once a day: relations drift and the AI decides on wars, peace and alliances.
+    this.diploTimer += worldDt;
+    if (this.diploTimer >= DAY_SECONDS) {
+      this.diploTimer = 0;
+      const ids = this.factions.filter((f) => f.alive).map((f) => f.id);
+      const touching = this.touchingBorders();
+      for (const e of this.diplomacy.daily(ids, this.clock.seconds, Math.random, (a, b) =>
+        touching.has(`${Math.min(a, b)}:${Math.max(a, b)}`),
+      )) {
+        if (e.type === 'war') this.announceWar(e.a, e.b);
+        else if (e.type === 'proposal') {
+          const what = e.proposal.kind === 'alliance' ? 'uma aliança' : 'a paz';
+          this.toast(`${this.factions[e.proposal.from].name} propõe ${what}. Responda em V → Diplomacia.`, '#a8c8ff');
+        } else if (e.type === 'alliance_broken' && (e.a === 0 || e.b === 0)) {
+          this.toast(`A aliança com ${this.factions[e.a === 0 ? e.b : e.a].name} acabou.`, '#ffb070');
+        }
+      }
+    }
+
+    // Villages at war send their soldiers on raids.
+    for (const f of this.factions) {
+      if (f.isPlayer || !f.alive) continue;
+      for (const e of this.factions) {
+        if (e.id === f.id || !e.alive || !this.atWar(f.id, e.id)) continue;
+        const k = `${f.id}>${e.id}`;
+        const t = (this.raidTimers.get(k) ?? 0) + worldDt;
+        this.raidTimers.set(k, t);
+        if (t < RAID_INTERVAL) continue;
+        this.raidTimers.set(k, 0);
+        const ready = this.soldiers(f.id).filter((s) => s.order === null && s.hp > 4 && isAdult(s, this.clock.seconds));
+        const go = ready.length > 2 ? ready.slice(0, ready.length - 1) : ready;
+        for (const s of go) s.order = { kind: 'raid', target: e.id };
+        if (go.length > 0 && e.id === PLAYER_FACTION)
+          this.toast(`Soldados de ${f.name} estão marchando contra sua vila!`, '#ff6a5a');
+      }
+    }
+  }
+
+  /** Pairs of villages whose territories touch ("a:b"), checked once a day. */
+  private touchingBorders(): Set<string> {
+    const out = new Set<string>();
+    const { owner } = this.territory;
+    const w = this.map.w;
+    for (let i = 0; i < owner.length; i++) {
+      const o = owner[i];
+      if (o < 0) continue;
+      for (const j of [i + 1, i + w]) {
+        const p = owner[j];
+        if (p >= 0 && p !== o && j < owner.length) out.add(`${Math.min(o, p)}:${Math.max(o, p)}`);
+      }
+    }
+    return out;
   }
 
   /** Nearest thing hostile to `faction` within `r` of (gx, gy): dangerous animals, or people of a faction at war with it. */
@@ -563,7 +839,7 @@ export class WorldScene extends Phaser.Scene {
       bestD = Math.hypot(a.data.gx - gx, a.data.gy - gy);
     }
     for (const n of this.npcs.values()) {
-      if (n.data.role !== 'villager' || !this.atWar(faction, n.data.faction)) continue;
+      if (n.data.role !== 'villager' || !this.atWar(faction, n.data.faction) || this.missions.has(n.data.id)) continue;
       const d = Math.hypot(n.gx - gx, n.gy - gy);
       if (d < bestD) {
         bestD = d;
@@ -615,7 +891,16 @@ export class WorldScene extends Phaser.Scene {
     if (b) this.damageBuilding(b, damage);
   }
 
-  damageBuilding(b: Building, damage: number): void {
+  damageBuilding(b: Building, damage: number, attacker?: number): void {
+    if (b.type === 'stockpile' && attacker !== undefined && b.hp - damage <= 0) {
+      if (b.faction === PLAYER_FACTION) this.plunder(attacker, b);
+      else this.conquer(b.faction, attacker);
+      return;
+    }
+    if (b.type === 'stockpile' && b.hp - damage <= 0) {
+      b.hp = 1; // animals can't knock a village hall down
+      return;
+    }
     const view = this.buildingViews.get(b.id);
     if (view) {
       view.img.setTint(0xff8070);
@@ -691,6 +976,30 @@ export class WorldScene extends Phaser.Scene {
           this.territory.recompute(this.buildings.list);
         }
       }
+      const threatened = this.factions.some(
+        (o) => o.id !== f.id && o.alive && (this.atWar(f.id, o.id) || this.diplomacy.get(f.id, o.id).score < -30),
+      );
+      const hasBarracks = this.buildings.list.some((b) => b.faction === f.id && b.type === 'barracks');
+      if (threatened && !hasBarracks && f.stock.canAfford(BUILDING_DEFS.barracks.cost)) {
+        const spot = findSpot(this.buildings, 'barracks', f.center, 3, 10, Math.random);
+        if (spot && this.territory.canBuild(f.id, spot.x, spot.y, 2)) {
+          f.stock.pay(BUILDING_DEFS.barracks.cost);
+          this.addBuildingView(this.buildings.place('barracks', spot.x, spot.y, true, f.id));
+          this.territory.recompute(this.buildings.list);
+        }
+      }
+      if (threatened && hasBarracks && this.soldiers(f.id).length < 2) {
+        const barracks = this.buildings.list.find((b) => b.faction === f.id && b.type === 'barracks')!;
+        const pool = this.population
+          .villagersOf(f.id)
+          .filter((n) => isAdult(n, this.clock.seconds) && this.buildings.list.find((b) => b.id === n.jobId)?.type !== 'barracks')
+          .sort((a, b) => b.skills.combat - a.skills.combat);
+        for (const n of pool) {
+          if (this.soldiers(f.id).length >= 2) break;
+          n.jobId = null;
+          this.population.assign(n, barracks);
+        }
+      }
       const hasTower = this.buildings.list.some((b) => b.faction === f.id && b.type === 'tower');
       if (!hasTower && f.stock.canAfford(BUILDING_DEFS.tower.cost)) {
         const spot = findSpot(this.buildings, 'tower', f.center, 4, 9, Math.random);
@@ -721,6 +1030,7 @@ export class WorldScene extends Phaser.Scene {
     }
     this.updateTowns(worldDt);
     this.updateFamilies(worldDt);
+    this.updateDiplomacy(worldDt);
 
     this.villagerRegen += worldDt;
     const regen = this.villagerRegen >= 30;
@@ -1050,8 +1360,11 @@ export class WorldScene extends Phaser.Scene {
   }
 
   /** Diplomatic status with a rival village, for the UI (diplomacy arrives in milestone 15). */
-  relationLabel(_faction: number): string {
-    return 'Paz';
+  relationLabel(faction: number): string {
+    if (!this.factions[faction]?.alive) return '—';
+    const r = this.diplomacy.get(PLAYER_FACTION, faction);
+    const name = { peace: 'Paz', alliance: 'Aliança', war: 'Guerra' }[r.status];
+    return `${name} (${r.score > 0 ? '+' : ''}${Math.round(r.score)})`;
   }
 
   /** Age for the UI (families arrive in milestone 14). */
@@ -1240,7 +1553,7 @@ export class WorldScene extends Phaser.Scene {
     view.img.setTexture(b.built ? BUILDING_KEY[b.type] : `site_${def.size}`);
     view.sign?.destroy();
     view.sign = undefined;
-    if (b.built && b.type === 'stockpile') {
+    if (b.built && (b.type === 'stockpile' || b.type === 'embassy')) {
       // Each village hall flies its faction's banner.
       view.sign = this.add
         .image(view.img.x + 6, view.img.y - view.img.height + 2, 'flag')

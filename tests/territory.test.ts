@@ -81,3 +81,19 @@ describe('rival towns', () => {
     expect(pop.villagers).toHaveLength(0); // none of them are the player's
   });
 });
+
+describe('rival town jobs', () => {
+  it('respect slot limits for rival workers too', () => {
+    const map = generateMap();
+    const b = new Buildings(map);
+    const pop = new Population(b);
+    const factions = createFactions(map.sites, new Inventory());
+    foundTown(b, factions[1], seeded(4));
+    populateTown(pop, b, factions[1], seeded(4), 8);
+    for (const w of b.list.filter((x) => x.faction === 1 && BUILDING_DEFS[x.type].job)) {
+      expect(pop.workers(w.id).length).toBeLessThanOrEqual(BUILDING_DEFS[w.type].job!.slots);
+    }
+    const soldiers = b.list.filter((x) => x.faction === 1 && x.type === 'barracks').flatMap((x) => pop.workers(x.id));
+    expect(soldiers.length).toBeGreaterThan(0);
+  });
+});

@@ -191,6 +191,8 @@ export interface NpcData {
   partnerId: number | null;
   /** Parent ids (0 = the player), empty for people who arrived as wanderers. */
   parents: number[];
+  /** Soldiers on campaign: attack village `target`. */
+  order: { kind: 'raid'; target: number } | null;
   /** Game seconds spent at zero satiety. */
   starving: number;
   /** Game time (clock seconds) when a wanderer gives up and leaves. */
@@ -233,6 +235,7 @@ export function generateWanderer(rng: Rng, id: number, leavesAt: number, now = 0
     born: now - (ADULT_AGE + Math.floor(rng() * 30)) * DAY_SECONDS,
     partnerId: null,
     parents: [],
+    order: null,
     leavesAt,
   };
 }
@@ -397,7 +400,7 @@ export class Population {
   }
 
   workers(buildingId: number): NpcData[] {
-    return this.villagers.filter((n) => n.jobId === buildingId);
+    return this.allVillagers.filter((n) => n.jobId === buildingId);
   }
 
   /** Villagers without a job, best first for `skill` (if given). */

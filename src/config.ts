@@ -72,6 +72,8 @@ export const GUARD_RANGE = 8;
 export const GUARD_LEASH = 14;
 /** Hit points a player restores per second when repairing (costs 1 wood per 10 HP). */
 export const REPAIR_RATE = 15;
+/** Game seconds between raids a warring village sends. */
+export const RAID_INTERVAL = 300;
 /** HP restored by eating one meat (F). */
 export const MEAT_HEAL = 2;
 export const ANIMAL_SPAWN_INTERVAL = 15;

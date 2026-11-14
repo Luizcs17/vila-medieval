@@ -8,6 +8,7 @@ import { ambientAt, formatClock } from '../game/time';
 import { BuildingPanelUI } from '../ui/BuildingPanelUI';
 import { BuildMenuUI } from '../ui/BuildMenuUI';
 import { CraftingUI } from '../ui/CraftingUI';
+import { renderDiplomacy } from '../ui/DiplomacyTab';
 import { renderDynasty } from '../ui/DynastyTab';
 import { FullMapUI } from '../ui/FullMapUI';
 import { InventoryUI } from '../ui/InventoryUI';
@@ -153,6 +154,7 @@ export class UIScene extends Phaser.Scene {
       (b) => this.world.openBuildingPanel(b),
     );
     this.management.renderers.dynasty = renderDynasty;
+    this.management.renderers.diplomacy = (ui, x, y, w) => renderDiplomacy(ui, x, y, w);
     kb.on('keydown', (e: KeyboardEvent) => {
       const key = e.key.toLowerCase();
       if (this.pause.isOpen) {
