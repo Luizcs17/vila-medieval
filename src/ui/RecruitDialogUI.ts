@@ -160,11 +160,17 @@ export class RecruitDialogUI {
       );
       y += 30;
     } else {
+      y += 18; // room for the "lives in" line
       items.push(
         s.add.text(PAD + 230, y, `Fome ${Math.round(100 - npc.food)}%${isStarving(npc) ? ' (FAMINTO)' : ''}`, {
           ...TEXT,
           fontSize: '12px',
           color: isStarving(npc) ? '#ff8a7a' : npc.food < 50 ? '#ffc060' : '#a8e890',
+        }),
+        s.add.text(PAD, y - 18, npc.faction === 0 ? 'Mora na sua vila.' : `Mora em ${this.world.factions[npc.faction].name}.`, {
+          ...TEXT,
+          fontSize: '12px',
+          color: this.world.factions[npc.faction].css,
         }),
         s.add.text(PAD, y, `Trabalho: ${npc.jobId === null ? 'nenhum' : jobTitle(npc, this.world.buildings)}`, {
           ...TEXT,
@@ -173,9 +179,11 @@ export class RecruitDialogUI {
         s.add.text(
           PAD,
           y + 18,
-          npc.jobId === null
-            ? 'Designe pelo painel de um prédio de trabalho (E nele).'
-            : (this.world.npcStatus(npc.id) ?? 'Trabalhando.'),
+          npc.faction !== 0
+            ? 'Não é da sua vila.'
+            : npc.jobId === null
+              ? 'Designe pelo painel de um prédio de trabalho (E nele).'
+              : (this.world.npcStatus(npc.id) ?? 'Trabalhando.'),
           {
             ...TEXT,
             fontSize: '12px',

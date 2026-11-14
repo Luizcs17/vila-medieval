@@ -26,6 +26,7 @@ function sampleSave(): SaveData {
     nodes: { remaining: [], regrowing: [] },
     buildings: { list: [], nextId: 1 },
     stockpile: { wood: 5, stone: 0, iron: 0, meat: 2 },
+    factions: [],
     inventory: [{ item: 'stone_axe', count: 1, durability: 40 }, null],
     selectedHotbar: 0,
     player: { gx: 10.5, gy: 11.5, hp: 7, maxHp: 11, level: 2, xp: 3 },

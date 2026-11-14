@@ -1,4 +1,4 @@
-import { ANIMAL_SPAWN_INTERVAL } from '../config';
+import { ANIMAL_SPAWN_INTERVAL, WILDLIFE_SCALE } from '../config';
 import { inBounds, isWalkable, Obj, tileIndex, type WorldMap } from '../world/map';
 import type { Rng } from './npcs';
 
@@ -161,7 +161,7 @@ export function takeMeat(a: AnimalData, max: number): number {
 /** How many of each species should be alive right now. */
 export function targetPopulation(species: Species, night: boolean): number {
   const def = SPECIES[species];
-  return night ? (def.nightPopulation ?? def.population) : def.population;
+  return Math.round((night ? (def.nightPopulation ?? def.population) : def.population) * WILDLIFE_SCALE);
 }
 
 /** Every ANIMAL_SPAWN_INTERVAL game seconds, names one species that is below its target (most missing first). */

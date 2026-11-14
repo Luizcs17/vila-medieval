@@ -3,6 +3,7 @@ import {
   ATTACK_COOLDOWN,
   AUTOSAVE_SECONDS,
   BEDS_PER_HOUSE,
+  DAY_SECONDS,
   DEFAULT_ZOOM_INDEX,
   FAST_FORWARD,
   HOTBAR_SLOTS,
@@ -13,6 +14,7 @@ import {
   NPC_REACH,
   PLAYER_RADIUS,
   TILE_H,
+  TILE_W,
   VILLAGER_HP,
   WANDERER_STAY,
   ZOOM_LEVELS,
@@ -22,6 +24,7 @@ import { Npc, type NpcWorld } from '../entities/Npc';
 import { Player } from '../entities/Player';
 import { BUILDING_DEFS, type Building, Buildings, type BuildingType, type PlaceCheck } from '../game/buildings';
 import { type CraftCheck, craft } from '../game/crafting';
+import { createFactions, type Faction, PLAYER_FACTION } from '../game/factions';
 import { Gatherer, NODE_DEFS, nearestTile, ResourceNodes } from '../game/gathering';
 import { Inventory, RESOURCE_LABEL, RESOURCES, type Resource } from '../game/inventory';
 import { ITEM_DEFS, type ItemId, type Recipe, type ToolType } from '../game/items';
@@ -30,7 +33,9 @@ import { compass, generateWanderer, jobTitle, type NpcData, Population, pickSpaw
 import { PER_LEVEL, PlayerStats, XP } from '../game/player';
 import { clearSave, readSave, SAVE_VERSION, type SaveData, writeSave } from '../game/save';
 import { SlotInventory } from '../game/slots';
+import { Territory } from '../game/territory';
 import { GameClock } from '../game/time';
+import { findSpot, foundTown, populateTown } from '../game/towns';
 import { createPlaceholderTextures } from '../gfx/textures';
 import { gridToScreen, screenToGrid } from '../iso';
 import { Wildlife } from '../systems/Wildlife';
@@ -124,6 +129,9 @@ export class WorldScene extends Phaser.Scene {
   /** Building whose panel is open in UIScene (workers / residents). Freezes the player. */
   panelBuilding: Building | null = null;
   npcWorld!: NpcWorld;
+  factions!: Faction[];
+  territory!: Territory;
+  private townTimer = 0;
   /** Set by UIScene while the inventory panel is open: freezes movement and gathering. */
   inventoryOpen = false;
   /** Selected hotbar slot (0-based). No effect yet; tools will use it. */
@@ -195,12 +203,14 @@ export class WorldScene extends Phaser.Scene {
     this.nodes = new ResourceNodes(this.map);
     this.buildings = new Buildings(this.map);
     this.population = new Population(this.buildings);
+    this.factions = createFactions(this.map.sites, this.stockpile);
+    this.territory = new Territory(this.map);
     this.npcWorld = {
       map: this.map,
       buildings: this.buildings,
       isNight: () => this.clock.isNight,
       harvest: (i) => this.workerHarvest(i),
-      deposit: (r, n) => this.stockpile.add(r, n),
+      deposit: (f, r, n) => this.factions[f]?.stock.add(r, n),
       threat: (gx, gy) => this.wildlife.threat(gx, gy),
       findPrey: (cx, cy, r) => this.wildlife.findPrey(cx, cy, r),
       prey: (id) => this.wildlife.prey(id),
@@ -221,7 +231,11 @@ export class WorldScene extends Phaser.Scene {
       const sx = Math.floor(this.map.spawn.x);
       const sy = Math.floor(this.map.spawn.y);
       this.addBuildingView(this.buildings.place('stockpile', sx + 2, sy - 1, true));
+      this.factions[0].center = { x: sx + 2, y: sy - 1 };
+      for (const f of this.factions)
+        if (!f.isPlayer) for (const b of foundTown(this.buildings, f, Math.random)) this.addBuildingView(b);
     }
+    this.territory.recompute(this.buildings.list);
 
     this.selection = this.add.graphics().setDepth(GROUND_DEPTH + 1);
     this.ghost = this.add.image(0, 0, 'bld_house').setOrigin(0.5, 1).setAlpha(0.65).setDepth(1_000_000).setVisible(false);
@@ -236,13 +250,22 @@ export class WorldScene extends Phaser.Scene {
       map: this.map,
       isNight: () => this.clock.isNight,
       now: () => this.clock.seconds,
-      avoidPoints: () => [this.villageCenter, { x: this.player.gx, y: this.player.gy }],
+      avoidPoints: () => [...this.factions.map((f) => f.center), { x: this.player.gx, y: this.player.gy }],
       humans: () => this.humans(),
       onHumanHit: (t, dmg, a) => this.onHumanHit(t, dmg, a),
       popup: (x, y, text, color) => this.popup(x, y, text, color),
     });
     if (save) this.applySave(save);
-    else this.wildlife.populate();
+    else {
+      this.wildlife.populate();
+      for (const f of this.factions) {
+        if (f.isPlayer) continue;
+        f.stock.add('wood', 20);
+        f.stock.add('stone', 10);
+        f.stock.add('meat', 20);
+        for (const n of populateTown(this.population, this.buildings, f, Math.random, 6)) this.spawnVillagerEntity(n);
+      }
+    }
     this.lastSaveDay = this.clock.day;
 
     const cam = this.cameras.main;
@@ -287,6 +310,13 @@ export class WorldScene extends Phaser.Scene {
       nodes: this.nodes.snapshot(),
       buildings: this.buildings.snapshot(),
       stockpile: { ...this.stockpile.items },
+      factions: this.factions.map((f) => ({
+        id: f.id,
+        stock: { ...f.stock.items },
+        alive: f.alive,
+        rulerId: f.rulerId,
+        center: f.center,
+      })),
       inventory: this.inventory.slots.map((s) => (s ? { ...s } : null)),
       selectedHotbar: this.selectedHotbar,
       player: { gx: this.player.gx, gy: this.player.gy, ...this.stats.snapshot() },
@@ -325,14 +355,17 @@ export class WorldScene extends Phaser.Scene {
     this.player.gy = save.player.gy;
     this.population.restore(save.population);
     const pos = new Map(save.npcPositions.map(([id, x, y]) => [id, { x, y }]));
-    for (const data of this.population.npcs) {
-      const p = pos.get(data.id) ?? this.villageCenter;
-      const npc = new Npc(this, this.map, data, { x: Math.floor(p.x), y: Math.floor(p.y) });
-      const home = data.homeId !== null ? this.buildings.list.find((b) => b.id === data.homeId) : undefined;
-      if (home) npc.settleAt(home);
-      this.npcs.set(data.id, npc);
-    }
+    for (const data of this.population.npcs) this.spawnVillagerEntity(data, pos.get(data.id) ?? this.villageCenter);
     this.wildlife.restore(save.animals);
+    for (const sf of save.factions) {
+      const f = this.factions[sf.id];
+      if (!f) continue;
+      if (!f.isPlayer) Object.assign(f.stock.items, sf.stock);
+      f.alive = sf.alive;
+      f.rulerId = sf.rulerId;
+      f.center = sf.center;
+    }
+    this.territory.recompute(this.buildings.list);
   }
 
   /** Autosave every few real minutes and at each new day. */
@@ -431,13 +464,13 @@ export class WorldScene extends Phaser.Scene {
   }
 
   /** A villager dies: frees their bed and job, fades them out, tells the player. */
-  private removeVillager(id: number, message: string): void {
+  private removeVillager(id: number, message: string | null): void {
     const npc = this.npcs.get(id);
     this.npcs.delete(id);
     this.population.remove(id);
     if (this.talkingTo?.id === id) this.talkingTo = null;
     npc?.leave(() => {});
-    this.toast(message, '#ff8a7a');
+    if (message) this.toast(message, '#ff8a7a');
   }
 
   /** F: eat one meat you carry to heal. */
@@ -473,17 +506,55 @@ export class WorldScene extends Phaser.Scene {
 
   /** Village centre for spawn distances and compass directions: the central stockpile. */
   private get villageCenter(): { x: number; y: number } {
-    const s = this.buildings.list[0];
-    return { x: s.tx + 0.5, y: s.ty + 0.5 };
+    const c = this.factions[PLAYER_FACTION].center;
+    return { x: c.x + 0.5, y: c.y + 0.5 };
+  }
+
+  /** Creates the on-map entity for a housed villager (rival towns, loaded games). */
+  private spawnVillagerEntity(data: NpcData, at?: { x: number; y: number }): Npc {
+    const home = data.homeId !== null ? this.buildings.list.find((b) => b.id === data.homeId) : undefined;
+    const tile = at ?? (home ? { x: home.tx, y: home.ty + BUILDING_DEFS[home.type].size } : this.factions[data.faction].center);
+    const npc = new Npc(this, this.map, data, { x: Math.floor(tile.x), y: Math.floor(tile.y) });
+    if (home) npc.settleAt(home);
+    this.npcs.set(data.id, npc);
+    return npc;
+  }
+
+  /** Rival towns grow on their own: new houses when beds run short, jobs for the idle. */
+  private updateTowns(worldDt: number): void {
+    this.townTimer += worldDt;
+    if (this.townTimer < DAY_SECONDS / 2) return;
+    this.townTimer = 0;
+    for (const f of this.factions) {
+      if (f.isPlayer || !f.alive) continue;
+      const cost = BUILDING_DEFS.house.cost;
+      if (this.population.freeBedsOf(f.id) < 2 && f.stock.canAfford(cost)) {
+        const spot = findSpot(this.buildings, 'house', f.center, 2, 10, Math.random);
+        if (spot && this.territory.canBuild(f.id, spot.x, spot.y, 2)) {
+          f.stock.pay(cost);
+          this.addBuildingView(this.buildings.place('house', spot.x, spot.y, true, f.id));
+          this.territory.recompute(this.buildings.list);
+        }
+      }
+      for (const b of this.buildings.list) {
+        if (b.faction !== f.id || !BUILDING_DEFS[b.type].job) continue;
+        for (const n of this.population.unemployed(undefined, f.id)) if (!this.population.assign(n, b)) break;
+      }
+    }
   }
 
   private updateNpcs(worldDt: number): void {
     if (this.spawner.update(worldDt, this.population.wanderers.length)) this.spawnWanderer();
 
-    for (const e of updateNeeds(this.population.villagers, this.stockpile, worldDt)) {
-      if (e.type === 'starving') this.toast(`${e.npc.name} está com fome! Falta carne no estoque.`, '#ffb070');
-      else this.removeVillager(e.npc.id, `${e.npc.name} morreu de fome.`);
+    for (const f of this.factions) {
+      for (const e of updateNeeds(this.population.villagersOf(f.id), f.stock, worldDt)) {
+        if (!f.isPlayer) {
+          if (e.type === 'died') this.removeVillager(e.npc.id, null);
+        } else if (e.type === 'starving') this.toast(`${e.npc.name} está com fome! Falta carne no estoque.`, '#ffb070');
+        else this.removeVillager(e.npc.id, `${e.npc.name} morreu de fome.`);
+      }
     }
+    this.updateTowns(worldDt);
 
     this.villagerRegen += worldDt;
     const regen = this.villagerRegen >= 30;
@@ -493,10 +564,21 @@ export class WorldScene extends Phaser.Scene {
       const talking = this.talkingTo?.id === npc.data.id;
       npc.update(worldDt, this.npcWorld, talking, talking ? this.player.sprite.x : undefined);
       if (npc.data.role === 'wanderer' && !talking && this.clock.seconds >= npc.data.leavesAt) {
-        this.npcs.delete(npc.data.id);
-        this.population.remove(npc.data.id);
-        npc.leave(() => {});
-        this.toast(`${npc.data.name} desistiu de esperar e foi embora.`, '#cfc3a8');
+        // Half the time, a rival town with a free bed takes them in.
+        const rival = this.factions.find((f) => !f.isPlayer && f.alive && this.population.houseWithBed(f.id));
+        const home = rival && Math.random() < 0.5 ? this.population.houseWithBed(rival.id) : undefined;
+        if (rival && home) {
+          npc.data.role = 'villager';
+          npc.data.faction = rival.id;
+          npc.data.homeId = home.id;
+          npc.becomeVillager(home);
+          this.toast(`${npc.data.name} cansou de esperar e foi morar em ${rival.name}.`, '#cfc3a8');
+        } else {
+          this.npcs.delete(npc.data.id);
+          this.population.remove(npc.data.id);
+          npc.leave(() => {});
+          this.toast(`${npc.data.name} desistiu de esperar e foi embora.`, '#cfc3a8');
+        }
       }
     }
   }
@@ -571,6 +653,7 @@ export class WorldScene extends Phaser.Scene {
     const def = BUILDING_DEFS[type];
     if (!this.stockpile.pay(def.cost)) return false;
     const b = this.buildings.place(type, this.placeTile.x, this.placeTile.y);
+    this.territory.recompute(this.buildings.list);
     for (const i of this.buildings.footprint(type, b.tx, b.ty)) this.replaceObjectImage(i); // clears stumps/saplings
     const view = this.addBuildingView(b);
     this.events.emit('popup', {
@@ -594,6 +677,8 @@ export class WorldScene extends Phaser.Scene {
     this.placeTile = { x: tx, y: ty };
 
     let check = this.buildings.check(p.type, tx, ty, (i) => this.playerOverlapsTile(i));
+    if (check.ok && !this.territory.canBuild(PLAYER_FACTION, tx, ty, def.size))
+      check = { ok: false, reason: 'Fora do seu território' };
     if (check.ok && !this.stockpile.canAfford(def.cost)) check = { ok: false, reason: 'Recursos insuficientes no estoque' };
     p.check = check;
 
@@ -615,7 +700,8 @@ export class WorldScene extends Phaser.Scene {
     if (npc) {
       this.gatherer.tick(dt, null, false, 1);
       const d = npc.data;
-      const text = d.role === 'wanderer' ? `[E] Falar com ${d.name}` : `[E] ${d.name} · ${jobTitle(d, this.buildings)}`;
+      let text = d.role === 'wanderer' ? `[E] Falar com ${d.name}` : `[E] ${d.name} · ${jobTitle(d, this.buildings)}`;
+      if (d.role === 'villager' && d.faction !== PLAYER_FACTION) text = `[E] ${d.name} · ${this.factions[d.faction].name}`;
       this.interaction = { x: npc.sprite.x, y: npc.sprite.y - npc.sprite.height - 6, text, progress: null };
       if (Phaser.Input.Keyboard.JustDown(this.keys.E)) {
         this.talkingTo = d;
@@ -728,6 +814,11 @@ export class WorldScene extends Phaser.Scene {
     const view = this.buildingViews.get(b.id)!;
     const x = view.img.x;
     const y = view.img.y - view.img.height - 2;
+    if (b.faction !== PLAYER_FACTION) {
+      this.drawFootprint(b.tx, b.ty, def.size, this.factions[b.faction].color);
+      this.interaction = { x, y, text: `${this.factions[b.faction].name} · ${def.name}`, progress: null };
+      return;
+    }
     this.drawFootprint(b.tx, b.ty, def.size, 0xffe08a);
 
     if (!b.built) {
@@ -818,12 +909,40 @@ export class WorldScene extends Phaser.Scene {
 
   private drawMap(): void {
     const m = this.map;
-    for (let ty = 0; ty < m.h; ty++) {
-      for (let tx = 0; tx < m.w; tx++) {
-        const i = tileIndex(m, tx, ty);
-        const c = gridToScreen(tx + 0.5, ty + 0.5);
-        this.add.image(c.x, c.y, `${GROUND_KEY[m.ground[i]]}_${m.variant[i]}`).setDepth(GROUND_DEPTH);
-        this.replaceObjectImage(i);
+    this.drawGround();
+    for (let i = 0; i < m.w * m.h; i++) this.replaceObjectImage(i);
+  }
+
+  /**
+   * Bakes the ground into render textures of CHUNK×CHUNK tiles, so the 16k ground tiles cost a
+   * few dozen draws per frame instead of one each.
+   */
+  private drawGround(): void {
+    const m = this.map;
+    const CHUNK = 16;
+    const pad = 2;
+    for (let y0 = 0; y0 < m.h; y0 += CHUNK) {
+      for (let x0 = 0; x0 < m.w; x0 += CHUNK) {
+        const minX = gridToScreen(x0, y0 + CHUNK).x - pad;
+        const minY = gridToScreen(x0, y0).y - pad;
+        const rt = this.add
+          .renderTexture(minX, minY, CHUNK * TILE_W + pad * 2, CHUNK * TILE_H + pad * 2)
+          .setOrigin(0)
+          .setDepth(GROUND_DEPTH);
+        rt.beginDraw();
+        for (let ty = y0; ty < Math.min(m.h, y0 + CHUNK); ty++) {
+          for (let tx = x0; tx < Math.min(m.w, x0 + CHUNK); tx++) {
+            const i = tileIndex(m, tx, ty);
+            const c = gridToScreen(tx + 0.5, ty + 0.5);
+            rt.batchDrawFrame(
+              `${GROUND_KEY[m.ground[i]]}_${m.variant[i]}`,
+              undefined,
+              c.x - TILE_W / 2 - minX,
+              c.y - TILE_H / 2 - minY,
+            );
+          }
+        }
+        rt.endDraw();
       }
     }
   }
@@ -862,7 +981,13 @@ export class WorldScene extends Phaser.Scene {
     view.img.setTexture(b.built ? BUILDING_KEY[b.type] : `site_${def.size}`);
     view.sign?.destroy();
     view.sign = undefined;
-    if (b.built && def.sign) {
+    if (b.built && b.type === 'stockpile') {
+      // Each village hall flies its faction's banner.
+      view.sign = this.add
+        .image(view.img.x + 6, view.img.y - view.img.height + 2, 'flag')
+        .setOrigin(0.2, 1)
+        .setTint(this.factions[b.faction]?.color ?? 0xffffff);
+    } else if (b.built && def.sign) {
       view.sign = this.add.image(view.img.x, view.img.y - view.img.height - 3, `icon_${def.sign}`).setOrigin(0.5, 1);
     }
   }

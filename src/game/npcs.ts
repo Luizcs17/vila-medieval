@@ -137,6 +137,8 @@ export interface NpcData {
   homeId: number | null;
   /** Workplace building id, or null when unemployed. */
   jobId: number | null;
+  /** Which village they belong to (0 = the player's). Wanderers are 0 until someone recruits them. */
+  faction: number;
   /** Hit points (animals can hurt villagers). */
   hp: number;
   /** Satiety 0–100 (see needs.ts). */
@@ -175,6 +177,7 @@ export function generateWanderer(rng: Rng, id: number, leavesAt: number): NpcDat
     role: 'wanderer',
     homeId: null,
     jobId: null,
+    faction: 0,
     hp: VILLAGER_HP,
     food: 100,
     starving: 0,
@@ -233,7 +236,17 @@ export class Population {
     this.nextId = s.nextId;
   }
 
+  /** The player's villagers. */
   get villagers(): NpcData[] {
+    return this.villagersOf(0);
+  }
+
+  villagersOf(faction: number): NpcData[] {
+    return this.npcs.filter((n) => n.role === 'villager' && n.faction === faction);
+  }
+
+  /** Villagers of every faction. */
+  get allVillagers(): NpcData[] {
     return this.npcs.filter((n) => n.role === 'villager');
   }
 
@@ -241,20 +254,33 @@ export class Population {
     return this.npcs.filter((n) => n.role === 'wanderer');
   }
 
-  private houses(): Building[] {
-    return this.buildings.list.filter((b) => b.type === 'house' && b.built);
+  private houses(faction = 0): Building[] {
+    return this.buildings.list.filter((b) => b.type === 'house' && b.built && b.faction === faction);
   }
 
   get beds(): number {
-    return this.houses().length * BEDS_PER_HOUSE;
+    return this.bedsOf(0);
   }
 
   get freeBeds(): number {
-    return this.beds - this.villagers.length;
+    return this.freeBedsOf(0);
+  }
+
+  bedsOf(faction: number): number {
+    return this.houses(faction).length * BEDS_PER_HOUSE;
+  }
+
+  freeBedsOf(faction: number): number {
+    return this.bedsOf(faction) - this.villagersOf(faction).length;
   }
 
   residents(houseId: number): NpcData[] {
-    return this.villagers.filter((n) => n.homeId === houseId);
+    return this.allVillagers.filter((n) => n.homeId === houseId);
+  }
+
+  /** A finished house of `faction` with a free bed, if any. */
+  houseWithBed(faction: number): Building | undefined {
+    return this.houses(faction).find((h) => this.residents(h.id).length < BEDS_PER_HOUSE);
   }
 
   check(npc: NpcData, inv: SlotInventory, stock: Inventory): RecruitCheck {
@@ -266,7 +292,7 @@ export class Population {
   /** Pays the request, turns the wanderer into a villager and assigns a home. Returns the home, or null if not allowed. */
   recruit(npc: NpcData, inv: SlotInventory, stock: Inventory): Building | null {
     if (!this.check(npc, inv, stock).ok) return null;
-    const home = this.houses().find((h) => this.residents(h.id).length < BEDS_PER_HOUSE)!;
+    const home = this.houseWithBed(0)!;
     payFrom(npc.request, inv, stock);
     npc.role = 'villager';
     npc.homeId = home.id;
@@ -283,8 +309,8 @@ export class Population {
   }
 
   /** Villagers without a job, best first for `skill` (if given). */
-  unemployed(skill?: Skill): NpcData[] {
-    const list = this.villagers.filter((n) => n.jobId === null);
+  unemployed(skill?: Skill, faction = 0): NpcData[] {
+    const list = this.villagersOf(faction).filter((n) => n.jobId === null);
     if (skill) list.sort((a, b) => productivity(b, skill) - productivity(a, skill));
     return list;
   }
@@ -292,7 +318,7 @@ export class Population {
   /** Assigns a villager to a finished workplace with a free slot. Returns false if not allowed. */
   assign(npc: NpcData, building: Building): boolean {
     const job = BUILDING_DEFS[building.type].job;
-    if (!job || !building.built || npc.role !== 'villager') return false;
+    if (!job || !building.built || npc.role !== 'villager' || building.faction !== npc.faction) return false;
     if (this.workers(building.id).length >= job.slots) return false;
     npc.jobId = building.id;
     return true;

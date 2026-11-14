@@ -7,7 +7,7 @@ import type { Stack } from './slots';
 
 export const SAVE_KEY = 'vila-medieval-save';
 /** Bump when the shape changes; older saves are then ignored instead of half-loaded. */
-export const SAVE_VERSION = 1;
+export const SAVE_VERSION = 2;
 
 /** Everything needed to rebuild a game. The map layout itself comes from the fixed seed. */
 export interface SaveData {
@@ -19,6 +19,7 @@ export interface SaveData {
   nodes: NodesSnapshot;
   buildings: { list: Building[]; nextId: number };
   stockpile: Amounts;
+  factions: { id: number; stock: Amounts; alive: boolean; rulerId: number | null; center: { x: number; y: number } }[];
   inventory: (Stack | null)[];
   selectedHotbar: number;
   player: { gx: number; gy: number; hp: number; maxHp: number; level: number; xp: number };
@@ -51,7 +52,8 @@ export function isSaveData(x: unknown): x is SaveData {
     typeof d.player?.gx === 'number' &&
     Array.isArray(d.buildings?.list) &&
     Array.isArray(d.population?.npcs) &&
-    Array.isArray(d.animals)
+    Array.isArray(d.animals) &&
+    Array.isArray(d.factions)
   );
 }
 

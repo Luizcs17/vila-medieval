@@ -1,4 +1,4 @@
-import { MAP_H, MAP_SEED, MAP_W } from '../config';
+import { MAP_H, MAP_SEED, MAP_W, TOWN_SITES } from '../config';
 
 export enum Ground {
   Grass,
@@ -33,6 +33,8 @@ export interface WorldMap {
   variant: number[];
   /** Where the player starts, in grid coordinates (tile center). */
   spawn: { x: number; y: number };
+  /** Village centre tiles: [0] is the player's, the rest are rival towns (same order as TOWN_SITES). */
+  sites: { x: number; y: number }[];
 }
 
 // ---------- deterministic noise ----------
@@ -84,12 +86,16 @@ export function generateMap(seed = MAP_SEED, w = MAP_W, h = MAP_H): WorldMap {
   const variant = new Array<number>(n).fill(0);
   const cx = Math.floor(w / 2);
   const cy = Math.floor(h / 2);
+  // Town sites: index 0 is the player's (map centre), the rest are rival villages.
+  const sites = [{ x: cx, y: cy }, ...TOWN_SITES.map((p) => ({ x: Math.floor(p.x * w), y: Math.floor(p.y * h) }))];
 
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
       const i = y * w + x;
       const r = hash2(x, y, seed + 9001);
-      const dist = Math.hypot(x - cx, y - cy);
+      // Distance to the nearest town site: every village gets a dry clearing.
+      let dist = Infinity;
+      for (const s of sites) dist = Math.min(dist, Math.hypot(x - s.x, y - s.y));
       const edge = Math.min(x, y, w - 1 - x, h - 1 - y);
       const lake = fbm(x / 11, y / 11, seed);
       const forest = fbm(x / 8, y / 8, seed + 500);
@@ -123,7 +129,7 @@ export function generateMap(seed = MAP_SEED, w = MAP_W, h = MAP_H): WorldMap {
     }
   }
 
-  return { w, h, ground, objects, variant, spawn: { x: cx + 0.5, y: cy + 0.5 } };
+  return { w, h, ground, objects, variant, spawn: { x: cx + 0.5, y: cy + 0.5 }, sites };
 }
 
 export function inBounds(map: WorldMap, tx: number, ty: number): boolean {

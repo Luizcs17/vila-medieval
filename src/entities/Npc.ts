@@ -17,8 +17,8 @@ export interface NpcWorld {
   isNight(): boolean;
   /** Takes one unit from the node on tile `i` (updating sprites). Null if nothing is there any more. */
   harvest(i: number): Resource | null;
-  /** Adds resources to the central stockpile. */
-  deposit(resource: Resource, n: number): void;
+  /** Adds resources to `faction`'s stockpile. */
+  deposit(faction: number, resource: Resource, n: number): void;
   /** Position of an aggressive animal hunting near (gx, gy), if any. */
   threat(gx: number, gy: number): { x: number; y: number } | null;
   /** Nearest live prey (skittish animal) within `r` tiles of (cx, cy). */
@@ -242,7 +242,7 @@ export class Npc {
     if (this.state === 'toDeposit') {
       if (this.path.length > 0) this.walk(dt);
       else {
-        if (this.carrying) world.deposit(this.carrying.resource, this.carrying.n);
+        if (this.carrying) world.deposit(this.data.faction, this.carrying.resource, this.carrying.n);
         this.carrying = null;
         this.updateCarryIcon();
         this.state = 'idle';
@@ -404,7 +404,7 @@ export class Npc {
     }
 
     if (this.state === 'toDeposit') {
-      if (this.carrying) world.deposit(this.carrying.resource, this.carrying.n);
+      if (this.carrying) world.deposit(this.data.faction, this.carrying.resource, this.carrying.n);
       this.carrying = null;
       this.updateCarryIcon();
       this.state = 'idle';
@@ -446,7 +446,7 @@ export class Npc {
 
   private startDeposit(world: NpcWorld): void {
     const deposits = world.buildings.list
-      .filter((b) => b.built && BUILDING_DEFS[b.type].deposit)
+      .filter((b) => b.built && BUILDING_DEFS[b.type].deposit && b.faction === this.data.faction)
       .sort((a, b) => Math.hypot(a.tx - this.gx, a.ty - this.gy) - Math.hypot(b.tx - this.gx, b.ty - this.gy));
     for (const d of deposits) {
       if (this.goNextTo(d, 6000)) {

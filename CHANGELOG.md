@@ -2,6 +2,15 @@
 
 Each milestone from `docs/GDD.md` is a minor version.
 
+## 1.1.0: Milestone 11, rival towns and territory
+
+- The map is now 128×128 with three rival villages (Pedra Alta, Vale Azul, Pinhal Dourado), each with a hall flying its colour, houses, workplaces and six villagers who work, eat and live with the same AI as yours. Rival towns build houses as they grow and staff their workplaces.
+- Factions: buildings, villagers and stockpiles belong to a village. Workers deliver to their own village; rival buildings and people show their village name.
+- Territory: every building claims land around it (hall 9, depot 5, others 4). You can only build on your own land, growing it from the border. The minimap tints each village's territory.
+- Houses now have 4 beds. Wanderers who give up waiting may move to a rival town instead.
+- Ground is baked into render-texture chunks, which keeps 60 fps on the bigger map. Wildlife scales with the map.
+- The save format moved to v2 (older saves are ignored).
+
 ## 1.0.0: Milestone 10, save/load (v1 complete)
 
 - The game saves to browser storage automatically (every 2 real minutes, at each new day, and when the page is hidden or closed) and loads the last save on start.
