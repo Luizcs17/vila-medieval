@@ -6,12 +6,12 @@ import {
   canPayFrom,
   compass,
   generateWanderer,
+  type NpcData,
+  Population,
   payFrom,
   pickSpawnTile,
-  Population,
   TRAITS,
   WandererSpawner,
-  type NpcData,
 } from '../src/game/npcs';
 import { SlotInventory } from '../src/game/slots';
 import { generateMap, isWalkable, Obj, tileIndex } from '../src/world/map';

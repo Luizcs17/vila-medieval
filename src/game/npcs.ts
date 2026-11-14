@@ -1,7 +1,7 @@
 import { BEDS_PER_HOUSE, MAX_WANDERERS, WANDERER_FIRST_SPAWN, WANDERER_INTERVAL } from '../config';
 import { isWalkable, type WorldMap } from '../world/map';
 import type { Building, Buildings } from './buildings';
-import { RESOURCE_LABEL, RESOURCES, type Amounts, type Inventory } from './inventory';
+import { type Amounts, type Inventory, RESOURCE_LABEL, RESOURCES } from './inventory';
 import type { SlotInventory } from './slots';
 
 export type Rng = () => number;
@@ -36,8 +36,38 @@ export const TRAITS: Record<TraitId, { name: string; description: string; positi
 const PROFESSION_TRAITS: TraitId[] = ['axe', 'stone', 'iron', 'aim'];
 
 const NAMES: Record<Gender, string[]> = {
-  f: ['Ana', 'Beatriz', 'Brites', 'Catarina', 'Clara', 'Constança', 'Filipa', 'Inês', 'Isabel', 'Joana', 'Leonor', 'Margarida', 'Maria', 'Teresa'],
-  m: ['Afonso', 'Bento', 'Duarte', 'Fernão', 'Gonçalo', 'Henrique', 'João', 'Lourenço', 'Martim', 'Nuno', 'Pedro', 'Rodrigo', 'Tomé', 'Vasco'],
+  f: [
+    'Ana',
+    'Beatriz',
+    'Brites',
+    'Catarina',
+    'Clara',
+    'Constança',
+    'Filipa',
+    'Inês',
+    'Isabel',
+    'Joana',
+    'Leonor',
+    'Margarida',
+    'Maria',
+    'Teresa',
+  ],
+  m: [
+    'Afonso',
+    'Bento',
+    'Duarte',
+    'Fernão',
+    'Gonçalo',
+    'Henrique',
+    'João',
+    'Lourenço',
+    'Martim',
+    'Nuno',
+    'Pedro',
+    'Rodrigo',
+    'Tomé',
+    'Vasco',
+  ],
 };
 
 /** What each tier may ask for (besides a free bed), picked at random. */

@@ -1,7 +1,7 @@
 import Phaser from 'phaser';
 import { NPC_SPEED } from '../config';
 import { BUILDING_DEFS, type Building } from '../game/buildings';
-import { TIER_COLOR, type NpcData } from '../game/npcs';
+import { type NpcData, TIER_COLOR } from '../game/npcs';
 import { npcSpriteKey } from '../gfx/textures';
 import { gridToScreen } from '../iso';
 import { inBounds, isWalkable, type WorldMap } from '../world/map';
@@ -42,13 +42,21 @@ export class Npc {
     if (!scene.anims.exists(`${this.key}_walk`)) {
       scene.anims.create({
         key: `${this.key}_walk`,
-        frames: [{ key: `${this.key}_step_a` }, { key: `${this.key}_idle` }, { key: `${this.key}_step_b` }, { key: `${this.key}_idle` }],
+        frames: [
+          { key: `${this.key}_step_a` },
+          { key: `${this.key}_idle` },
+          { key: `${this.key}_step_b` },
+          { key: `${this.key}_idle` },
+        ],
         frameRate: 7,
         repeat: -1,
       });
     }
     if (data.role === 'wanderer') {
-      this.marker = scene.add.image(0, 0, 'marker').setOrigin(0.5, 1).setTint(Phaser.Display.Color.HexStringToColor(TIER_COLOR[data.tier]).color);
+      this.marker = scene.add
+        .image(0, 0, 'marker')
+        .setOrigin(0.5, 1)
+        .setTint(Phaser.Display.Color.HexStringToColor(TIER_COLOR[data.tier]).color);
       scene.tweens.add({ targets: this.bob, v: -2, duration: 500, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
     }
     this.sync();
@@ -101,10 +109,15 @@ export class Npc {
   /** Fades out and removes the NPC. */
   leave(onDone: () => void): void {
     const targets = [this.sprite, this.shadow, ...(this.marker ? [this.marker] : [])];
-    this.scene.tweens.add({ targets, alpha: 0, duration: 800, onComplete: () => {
-      targets.forEach((t) => t.destroy());
-      onDone();
-    } });
+    this.scene.tweens.add({
+      targets,
+      alpha: 0,
+      duration: 800,
+      onComplete: () => {
+        for (const t of targets) t.destroy();
+        onDone();
+      },
+    });
   }
 
   private planStroll(): Tile[] | null {

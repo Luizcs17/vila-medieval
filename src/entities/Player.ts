@@ -1,4 +1,4 @@
-import Phaser from 'phaser';
+import type Phaser from 'phaser';
 import { PLAYER_RADIUS, PLAYER_RUN_MULTIPLIER, PLAYER_SPEED } from '../config';
 import { gridToScreen, screenDirToGrid } from '../iso';
 import { isWalkable, type WorldMap } from '../world/map';

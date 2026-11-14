@@ -14,15 +14,15 @@ import {
 } from '../config';
 import { Npc } from '../entities/Npc';
 import { Player } from '../entities/Player';
-import { compass, generateWanderer, pickSpawnTile, Population, WandererSpawner, type NpcData } from '../game/npcs';
-import { BUILDING_DEFS, Buildings, type Building, type BuildingType, type PlaceCheck } from '../game/buildings';
+import { BUILDING_DEFS, type Building, Buildings, type BuildingType, type PlaceCheck } from '../game/buildings';
 import { Gatherer, NODE_DEFS, nearestTile, ResourceNodes } from '../game/gathering';
 import { Inventory, RESOURCE_LABEL, RESOURCES } from '../game/inventory';
+import { compass, generateWanderer, type NpcData, Population, pickSpawnTile, WandererSpawner } from '../game/npcs';
 import { SlotInventory } from '../game/slots';
 import { GameClock } from '../game/time';
 import { createPlaceholderTextures } from '../gfx/textures';
 import { gridToScreen, screenToGrid } from '../iso';
-import { generateMap, Ground, Obj, tileCenter, tileIndex, type WorldMap } from '../world/map';
+import { Ground, generateMap, Obj, tileCenter, tileIndex, type WorldMap } from '../world/map';
 
 const GROUND_KEY: Record<Ground, string> = {
   [Ground.Grass]: 'grass',
@@ -279,7 +279,12 @@ export class WorldScene extends Phaser.Scene {
     const b = this.buildings.place(type, this.placeTile.x, this.placeTile.y);
     for (const i of this.buildings.footprint(type, b.tx, b.ty)) this.replaceObjectImage(i); // clears stumps/saplings
     const view = this.addBuildingView(b);
-    this.events.emit('popup', { x: view.img.x, y: view.img.y - view.img.height, text: `Obra: ${def.name}`, color: '#ffe08a' } satisfies PopupEvent);
+    this.events.emit('popup', {
+      x: view.img.x,
+      y: view.img.y - view.img.height,
+      text: `Obra: ${def.name}`,
+      color: '#ffe08a',
+    } satisfies PopupEvent);
     this.cancelPlacing();
     return true;
   }
@@ -383,7 +388,12 @@ export class WorldScene extends Phaser.Scene {
         }
       }
       const pct = Math.floor((b.progress / def.buildSeconds) * 100);
-      this.interaction = { x, y, text: `[segure E] Construir ${def.name} (${pct}%)`, progress: active ? b.progress / def.buildSeconds : null };
+      this.interaction = {
+        x,
+        y,
+        text: `[segure E] Construir ${def.name} (${pct}%)`,
+        progress: active ? b.progress / def.buildSeconds : null,
+      };
       return;
     }
 
@@ -445,7 +455,10 @@ export class WorldScene extends Phaser.Scene {
     const g = tileCenter(this.map, i);
     const c = gridToScreen(g.x, g.y);
     // Anchor the sprite's base slightly below the tile center so it sits on the diamond.
-    const img = this.add.image(c.x, c.y + TILE_H / 4, key).setOrigin(0.5, 1).setDepth(c.y);
+    const img = this.add
+      .image(c.x, c.y + TILE_H / 4, key)
+      .setOrigin(0.5, 1)
+      .setDepth(c.y);
     if (this.map.variant[i] % 2 === 1) img.setFlipX(true);
     this.objectImages.set(i, img);
   }
@@ -473,7 +486,12 @@ export class WorldScene extends Phaser.Scene {
   }
 
   private drawFootprint(tx: number, ty: number, size: number, color: number): void {
-    const pts = [gridToScreen(tx, ty), gridToScreen(tx + size, ty), gridToScreen(tx + size, ty + size), gridToScreen(tx, ty + size)];
+    const pts = [
+      gridToScreen(tx, ty),
+      gridToScreen(tx + size, ty),
+      gridToScreen(tx + size, ty + size),
+      gridToScreen(tx, ty + size),
+    ];
     this.selection.lineStyle(1, color, 0.9);
     this.selection.strokePoints(pts, true);
   }

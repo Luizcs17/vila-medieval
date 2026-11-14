@@ -1,4 +1,4 @@
-import { Obj, tileCenter, tileIndex, inBounds, type WorldMap } from '../world/map';
+import { inBounds, Obj, tileCenter, tileIndex, type WorldMap } from '../world/map';
 import type { Resource } from './inventory';
 
 export interface NodeDef {
@@ -18,10 +18,42 @@ export interface NodeDef {
 
 // Regrow times are relative to the day length (DAY_SECONDS = 480 → half a day = 240 s).
 export const NODE_DEFS: Partial<Record<Obj, NodeDef>> = {
-  [Obj.Tree]: { resource: 'wood', amount: 4, secondsPerUnit: 0.9, depletesTo: Obj.Stump, regrowSeconds: 240, verb: 'Cortar', name: 'árvore' },
-  [Obj.Pine]: { resource: 'wood', amount: 5, secondsPerUnit: 1.0, depletesTo: Obj.Stump, regrowSeconds: 300, verb: 'Cortar', name: 'pinheiro' },
-  [Obj.Rock]: { resource: 'stone', amount: 4, secondsPerUnit: 1.2, depletesTo: Obj.None, regrowSeconds: 480, verb: 'Quebrar', name: 'pedra' },
-  [Obj.Iron]: { resource: 'iron', amount: 3, secondsPerUnit: 1.8, depletesTo: Obj.None, regrowSeconds: 720, verb: 'Minerar', name: 'ferro' },
+  [Obj.Tree]: {
+    resource: 'wood',
+    amount: 4,
+    secondsPerUnit: 0.9,
+    depletesTo: Obj.Stump,
+    regrowSeconds: 240,
+    verb: 'Cortar',
+    name: 'árvore',
+  },
+  [Obj.Pine]: {
+    resource: 'wood',
+    amount: 5,
+    secondsPerUnit: 1.0,
+    depletesTo: Obj.Stump,
+    regrowSeconds: 300,
+    verb: 'Cortar',
+    name: 'pinheiro',
+  },
+  [Obj.Rock]: {
+    resource: 'stone',
+    amount: 4,
+    secondsPerUnit: 1.2,
+    depletesTo: Obj.None,
+    regrowSeconds: 480,
+    verb: 'Quebrar',
+    name: 'pedra',
+  },
+  [Obj.Iron]: {
+    resource: 'iron',
+    amount: 3,
+    secondsPerUnit: 1.8,
+    depletesTo: Obj.None,
+    regrowSeconds: 720,
+    verb: 'Minerar',
+    name: 'ferro',
+  },
 };
 
 interface Regrowth {
@@ -104,13 +136,7 @@ export class ResourceNodes {
  * to the tile's closest edge (so every tile of a multi-tile building is equally reachable).
  * Ties go to the tile whose centre is closer. Null if nothing is within `reach`.
  */
-export function nearestTile(
-  map: WorldMap,
-  gx: number,
-  gy: number,
-  reach: number,
-  accept: (obj: Obj) => boolean,
-): number | null {
+export function nearestTile(map: WorldMap, gx: number, gy: number, reach: number, accept: (obj: Obj) => boolean): number | null {
   let best: number | null = null;
   let bestScore = Infinity;
   const r = Math.ceil(reach) + 1;
