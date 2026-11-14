@@ -514,6 +514,11 @@ export function createPlaceholderTextures(scene: Phaser.Scene): void {
     fromRows(scene, `animal_${name}_a`, [...art.body, ...art.legsA], art.palette);
     fromRows(scene, `animal_${name}_b`, [...art.body, ...art.legsB], art.palette);
   }
+  // Banner over village halls (white, tinted with the faction colour).
+  fromRows(scene, 'flag', ['kwwwww', 'kwwwww', 'kwwww.', 'kwwwww', 'k.....', 'k.....', 'k.....', 'k.....', 'k.....', 'k.....'], {
+    k: '#3a2a1a',
+    w: '#ffffff',
+  });
   // Melee swing arc.
   fromRows(scene, 'slash', ['..wwww..', '.w....w.', 'w......w', '........'], { w: '#ffffff' });
 

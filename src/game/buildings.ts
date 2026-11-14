@@ -33,10 +33,13 @@ export interface BuildingDef {
   /** Resource icon shown above the finished building. */
   sign?: Resource;
   job?: JobDef;
+  /** Territory radius (tiles) this building claims for its faction. */
+  claim: number;
 }
 
 export const BUILDING_DEFS: Record<BuildingType, BuildingDef> = {
   stockpile: {
+    claim: 9,
     name: 'Estoque central',
     size: 1,
     cost: {},
@@ -46,6 +49,7 @@ export const BUILDING_DEFS: Record<BuildingType, BuildingDef> = {
     buildable: false,
   },
   house: {
+    claim: 4,
     name: 'Casa',
     size: 2,
     cost: { wood: 20, stone: 10 },
@@ -54,6 +58,7 @@ export const BUILDING_DEFS: Record<BuildingType, BuildingDef> = {
     buildable: true,
   },
   lumberjack: {
+    claim: 4,
     name: 'Cabana do lenhador',
     size: 2,
     cost: { wood: 15, stone: 5 },
@@ -65,6 +70,7 @@ export const BUILDING_DEFS: Record<BuildingType, BuildingDef> = {
     job: { skill: 'woodcutting', slots: 2, nodes: [Obj.Tree, Obj.Pine], radius: 9, title: { f: 'Lenhadora', m: 'Lenhador' } },
   },
   quarry: {
+    claim: 4,
     name: 'Pedreira',
     size: 2,
     cost: { wood: 20 },
@@ -76,6 +82,7 @@ export const BUILDING_DEFS: Record<BuildingType, BuildingDef> = {
     job: { skill: 'stonework', slots: 2, nodes: [Obj.Rock], radius: 9, title: { f: 'Pedreira', m: 'Pedreiro' } },
   },
   mine: {
+    claim: 4,
     name: 'Mina',
     size: 2,
     cost: { wood: 20, stone: 15 },
@@ -87,6 +94,7 @@ export const BUILDING_DEFS: Record<BuildingType, BuildingDef> = {
     job: { skill: 'mining', slots: 2, nodes: [Obj.Iron], radius: 9, title: { f: 'Mineira', m: 'Mineiro' } },
   },
   hunter: {
+    claim: 4,
     name: 'Cabana do caçador',
     size: 2,
     cost: { wood: 15, stone: 5 },
@@ -97,6 +105,7 @@ export const BUILDING_DEFS: Record<BuildingType, BuildingDef> = {
     job: { skill: 'hunting', slots: 2, nodes: [], radius: 14, title: { f: 'Caçadora', m: 'Caçador' } },
   },
   depot: {
+    claim: 5,
     name: 'Depósito',
     size: 1,
     cost: { wood: 10, stone: 5 },
@@ -114,6 +123,8 @@ export const BUILD_MENU: BuildingType[] = (Object.keys(BUILDING_DEFS) as Buildin
 export interface Building {
   id: number;
   type: BuildingType;
+  /** Owner faction (0 = the player). */
+  faction: number;
   /** Footprint's minimum corner (north tile). */
   tx: number;
   ty: number;
@@ -134,6 +145,10 @@ export class Buildings {
   private nextId = 1;
 
   constructor(private readonly map: WorldMap) {}
+
+  get mapWidth(): number {
+    return this.map.w;
+  }
 
   at(i: number): Building | undefined {
     return this.byTile.get(i);
@@ -166,8 +181,8 @@ export class Buildings {
   }
 
   /** Places a building or construction site. Does not check or pay; call `check` first. */
-  place(type: BuildingType, tx: number, ty: number, built = false): Building {
-    const b: Building = { id: this.nextId++, type, tx, ty, built, progress: 0 };
+  place(type: BuildingType, tx: number, ty: number, built = false, faction = 0): Building {
+    const b: Building = { id: this.nextId++, type, faction, tx, ty, built, progress: 0 };
     for (const i of this.footprint(type, tx, ty)) {
       this.map.objects[i] = Obj.Building;
       this.byTile.set(i, b);
@@ -193,6 +208,16 @@ export class Buildings {
       this.list.push(copy);
     }
     this.nextId = s.nextId;
+  }
+
+  /** Removes a building (destroyed or demolished); its tiles become empty. */
+  remove(b: Building): void {
+    for (const i of this.footprint(b.type, b.tx, b.ty)) {
+      this.map.objects[i] = Obj.None;
+      this.byTile.delete(i);
+    }
+    const k = this.list.indexOf(b);
+    if (k >= 0) this.list.splice(k, 1);
   }
 
   /** Adds construction work. Returns true on the call that finishes the building. */

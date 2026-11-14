@@ -3,8 +3,22 @@ export const TILE_W = 32;
 export const TILE_H = 16;
 
 /** Map size in tiles. */
-export const MAP_W = 64;
-export const MAP_H = 64;
+export const MAP_W = 128;
+export const MAP_H = 128;
+
+/** Rival villages: names and colours, same order as TOWN_SITES. */
+export const RIVAL_TOWNS = [
+  { name: 'Pedra Alta', color: 0xd05050 },
+  { name: 'Vale Azul', color: 0x5078d8 },
+  { name: 'Pinhal Dourado', color: 0xd8b040 },
+];
+
+/** Rival village centres, as fractions of the map size (the player's village is the centre). */
+export const TOWN_SITES = [
+  { x: 0.2, y: 0.22 },
+  { x: 0.82, y: 0.25 },
+  { x: 0.48, y: 0.84 },
+];
 
 /** The v1 map is fixed: same seed every run. Change it only on purpose. */
 export const MAP_SEED = 1337;
@@ -30,7 +44,7 @@ export const MAX_CARRY_WEIGHT = 40;
 /** NPCs. Times are game seconds (see DAY_SECONDS). */
 export const NPC_SPEED = 1.6;
 export const NPC_REACH = 1.1;
-export const BEDS_PER_HOUSE = 2;
+export const BEDS_PER_HOUSE = 4;
 /** Units a worker carries before walking to the stockpile. */
 export const WORKER_LOAD = 5;
 /** Workers take this many times the player's base time per unit (before their productivity). */
@@ -51,7 +65,9 @@ export const ATTACK_REACH = 1.3;
 export const VILLAGER_HP = 6;
 /** HP restored by eating one meat (F). */
 export const MEAT_HEAL = 2;
-export const ANIMAL_SPAWN_INTERVAL = 30;
+export const ANIMAL_SPAWN_INTERVAL = 15;
+/** Multiplies every species' population (the map is 4× the original area). */
+export const WILDLIFE_SCALE = 2.5;
 /** Animals spawn at least this far from the village centre and the player. */
 export const ANIMAL_SPAWN_DISTANCE = 14;
 /** Carcasses rot away after this many game seconds. */

@@ -5,7 +5,7 @@ import type { WorldScene } from '../scenes/WorldScene';
 import { Ground, Obj } from '../world/map';
 
 /** Pixels per tile step on the minimap (isometric, so a tile is K wide and K/2 tall). */
-const K = 1.5;
+const K = 0.75;
 const PAD = 6;
 const TERRAIN_REFRESH = 2; // seconds
 
@@ -93,13 +93,16 @@ export class Minimap {
     };
     for (const b of w.buildings.list) {
       const s = BUILDING_DEFS[b.type].size;
-      dot(b.tx + s / 2, b.ty + s / 2, b.built ? 0xe8c070 : 0x8a7350, s * 2 + 1);
+      dot(b.tx + s / 2, b.ty + s / 2, b.built ? w.factions[b.faction].color : 0x8a7350, s + 1);
     }
     for (const a of w.wildlife.animals.values()) {
       if (!a.alive) continue;
       dot(a.data.gx, a.data.gy, SPECIES[a.data.species].temper === 'aggressive' ? 0xff4030 : 0xe8d8b0);
     }
-    for (const n of w.npcList()) dot(n.gx, n.gy, n.data.role === 'villager' ? 0x6ab0ff : 0xffe060, 3);
+    for (const n of w.npcList()) {
+      if (n.data.role === 'wanderer') dot(n.gx, n.gy, 0xffe060, 2);
+      else if (n.data.faction === 0) dot(n.gx, n.gy, 0x6ab0ff, 2);
+    }
     dot(w.player.gx, w.player.gy, 0xffffff, 3);
   }
 
@@ -118,6 +121,11 @@ export class Minimap {
         const p = this.project(tx + 0.5, ty + 0.5);
         ctx.fillStyle = OBJ_COLOR[m.objects[i]] ?? GROUND_COLOR[m.ground[i]];
         ctx.fillRect(Math.round(p.x - K), Math.round(p.y - K / 2), Math.ceil(K * 2), Math.ceil(K));
+        const owner = this.world.territory.owner[i];
+        if (owner >= 0) {
+          ctx.fillStyle = this.world.factions[owner].css + '66';
+          ctx.fillRect(Math.round(p.x - K), Math.round(p.y - K / 2), Math.ceil(K * 2), Math.ceil(K));
+        }
       }
     }
     this.tex.refresh();

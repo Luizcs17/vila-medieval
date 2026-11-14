@@ -72,7 +72,7 @@ Pedido em 14/11/2026. Decisões tomadas para começar (ajustáveis):
 
 ### Marcos da v2
 
-11. Mundo maior, vilas rivais, facções e território
+11. ✅ **Mundo maior, vilas rivais, facções e território**
 12. Mapa em tela cheia com território + interface de gerenciamento da vila
 13. Construções defensivas, soldados e vida dos prédios
 14. Relacionamentos, famílias, filhos e árvore genealógica
