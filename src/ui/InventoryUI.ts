@@ -1,4 +1,4 @@
-import Phaser from 'phaser';
+import type Phaser from 'phaser';
 import { ITEM_LABEL, ITEM_WEIGHT, type SlotInventory, type Stack } from '../game/slots';
 
 const SLOT = 44;
@@ -85,7 +85,9 @@ export class InventoryUI {
 
     this.panelBg = scene.add.rectangle(0, 0, 0, 0, 0x1a140e, 0.94).setOrigin(0).setStrokeStyle(2, BORDER).setDepth(100);
     this.panelBg.setInteractive(); // swallow clicks between slots
-    this.title = scene.add.text(0, 0, 'Inventário', { fontFamily: 'monospace', fontSize: '15px', color: '#f3e9d2' }).setDepth(101);
+    this.title = scene.add
+      .text(0, 0, 'Inventário', { fontFamily: 'monospace', fontSize: '15px', color: '#f3e9d2' })
+      .setDepth(101);
     this.hint = scene.add
       .text(0, 0, 'Clique: pegar/soltar · Direito: metade/um · Shift: mover', {
         fontFamily: 'monospace',
@@ -95,7 +97,10 @@ export class InventoryUI {
       .setDepth(101);
 
     // Panel order: bag rows first (top), then the hotbar row (bottom), like Minecraft.
-    const order = [...Array.from({ length: inv.slots.length - inv.hotbarSize }, (_, k) => k + inv.hotbarSize), ...Array.from({ length: inv.hotbarSize }, (_, k) => k)];
+    const order = [
+      ...Array.from({ length: inv.slots.length - inv.hotbarSize }, (_, k) => k + inv.hotbarSize),
+      ...Array.from({ length: inv.hotbarSize }, (_, k) => k),
+    ];
     for (const idx of order) {
       const v = new SlotView(scene, idx);
       v.setDepth(102);
@@ -112,7 +117,13 @@ export class InventoryUI {
     this.heldIcon = scene.add.image(0, 0, 'icon_wood').setScale(3).setDepth(200).setVisible(false);
     this.heldCount = scene.add.text(0, 0, '', COUNT_STYLE).setOrigin(1, 1).setDepth(201);
     this.tooltip = scene.add
-      .text(0, 0, '', { fontFamily: 'monospace', fontSize: '12px', color: '#f3e9d2', backgroundColor: '#000000cc', padding: { x: 5, y: 3 } })
+      .text(0, 0, '', {
+        fontFamily: 'monospace',
+        fontSize: '12px',
+        color: '#f3e9d2',
+        backgroundColor: '#000000cc',
+        padding: { x: 5, y: 3 },
+      })
       .setDepth(202)
       .setVisible(false);
 
@@ -140,7 +151,9 @@ export class InventoryUI {
     const hotbarW = this.inv.hotbarSize * SLOT + (this.inv.hotbarSize - 1) * GAP;
     const hx = Math.round((width - hotbarW) / 2);
     const hy = height - SLOT - 12;
-    this.hotbar.forEach((v, i) => v.setPosition(hx + i * (SLOT + GAP), hy));
+    this.hotbar.forEach((v, i) => {
+      v.setPosition(hx + i * (SLOT + GAP), hy);
+    });
     this.weightPos = { x: hx + hotbarW + 10, y: hy + SLOT };
 
     const cols = this.inv.hotbarSize;
@@ -187,8 +200,10 @@ export class InventoryUI {
 
   update(pointer: Phaser.Input.Pointer): void {
     const selected = this.selection.get();
-    this.hotbar.forEach((v, i) => v.render(this.inv.slots[i], i === selected, !this.isOpen));
-    this.panelSlots.forEach((v) => v.render(this.inv.slots[v.index], false, this.isOpen));
+    this.hotbar.forEach((v, i) => {
+      v.render(this.inv.slots[i], i === selected, !this.isOpen);
+    });
+    for (const v of this.panelSlots) v.render(this.inv.slots[v.index], false, this.isOpen);
 
     const h = this.held;
     this.heldIcon.setVisible(this.isOpen && h !== null);

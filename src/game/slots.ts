@@ -1,4 +1,4 @@
-import { emptyAmounts, RESOURCE_LABEL, RESOURCES, type Amounts, type Resource } from './inventory';
+import { type Amounts, emptyAmounts, RESOURCE_LABEL, RESOURCES, type Resource } from './inventory';
 
 /** Anything that can sit in an inventory slot. Only resources for now; tools come later. */
 export type ItemId = Resource;

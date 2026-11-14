@@ -32,7 +32,10 @@ describe('buildings', () => {
     expect(b.check('depot', 0, 0).ok).toBe(false); // coast is water
     expect(b.check('depot', -1, 5)).toEqual({ ok: false, reason: 'Fora do mapa' });
     const s = spawnTile(map);
-    expect(b.check('depot', s.x, s.y, (i) => i === tileIndex(map, s.x, s.y))).toEqual({ ok: false, reason: 'Saia de cima do local' });
+    expect(b.check('depot', s.x, s.y, (i) => i === tileIndex(map, s.x, s.y))).toEqual({
+      ok: false,
+      reason: 'Saia de cima do local',
+    });
   });
 
   it('enforces "near" requirements', () => {

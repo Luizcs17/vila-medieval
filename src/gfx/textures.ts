@@ -1,4 +1,4 @@
-import Phaser from 'phaser';
+import type Phaser from 'phaser';
 import { TILE_H, TILE_W } from '../config';
 
 /**
@@ -26,13 +26,7 @@ function rng(seed: number): () => number {
   };
 }
 
-function paint(
-  scene: Phaser.Scene,
-  key: string,
-  w: number,
-  h: number,
-  pixel: (x: number, y: number) => RGB | null,
-): void {
+function paint(scene: Phaser.Scene, key: string, w: number, h: number, pixel: (x: number, y: number) => RGB | null): void {
   const tex = scene.textures.createCanvas(key, w, h);
   if (!tex) throw new Error(`could not create texture ${key}`);
   const ctx = tex.getContext();
@@ -118,7 +112,7 @@ function mirror(rows: string[]): string[] {
 
 /** Longer hair framing the face (rows 3-5, outline columns become hair). */
 function withLongHair(rows: string[]): string[] {
-  return rows.map((r, y) => (y >= 3 && y <= 5 ? 'h'.padStart(2, '.') + r.slice(2, 8) + 'h.' : r));
+  return rows.map((r, y) => (y >= 3 && y <= 5 ? `${'h'.padStart(2, '.') + r.slice(2, 8)}h.` : r));
 }
 
 /** Creates `${prefix}_idle`, `${prefix}_step_a`, `${prefix}_step_b` for a character. */
@@ -222,20 +216,13 @@ function rock(scene: Phaser.Scene, key: string, seed: number, ore: boolean): voi
 }
 
 function stump(scene: Phaser.Scene, key: string): void {
-  fromRows(
-    scene,
-    key,
-    [
-      '..kkkkkk..',
-      '.krrRRrrk.',
-      'krRrrrrRrk',
-      'kbrrRRrrbk',
-      'kBbkkkkbBk',
-      'kBbbbbbbBk',
-      '.kkkkkkkk.',
-    ],
-    { k: '#2b1d14', r: '#d9b27a', R: '#b8915c', b: '#6e4824', B: '#5a3a1a' },
-  );
+  fromRows(scene, key, ['..kkkkkk..', '.krrRRrrk.', 'krRrrrrRrk', 'kbrrRRrrbk', 'kBbkkkkbBk', 'kBbbbbbbBk', '.kkkkkkkk.'], {
+    k: '#2b1d14',
+    r: '#d9b27a',
+    R: '#b8915c',
+    b: '#6e4824',
+    B: '#5a3a1a',
+  });
 }
 
 /** Central stockpile: a wooden platform with crates and a log pile. */
@@ -422,30 +409,62 @@ function constructionSite(scene: Phaser.Scene, key: string, size: number): void 
 
 export function createPlaceholderTextures(scene: Phaser.Scene): void {
   isoBuilding(scene, 'bld_house', 2, {
-    wallL: '#e0d0a8', wallR: '#bfae86', roofL: '#b0503a', roofR: '#8a3a28', wallH: 18, roofH: 22, door: true, window: true,
+    wallL: '#e0d0a8',
+    wallR: '#bfae86',
+    roofL: '#b0503a',
+    roofR: '#8a3a28',
+    wallH: 18,
+    roofH: 22,
+    door: true,
+    window: true,
   });
   isoBuilding(scene, 'bld_lumberjack', 2, {
-    wallL: '#9a6a3a', wallR: '#7a5028', roofL: '#5a7a44', roofR: '#455f34', wallH: 16, roofH: 20, door: true,
+    wallL: '#9a6a3a',
+    wallR: '#7a5028',
+    roofL: '#5a7a44',
+    roofR: '#455f34',
+    wallH: 16,
+    roofH: 20,
+    door: true,
   });
   isoBuilding(scene, 'bld_quarry', 2, {
-    wallL: '#a8a39b', wallR: '#86817a', roofL: '#8a6a44', roofR: '#6e5234', wallH: 14, roofH: 20, door: true,
+    wallL: '#a8a39b',
+    wallR: '#86817a',
+    roofL: '#8a6a44',
+    roofR: '#6e5234',
+    wallH: 14,
+    roofH: 20,
+    door: true,
   });
   isoBuilding(scene, 'bld_mine', 2, {
-    wallL: '#6e6a66', wallR: '#55524f', roofL: '#5a4a3a', roofR: '#463a2d', wallH: 12, roofH: 18, door: true,
+    wallL: '#6e6a66',
+    wallR: '#55524f',
+    roofL: '#5a4a3a',
+    roofR: '#463a2d',
+    wallH: 12,
+    roofH: 18,
+    door: true,
   });
   isoBuilding(scene, 'bld_hunter', 2, {
-    wallL: '#8a5a2b', wallR: '#6e4824', roofL: '#d4b05a', roofR: '#b08e40', wallH: 16, roofH: 22, door: true, window: true,
+    wallL: '#8a5a2b',
+    wallR: '#6e4824',
+    roofL: '#d4b05a',
+    roofR: '#b08e40',
+    wallH: 16,
+    roofH: 22,
+    door: true,
+    window: true,
   });
   constructionSite(scene, 'site_1', 1);
   constructionSite(scene, 'site_2', 2);
 
   stump(scene, 'stump');
-  fromRows(
-    scene,
-    'sapling',
-    ['...kk...', '..kllk..', '.kllgk..', '.kglggk.', '..kgggk.', '...kbk..', '..kbbk..', '.kkkkkk.'],
-    { k: '#1c2b14', l: '#7cc25a', g: '#4c8a3b', b: '#6e4824' },
-  );
+  fromRows(scene, 'sapling', ['...kk...', '..kllk..', '.kllgk..', '.kglggk.', '..kgggk.', '...kbk..', '..kbbk..', '.kkkkkk.'], {
+    k: '#1c2b14',
+    l: '#7cc25a',
+    g: '#4c8a3b',
+    b: '#6e4824',
+  });
   stockpile(scene, 'stockpile');
   for (const key in ICON_ROWS) fromRows(scene, key, ICON_ROWS[key].rows, ICON_ROWS[key].palette);
 

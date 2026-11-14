@@ -1,7 +1,7 @@
-import Phaser from 'phaser';
+import type Phaser from 'phaser';
 import { DAY_SECONDS } from '../config';
 import { RESOURCE_LABEL, RESOURCES } from '../game/inventory';
-import { roleLabel, tierLabel, TIER_COLOR, TRAITS, type NpcData } from '../game/npcs';
+import { type NpcData, roleLabel, TIER_COLOR, TRAITS, tierLabel } from '../game/npcs';
 import { npcSpriteKey } from '../gfx/textures';
 import type { WorldScene } from '../scenes/WorldScene';
 
@@ -56,7 +56,7 @@ export class RecruitDialogUI {
 
   /** Recruits if allowed; closes the card on success. */
   confirm(): void {
-    if (!this.npc || this.npc.role !== 'wanderer') return;
+    if (this.npc?.role !== 'wanderer') return;
     if (this.world.recruit(this.npc.id)) this.close();
   }
 
@@ -128,22 +128,31 @@ export class RecruitDialogUI {
         this.addLine(items, y, () => {
           const carried = this.world.inventory.count(r);
           const stored = this.world.stockpile.items[r];
-          return { label: `${need} ${RESOURCE_LABEL[r]} (com você ${carried}, no estoque ${stored})`, met: carried + stored >= need };
+          return {
+            label: `${need} ${RESOURCE_LABEL[r]} (com você ${carried}, no estoque ${stored})`,
+            met: carried + stored >= need,
+          };
         });
         y += 18;
       }
       const days = Math.max(0, (npc.leavesAt - this.world.clock.seconds) / DAY_SECONDS);
       const when = days >= 1 ? `${days.toFixed(1).replace('.', ',')} dia(s)` : 'menos de 1 dia';
-      items.push(s.add.text(PAD, y + 6, `Vai embora em ${when} se não for recrutad${npc.gender === 'f' ? 'a' : 'o'}.`, {
-        ...TEXT,
-        fontSize: '11px',
-        color: '#a89a80',
-      }));
+      items.push(
+        s.add.text(PAD, y + 6, `Vai embora em ${when} se não for recrutad${npc.gender === 'f' ? 'a' : 'o'}.`, {
+          ...TEXT,
+          fontSize: '11px',
+          color: '#a89a80',
+        }),
+      );
       y += 30;
     } else {
       items.push(
         s.add.text(PAD, y, 'Mora numa Casa da vila.', { ...TEXT, fontSize: '13px' }),
-        s.add.text(PAD, y + 18, 'Trabalho: nenhum ainda (chega no próximo marco).', { ...TEXT, fontSize: '12px', color: '#a89a80' }),
+        s.add.text(PAD, y + 18, 'Trabalho: nenhum ainda (chega no próximo marco).', {
+          ...TEXT,
+          fontSize: '12px',
+          color: '#a89a80',
+        }),
       );
       y += 44;
     }

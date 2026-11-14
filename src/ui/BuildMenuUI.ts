@@ -1,6 +1,6 @@
-import Phaser from 'phaser';
+import type Phaser from 'phaser';
 import { BUILD_MENU, BUILDING_DEFS, type BuildingType } from '../game/buildings';
-import { RESOURCES, type Inventory } from '../game/inventory';
+import { type Inventory, RESOURCES } from '../game/inventory';
 
 const ROW_W = 300;
 const ROW_H = 48;
@@ -28,7 +28,10 @@ export class BuildMenuUI {
   ) {
     this.container = scene.add.container(12, 110).setDepth(90);
     const height = PAD * 2 + 22 + BUILD_MENU.length * (ROW_H + 4);
-    const panel = scene.add.rectangle(0, 0, ROW_W + PAD * 2, height, 0x1a140e, 0.94).setOrigin(0).setStrokeStyle(2, 0x5a4630);
+    const panel = scene.add
+      .rectangle(0, 0, ROW_W + PAD * 2, height, 0x1a140e, 0.94)
+      .setOrigin(0)
+      .setStrokeStyle(2, 0x5a4630);
     panel.setInteractive(); // swallow clicks so they don't place buildings underneath
     const title = scene.add.text(PAD, PAD - 2, 'Construir  (B fecha)', { ...TEXT, fontSize: '14px' });
     this.container.add([panel, title]);
@@ -53,7 +56,10 @@ export class BuildMenuUI {
         const amount = def.cost[r];
         if (!amount) continue;
         const text = scene.add.text(cx, y + 12, String(amount), { ...TEXT, fontSize: '13px' }).setOrigin(1, 0.5);
-        const icon = scene.add.image(cx - text.width - 3, y + 12, `icon_${r}`).setScale(2).setOrigin(1, 0.5);
+        const icon = scene.add
+          .image(cx - text.width - 3, y + 12, `icon_${r}`)
+          .setScale(2)
+          .setOrigin(1, 0.5);
         cx -= text.width + 26;
         costs.push({ r, text });
         objects.push(text, icon);

@@ -1,10 +1,10 @@
 import Phaser from 'phaser';
 import { RESOURCE_LABEL, RESOURCES, type Resource } from '../game/inventory';
+import type { NpcData } from '../game/npcs';
 import { ambientAt, formatClock } from '../game/time';
 import { BuildMenuUI } from '../ui/BuildMenuUI';
 import { InventoryUI } from '../ui/InventoryUI';
 import { RecruitDialogUI } from '../ui/RecruitDialogUI';
-import type { NpcData } from '../game/npcs';
 import type { PopupEvent, ToastEvent, WorldScene } from './WorldScene';
 
 const TOAST_SECONDS = 5;
@@ -73,9 +73,7 @@ export class UIScene extends Phaser.Scene {
     x += 160;
     panel.width = x - 8;
 
-    this.clockText = this.add
-      .text(0, 8, '', { ...TEXT, backgroundColor: '#00000088', padding: { x: 10, y: 9 } })
-      .setOrigin(1, 0);
+    this.clockText = this.add.text(0, 8, '', { ...TEXT, backgroundColor: '#00000088', padding: { x: 10, y: 9 } }).setOrigin(1, 0);
     this.add.text(
       12,
       52,
