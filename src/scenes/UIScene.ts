@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import type { Building } from '../game/buildings';
 import { RESOURCE_LABEL, RESOURCES, type Resource } from '../game/inventory';
+import { foodDays } from '../game/needs';
 import type { NpcData } from '../game/npcs';
 import { ambientAt, formatClock } from '../game/time';
 import { BuildingPanelUI } from '../ui/BuildingPanelUI';
@@ -73,7 +74,7 @@ export class UIScene extends Phaser.Scene {
     for (const r of RESOURCES) {
       this.add.image(x, 26, `icon_${r}`).setScale(2).setOrigin(0, 0.5);
       this.counts[r] = this.add.text(x + 20, 26, '', TEXT).setOrigin(0, 0.5);
-      x += 116;
+      x += r === 'meat' ? 170 : 116; // meat also shows days of food left
     }
     this.add.image(x, 26, 'icon_person').setScale(2).setOrigin(0, 0.5);
     this.popText = this.add.text(x + 20, 26, '', TEXT).setOrigin(0, 0.5);
@@ -84,7 +85,7 @@ export class UIScene extends Phaser.Scene {
     this.add.text(
       12,
       52,
-      'WASD: andar  Shift: correr  E: usar  Espaço: atacar  B: construir  I/Tab: inventário  M: mapa  T: acelerar tempo',
+      'WASD: andar  Shift: correr  E: usar  Espaço: atacar  F: comer  B: construir  I/Tab: inventário  M: mapa  T: acelerar',
       { ...TEXT, fontSize: '12px', backgroundColor: '#00000088', padding: { x: 8, y: 5 } },
     );
     this.debug = this.add.text(12, 80, '', { ...TEXT, fontSize: '11px', color: '#cfc3a8' });
@@ -188,6 +189,12 @@ export class UIScene extends Phaser.Scene {
     if (!w.player) return;
 
     for (const r of RESOURCES) this.counts[r].setText(`${RESOURCE_LABEL[r]} ${w.stockpile.items[r]}`);
+    // Meat is food: show how many days it lasts, and warn when it runs low.
+    const days = foodDays(w.population.villagers, w.stockpile);
+    if (Number.isFinite(days)) {
+      this.counts.meat.setText(`Carne ${w.stockpile.items.meat} · ${days.toFixed(1).replace('.', ',')}d`);
+      this.counts.meat.setColor(days < 1 ? '#ff8a7a' : days < 2 ? '#ffc060' : '#f3e9d2');
+    }
     this.popText.setText(`População ${w.population.villagers.length}/${w.population.beds}`);
 
     const light = ambientAt(w.clock.hour);

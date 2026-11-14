@@ -63,6 +63,6 @@ explorar → coletar → construir → recrutar → designar NPCs a prédios →
 5. ✅ **NPCs aparecendo pelo mapa + recrutamento** (casa livre, pedidos por nível, traços definidos)
 6. ✅ **Notas de habilidade + designar aldeões a prédios + produção automática**
 7. ✅ **Animais neutros e agressivos + combate + caça + minimapa** (antecipado: a carne vem da caça e é a comida da vila)
-8. Necessidades dos NPCs (fome, morte) + efeitos dos traços
+8. ✅ **Fome dos aldeões, morte por fome e efeitos dos traços**
 9. Crafting de ferramentas e armas + evolução do protagonista
 10. Salvar e carregar + menu de pausa

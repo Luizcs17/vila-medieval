@@ -1,6 +1,7 @@
 import type Phaser from 'phaser';
 import { DAY_SECONDS } from '../config';
 import { RESOURCE_LABEL, RESOURCES } from '../game/inventory';
+import { isStarving } from '../game/needs';
 import { jobTitle, type NpcData, roleLabel, SKILL_LABEL, SKILLS, stars, TIER_COLOR, TRAITS, tierLabel } from '../game/npcs';
 import { npcSpriteKey } from '../gfx/textures';
 import type { WorldScene } from '../scenes/WorldScene';
@@ -160,6 +161,11 @@ export class RecruitDialogUI {
       y += 30;
     } else {
       items.push(
+        s.add.text(PAD + 230, y, `Fome ${Math.round(100 - npc.food)}%${isStarving(npc) ? ' (FAMINTO)' : ''}`, {
+          ...TEXT,
+          fontSize: '12px',
+          color: isStarving(npc) ? '#ff8a7a' : npc.food < 50 ? '#ffc060' : '#a8e890',
+        }),
         s.add.text(PAD, y, `Trabalho: ${npc.jobId === null ? 'nenhum' : jobTitle(npc, this.world.buildings)}`, {
           ...TEXT,
           fontSize: '13px',

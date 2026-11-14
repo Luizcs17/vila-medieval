@@ -2,6 +2,14 @@
 
 Each milestone from `docs/GDD.md` is a minor version.
 
+## 0.8.0: Milestone 8, villager needs
+
+- Villagers get hungry (satiety 0–100, empty after a day) and eat meat straight from the stockpile, about 2 per day. Frugal eats 30% less, Apetite grande 40% more.
+- With no meat: a warning toast, a red meat icon over the villager, half productivity, no healing; after 1.5 days at zero they die (their bed and job free up).
+- The resource bar shows how many days the meat lasts (orange under 2 days, red under 1).
+- F eats a meat you carry to heal 2 HP.
+- The villager card shows hunger.
+
 ## 0.7.0: Milestone 7, animals, combat and minimap
 
 - Wildlife: rabbits and deer (run away), boars (fight back when hurt), wolves and bears (attack people nearby; more wolves at night). Populations refill over time, away from the village.
