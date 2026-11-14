@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import {
+  BEDS_PER_HOUSE,
   DEFAULT_ZOOM_INDEX,
   FAST_FORWARD,
   HOTBAR_SLOTS,
@@ -12,12 +13,12 @@ import {
   WANDERER_STAY,
   ZOOM_LEVELS,
 } from '../config';
-import { Npc } from '../entities/Npc';
+import { Npc, type NpcWorld } from '../entities/Npc';
 import { Player } from '../entities/Player';
 import { BUILDING_DEFS, type Building, Buildings, type BuildingType, type PlaceCheck } from '../game/buildings';
 import { Gatherer, NODE_DEFS, nearestTile, ResourceNodes } from '../game/gathering';
-import { Inventory, RESOURCE_LABEL, RESOURCES } from '../game/inventory';
-import { compass, generateWanderer, type NpcData, Population, pickSpawnTile, WandererSpawner } from '../game/npcs';
+import { Inventory, RESOURCE_LABEL, RESOURCES, type Resource } from '../game/inventory';
+import { compass, generateWanderer, jobTitle, type NpcData, Population, pickSpawnTile, WandererSpawner } from '../game/npcs';
 import { SlotInventory } from '../game/slots';
 import { GameClock } from '../game/time';
 import { createPlaceholderTextures } from '../gfx/textures';
@@ -103,6 +104,9 @@ export class WorldScene extends Phaser.Scene {
   population!: Population;
   /** NPC the player is talking to (dialog open in UIScene). Freezes the player and that NPC. */
   talkingTo: NpcData | null = null;
+  /** Building whose panel is open in UIScene (workers / residents). Freezes the player. */
+  panelBuilding: Building | null = null;
+  npcWorld!: NpcWorld;
   /** Set by UIScene while the inventory panel is open: freezes movement and gathering. */
   inventoryOpen = false;
   /** Selected hotbar slot (0-based). No effect yet; tools will use it. */
@@ -135,6 +139,13 @@ export class WorldScene extends Phaser.Scene {
     this.nodes = new ResourceNodes(this.map);
     this.buildings = new Buildings(this.map);
     this.population = new Population(this.buildings);
+    this.npcWorld = {
+      map: this.map,
+      buildings: this.buildings,
+      isNight: () => this.clock.isNight,
+      harvest: (i) => this.workerHarvest(i),
+      deposit: (r, n) => this.stockpile.add(r, n),
+    };
 
     this.drawMap();
 
@@ -169,7 +180,7 @@ export class WorldScene extends Phaser.Scene {
 
   update(_time: number, deltaMs: number): void {
     const k = this.keys;
-    const frozen = this.inventoryOpen || this.talkingTo !== null;
+    const frozen = this.inventoryOpen || this.talkingTo !== null || this.panelBuilding !== null;
     const x = frozen ? 0 : (k.D.isDown || k.RIGHT.isDown ? 1 : 0) - (k.A.isDown || k.LEFT.isDown ? 1 : 0);
     const y = frozen ? 0 : (k.S.isDown || k.DOWN.isDown ? 1 : 0) - (k.W.isDown || k.UP.isDown ? 1 : 0);
     // Clamp huge frame gaps (e.g. tab switch) so the player never tunnels through walls.
@@ -182,7 +193,7 @@ export class WorldScene extends Phaser.Scene {
     for (const i of this.nodes.update(worldDt, (t) => !this.playerOverlapsTile(t))) this.replaceObjectImage(i);
 
     this.player.update(dt, { x, y, run: k.SHIFT.isDown });
-    this.updateNpcs(dt, worldDt);
+    this.updateNpcs(worldDt);
     this.selection.clear();
     if (this.placement) this.updatePlacement();
     else this.updateInteraction(dt, x !== 0 || y !== 0);
@@ -198,12 +209,12 @@ export class WorldScene extends Phaser.Scene {
     return { x: s.tx + 0.5, y: s.ty + 0.5 };
   }
 
-  private updateNpcs(dt: number, worldDt: number): void {
+  private updateNpcs(worldDt: number): void {
     if (this.spawner.update(worldDt, this.population.wanderers.length)) this.spawnWanderer();
 
     for (const npc of [...this.npcs.values()]) {
       const talking = this.talkingTo?.id === npc.data.id;
-      npc.update(dt, talking, talking ? this.player.sprite.x : undefined);
+      npc.update(worldDt, this.npcWorld, talking, talking ? this.player.sprite.x : undefined);
       if (npc.data.role === 'wanderer' && !talking && this.clock.seconds >= npc.data.leavesAt) {
         this.npcs.delete(npc.data.id);
         this.population.remove(npc.data.id);
@@ -311,7 +322,7 @@ export class WorldScene extends Phaser.Scene {
   // ---------- interaction ----------
 
   private updateInteraction(dt: number, moving: boolean): void {
-    if (this.talkingTo) {
+    if (this.talkingTo || this.panelBuilding) {
       this.interaction = null;
       return;
     }
@@ -321,7 +332,7 @@ export class WorldScene extends Phaser.Scene {
     if (npc) {
       this.gatherer.tick(dt, null, false, 1);
       const d = npc.data;
-      const text = d.role === 'wanderer' ? `[E] Falar com ${d.name}` : `[E] ${d.name}`;
+      const text = d.role === 'wanderer' ? `[E] Falar com ${d.name}` : `[E] ${d.name} · ${jobTitle(d, this.buildings)}`;
       this.interaction = { x: npc.sprite.x, y: npc.sprite.y - npc.sprite.height - 6, text, progress: null };
       if (Phaser.Input.Keyboard.JustDown(this.keys.E)) {
         this.talkingTo = d;
@@ -404,7 +415,34 @@ export class WorldScene extends Phaser.Scene {
       return;
     }
 
-    this.interaction = { x, y, text: `${def.name}: ${def.description}`, progress: null };
+    let text = `${def.name}: ${def.description}`;
+    if (def.job) text = `[E] ${def.name} (${this.population.workers(b.id).length}/${def.job.slots} trabalhando)`;
+    else if (b.type === 'house') text = `[E] ${def.name} (${this.population.residents(b.id).length}/${BEDS_PER_HOUSE} moradores)`;
+    this.interaction = { x, y, text, progress: null };
+    if ((def.job || b.type === 'house') && Phaser.Input.Keyboard.JustDown(this.keys.E)) {
+      this.panelBuilding = b;
+      this.events.emit('building', b);
+    }
+  }
+
+  /** Why a villager isn't working (e.g. no resources nearby), or null. */
+  npcStatus(id: number): string | null {
+    return this.npcs.get(id)?.status ?? null;
+  }
+
+  /** Called by the building panel when it closes. */
+  closeBuildingPanel(): void {
+    this.panelBuilding = null;
+  }
+
+  /** A worker takes one unit from node `i` (sprites updated). */
+  private workerHarvest(i: number): Resource | null {
+    const result = this.nodes.harvest(i);
+    if (!result) return null;
+    const img = this.objectImages.get(i);
+    if (img) this.tweens.add({ targets: img, x: img.x + 1, duration: 40, yoyo: true, repeat: 1 });
+    if (result.depleted) this.replaceObjectImage(i);
+    return result.resource;
   }
 
   private harvest(i: number): void {

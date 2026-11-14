@@ -1,6 +1,6 @@
 import { BEDS_PER_HOUSE, MAX_WANDERERS, WANDERER_FIRST_SPAWN, WANDERER_INTERVAL } from '../config';
 import { isWalkable, type WorldMap } from '../world/map';
-import type { Building, Buildings } from './buildings';
+import { BUILDING_DEFS, type Building, type Buildings } from './buildings';
 import { type Amounts, type Inventory, RESOURCE_LABEL, RESOURCES } from './inventory';
 import type { SlotInventory } from './slots';
 
@@ -21,7 +21,7 @@ export const roleLabel = (role: NpcData['role'], g: Gender) =>
 
 export type TraitId = 'axe' | 'stone' | 'iron' | 'aim' | 'tireless' | 'frugal' | 'appetite' | 'slow';
 
-/** Trait effects are applied by the job and needs systems (milestones 6 and 7). */
+/** Traits are random personality quirks. Production effects apply in `productivity`; eating effects in the needs system. */
 export const TRAITS: Record<TraitId, { name: string; description: string; positive: boolean }> = {
   axe: { name: 'Força no machado', description: '+50% de madeira como lenhador', positive: true },
   stone: { name: 'Olho para pedra', description: '+50% de pedra na pedreira', positive: true },
@@ -33,7 +33,50 @@ export const TRAITS: Record<TraitId, { name: string; description: string; positi
   slow: { name: 'Sem pressa', description: '-20% de produção', positive: false },
 };
 
-const PROFESSION_TRAITS: TraitId[] = ['axe', 'stone', 'iron', 'aim'];
+// ---------- skills (rated 1–5 stars) ----------
+
+export const SKILLS = ['woodcutting', 'stonework', 'mining', 'hunting'] as const;
+export type Skill = (typeof SKILLS)[number];
+export type Skills = Record<Skill, number>;
+
+export const SKILL_LABEL: Record<Skill, string> = {
+  woodcutting: 'Corte de lenha',
+  stonework: 'Cantaria',
+  mining: 'Mineração',
+  hunting: 'Caça',
+};
+
+/** The trait that gives +50% in each skill's job. */
+const SKILL_TRAIT: Record<Skill, TraitId> = { woodcutting: 'axe', stonework: 'stone', mining: 'iron', hunting: 'aim' };
+
+export const stars = (rating: number) => '★'.repeat(rating) + '☆'.repeat(5 - rating);
+
+const randInt = (rng: Rng, lo: number, hi: number) => lo + Math.floor(rng() * (hi - lo + 1));
+
+/** Skill ratings by tier: common 1–3 everywhere; skilled one 4; master one 5 and one 4 (rest 2–3). */
+export function rollSkills(rng: Rng, tier: Tier): Skills {
+  const order = [...SKILLS].sort(() => rng() - 0.5);
+  const skills = {} as Skills;
+  for (const s of SKILLS) skills[s] = tier === 'master' ? randInt(rng, 2, 3) : randInt(rng, 1, 3);
+  if (tier === 'skilled') skills[order[0]] = 4;
+  if (tier === 'master') {
+    skills[order[0]] = 5;
+    skills[order[1]] = 4;
+  }
+  return skills;
+}
+
+/**
+ * Work speed multiplier for a skill: rating 1 → 0.75×, 3 → 1.25×, 5 → 1.75×,
+ * times trait effects (matching profession trait ×1.5, Incansável ×1.2, Sem pressa ×0.8).
+ */
+export function productivity(npc: Pick<NpcData, 'skills' | 'traits'>, skill: Skill): number {
+  let m = 0.5 + 0.25 * npc.skills[skill];
+  if (npc.traits.includes(SKILL_TRAIT[skill])) m *= 1.5;
+  if (npc.traits.includes('tireless')) m *= 1.2;
+  if (npc.traits.includes('slow')) m *= 0.8;
+  return m;
+}
 
 const NAMES: Record<Gender, string[]> = {
   f: [
@@ -86,11 +129,14 @@ export interface NpcData {
   gender: Gender;
   tier: Tier;
   traits: TraitId[];
+  skills: Skills;
   /** Resources asked for on recruitment (in addition to a free bed). */
   request: Partial<Amounts>;
   variant: number;
   role: 'wanderer' | 'villager';
   homeId: number | null;
+  /** Workplace building id, or null when unemployed. */
+  jobId: number | null;
   /** Game time (clock seconds) when a wanderer gives up and leaves. */
   leavesAt: number;
 }
@@ -101,20 +147,28 @@ export function generateWanderer(rng: Rng, id: number, leavesAt: number): NpcDat
   const roll = rng();
   const tier: Tier = roll < 0.6 ? 'common' : roll < 0.9 ? 'skilled' : 'master';
   const gender: Gender = rng() < 0.5 ? 'f' : 'm';
-  let traits: TraitId[];
-  if (tier === 'common') traits = [pick(rng, Object.keys(TRAITS) as TraitId[])];
-  else if (tier === 'skilled') traits = [pick(rng, PROFESSION_TRAITS)];
-  else traits = [pick(rng, PROFESSION_TRAITS), pick(rng, ['tireless', 'frugal'] as TraitId[])];
+  // Traits are random at every tier; masters get two different ones. Tier shows in the skill ratings.
+  const all = Object.keys(TRAITS) as TraitId[];
+  const traits: TraitId[] = [pick(rng, all)];
+  if (tier === 'master')
+    traits.push(
+      pick(
+        rng,
+        all.filter((t) => t !== traits[0]),
+      ),
+    );
   return {
     id,
     name: pick(rng, NAMES[gender]),
     gender,
     tier,
     traits,
+    skills: rollSkills(rng, tier),
     request: { ...pick(rng, REQUESTS[tier]) },
     variant: Math.floor(rng() * NPC_VARIANTS),
     role: 'wanderer',
     homeId: null,
+    jobId: null,
     leavesAt,
   };
 }
@@ -204,6 +258,37 @@ export class Population {
     const i = this.npcs.findIndex((n) => n.id === id);
     if (i >= 0) this.npcs.splice(i, 1);
   }
+
+  workers(buildingId: number): NpcData[] {
+    return this.villagers.filter((n) => n.jobId === buildingId);
+  }
+
+  /** Villagers without a job, best first for `skill` (if given). */
+  unemployed(skill?: Skill): NpcData[] {
+    const list = this.villagers.filter((n) => n.jobId === null);
+    if (skill) list.sort((a, b) => productivity(b, skill) - productivity(a, skill));
+    return list;
+  }
+
+  /** Assigns a villager to a finished workplace with a free slot. Returns false if not allowed. */
+  assign(npc: NpcData, building: Building): boolean {
+    const job = BUILDING_DEFS[building.type].job;
+    if (!job || !building.built || npc.role !== 'villager') return false;
+    if (this.workers(building.id).length >= job.slots) return false;
+    npc.jobId = building.id;
+    return true;
+  }
+
+  unassign(npc: NpcData): void {
+    npc.jobId = null;
+  }
+}
+
+/** Display title for a villager: job title, or "Aldeã/Aldeão" when unemployed. */
+export function jobTitle(npc: NpcData, buildings: Buildings): string {
+  const b = npc.jobId !== null ? buildings.list.find((x) => x.id === npc.jobId) : undefined;
+  const job = b ? BUILDING_DEFS[b.type].job : undefined;
+  return job ? job.title[npc.gender] : roleLabel(npc.role, npc.gender);
 }
 
 // ---------- spawning ----------

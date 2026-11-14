@@ -31,6 +31,10 @@ export const MAX_CARRY_WEIGHT = 40;
 export const NPC_SPEED = 1.6;
 export const NPC_REACH = 1.1;
 export const BEDS_PER_HOUSE = 2;
+/** Units a worker carries before walking to the stockpile. */
+export const WORKER_LOAD = 5;
+/** Workers take this many times the player's base time per unit (before their productivity). */
+export const WORKER_TIME_FACTOR = 1.5;
 export const MAX_WANDERERS = 3;
 export const WANDERER_FIRST_SPAWN = 15;
 export const WANDERER_INTERVAL = 150;
