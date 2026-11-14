@@ -1,5 +1,17 @@
 import { Ground, inBounds, Obj, tileIndex, type WorldMap } from '../world/map';
 import type { Amounts, Resource } from './inventory';
+import type { Skill } from './npcs';
+
+/** A workplace: villagers assigned here use `skill` on `nodes` within `radius` tiles. */
+export interface JobDef {
+  skill: Skill;
+  slots: number;
+  /** Map objects workers harvest. Empty for hunters (they hunt animals). */
+  nodes: Obj[];
+  radius: number;
+  /** Job title, gendered. */
+  title: { f: string; m: string };
+}
 
 export type BuildingType = 'stockpile' | 'house' | 'lumberjack' | 'quarry' | 'mine' | 'hunter' | 'depot';
 
@@ -20,6 +32,7 @@ export interface BuildingDef {
   buildable: boolean;
   /** Resource icon shown above the finished building. */
   sign?: Resource;
+  job?: JobDef;
 }
 
 export const BUILDING_DEFS: Record<BuildingType, BuildingDef> = {
@@ -49,6 +62,7 @@ export const BUILDING_DEFS: Record<BuildingType, BuildingDef> = {
     near: { objs: [Obj.Tree, Obj.Pine], radius: 6, label: 'árvores' },
     buildable: true,
     sign: 'wood',
+    job: { skill: 'woodcutting', slots: 2, nodes: [Obj.Tree, Obj.Pine], radius: 9, title: { f: 'Lenhadora', m: 'Lenhador' } },
   },
   quarry: {
     name: 'Pedreira',
@@ -59,6 +73,7 @@ export const BUILDING_DEFS: Record<BuildingType, BuildingDef> = {
     near: { objs: [Obj.Rock], radius: 6, label: 'pedras' },
     buildable: true,
     sign: 'stone',
+    job: { skill: 'stonework', slots: 2, nodes: [Obj.Rock], radius: 9, title: { f: 'Pedreira', m: 'Pedreiro' } },
   },
   mine: {
     name: 'Mina',
@@ -69,6 +84,7 @@ export const BUILDING_DEFS: Record<BuildingType, BuildingDef> = {
     near: { objs: [Obj.Iron], radius: 6, label: 'ferro' },
     buildable: true,
     sign: 'iron',
+    job: { skill: 'mining', slots: 2, nodes: [Obj.Iron], radius: 9, title: { f: 'Mineira', m: 'Mineiro' } },
   },
   hunter: {
     name: 'Cabana do caçador',
@@ -78,6 +94,7 @@ export const BUILDING_DEFS: Record<BuildingType, BuildingDef> = {
     description: 'Um aldeão aqui caça animais.',
     buildable: true,
     sign: 'meat',
+    job: { skill: 'hunting', slots: 2, nodes: [], radius: 14, title: { f: 'Caçadora', m: 'Caçador' } },
   },
   depot: {
     name: 'Depósito',

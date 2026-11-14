@@ -1,7 +1,9 @@
 import Phaser from 'phaser';
+import type { Building } from '../game/buildings';
 import { RESOURCE_LABEL, RESOURCES, type Resource } from '../game/inventory';
 import type { NpcData } from '../game/npcs';
 import { ambientAt, formatClock } from '../game/time';
+import { BuildingPanelUI } from '../ui/BuildingPanelUI';
 import { BuildMenuUI } from '../ui/BuildMenuUI';
 import { InventoryUI } from '../ui/InventoryUI';
 import { RecruitDialogUI } from '../ui/RecruitDialogUI';
@@ -40,6 +42,7 @@ export class UIScene extends Phaser.Scene {
   private buildMenu!: BuildMenuUI;
   private placeHint!: Phaser.GameObjects.Text;
   private dialog!: RecruitDialogUI;
+  private panel!: BuildingPanelUI;
   private popText!: Phaser.GameObjects.Text;
   private popups: Popup[] = [];
   private toasts: { text: Phaser.GameObjects.Text; age: number }[] = [];
@@ -103,10 +106,21 @@ export class UIScene extends Phaser.Scene {
       this.dialog.open(npc);
     });
 
+    this.panel = new BuildingPanelUI(this, this.world, () => this.world.closeBuildingPanel());
+    this.world.events.on('building', (b: Building) => {
+      if (this.inventory.isOpen) this.toggleInventory();
+      this.closeBuildMode();
+      this.panel.open(b);
+    });
+
     const kb = this.input.keyboard!;
     kb.addCapture('TAB');
     kb.on('keydown', (e: KeyboardEvent) => {
       const key = e.key.toLowerCase();
+      if (this.panel.isOpen) {
+        if (key === 'escape' || key === 'e') this.panel.close();
+        return;
+      }
       if (this.dialog.isOpen) {
         // The dialog is modal: only its own keys work.
         if (key === 'enter') this.dialog.confirm();
@@ -181,6 +195,7 @@ export class UIScene extends Phaser.Scene {
     this.buildMenu.update();
     this.updatePlaceHint();
     this.dialog.update();
+    this.panel.update();
     this.updateToasts(deltaMs / 1000);
   }
 
@@ -269,5 +284,6 @@ export class UIScene extends Phaser.Scene {
     this.clockText.setX(width - 8);
     this.inventory.layout(width, height);
     this.dialog.layout(width, height);
+    this.panel.layout(width, height);
   }
 }

@@ -10,7 +10,9 @@ import {
   Population,
   payFrom,
   pickSpawnTile,
+  productivity,
   TRAITS,
+  type TraitId,
   WandererSpawner,
 } from '../src/game/npcs';
 import { SlotInventory } from '../src/game/slots';
@@ -77,9 +79,28 @@ describe('wanderer generation', () => {
       if (n.tier === 'common') expect(asked).toBe(0);
       else expect(asked).toBeGreaterThan(0);
       if (n.tier === 'master') expect(n.request.iron).toBeGreaterThan(0);
-      if (n.tier !== 'common') expect(n.traits.every((t) => TRAITS[t].positive)).toBe(true);
+      // Skill ratings carry the tier: common ≤3, skilled has a 4, master a 5 and a 4.
+      const ratings = Object.values(n.skills).sort((a, b) => b - a);
+      for (const r of ratings) expect(r).toBeGreaterThanOrEqual(1);
+      if (n.tier === 'common') expect(ratings[0]).toBeLessThanOrEqual(3);
+      if (n.tier === 'skilled') expect(ratings[0]).toBe(4);
+      if (n.tier === 'master') expect(ratings.slice(0, 2)).toEqual([5, 4]);
+      expect(n.jobId).toBeNull();
     }
     expect(seen).toEqual(new Set(['common', 'skilled', 'master']));
+  });
+});
+
+describe('skills and productivity', () => {
+  it('rates 1–5 and turns ratings and traits into a work multiplier', () => {
+    const base = { skills: { woodcutting: 1, stonework: 3, mining: 5, hunting: 2 }, traits: [] as TraitId[] };
+    expect(productivity(base, 'woodcutting')).toBeCloseTo(0.75);
+    expect(productivity(base, 'stonework')).toBeCloseTo(1.25);
+    expect(productivity(base, 'mining')).toBeCloseTo(1.75);
+    expect(productivity({ ...base, traits: ['axe'] }, 'woodcutting')).toBeCloseTo(1.125);
+    expect(productivity({ ...base, traits: ['axe'] }, 'mining')).toBeCloseTo(1.75); // trait only helps its own job
+    expect(productivity({ ...base, traits: ['tireless'] }, 'mining')).toBeCloseTo(2.1);
+    expect(productivity({ ...base, traits: ['slow'] }, 'stonework')).toBeCloseTo(1.0);
   });
 });
 
@@ -145,6 +166,49 @@ describe('population', () => {
     inv.add('iron', 2);
     expect(pop.recruit(n, inv, stock)).not.toBeNull();
     expect(stock.items.iron + inv.count('iron')).toBe(0);
+  });
+});
+
+describe('jobs', () => {
+  it('assigns villagers to finished workplaces up to the slot limit', () => {
+    const map = generateMap();
+    const buildings = new Buildings(map);
+    const pop = new Population(buildings);
+    const s = spawnOf(map);
+    const mk = () => {
+      const n = { ...generateWanderer(seeded(pop.newId()), pop.newId(), 0), role: 'villager' as const };
+      pop.npcs.push(n);
+      return n;
+    };
+    const [a, b, c] = [mk(), mk(), mk()];
+    const hut = buildings.place('hunter', s.x - 3, s.y - 3);
+    expect(pop.assign(a, hut)).toBe(false); // not built yet
+    buildings.work(hut, 999);
+    expect(pop.assign(a, hut)).toBe(true);
+    expect(pop.assign(b, hut)).toBe(true);
+    expect(pop.assign(c, hut)).toBe(false); // 2 slots
+    expect(pop.workers(hut.id)).toEqual([a, b]);
+    expect(pop.unemployed()).toEqual([c]);
+    pop.unassign(a);
+    expect(pop.assign(c, hut)).toBe(true);
+    const house = buildings.place('house', s.x + 2, s.y + 2);
+    buildings.work(house, 999);
+    expect(pop.assign(a, house)).toBe(false); // houses aren't workplaces
+  });
+
+  it('lists the unemployed best-first for a skill', () => {
+    const map = generateMap();
+    const pop = new Population(new Buildings(map));
+    const mk = (rating: number) => {
+      const n = { ...generateWanderer(seeded(rating), pop.newId(), 0), role: 'villager' as const, traits: [] as TraitId[] };
+      n.skills = { ...n.skills, mining: rating };
+      pop.npcs.push(n);
+      return n;
+    };
+    const low = mk(1);
+    const high = mk(5);
+    const mid = mk(3);
+    expect(pop.unemployed('mining')).toEqual([high, mid, low]);
   });
 });
 

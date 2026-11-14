@@ -1,7 +1,7 @@
 import type Phaser from 'phaser';
 import { DAY_SECONDS } from '../config';
 import { RESOURCE_LABEL, RESOURCES } from '../game/inventory';
-import { type NpcData, roleLabel, TIER_COLOR, TRAITS, tierLabel } from '../game/npcs';
+import { jobTitle, type NpcData, roleLabel, SKILL_LABEL, SKILLS, stars, TIER_COLOR, TRAITS, tierLabel } from '../game/npcs';
 import { npcSpriteKey } from '../gfx/textures';
 import type { WorldScene } from '../scenes/WorldScene';
 
@@ -98,6 +98,19 @@ export class RecruitDialogUI {
     items.push(portrait, name, sub);
     y += 78;
 
+    items.push(s.add.text(PAD, y, 'Habilidades', { ...TEXT, fontSize: '13px', color: '#cfc3a8' }));
+    y += 20;
+    SKILLS.forEach((sk, k) => {
+      const col = k % 2;
+      const r = npc.skills[sk];
+      items.push(
+        s.add.text(PAD + 8 + col * 205, y, `${SKILL_LABEL[sk]}`, { ...TEXT, fontSize: '12px' }),
+        s.add.text(PAD + 8 + col * 205 + 118, y, stars(r), { ...TEXT, fontSize: '12px', color: r >= 4 ? '#ffcf5a' : '#cfc3a8' }),
+      );
+      if (col === 1) y += 18;
+    });
+    y += 8;
+
     items.push(s.add.text(PAD, y, 'Traços', { ...TEXT, fontSize: '13px', color: '#cfc3a8' }));
     y += 20;
     for (const t of npc.traits) {
@@ -147,12 +160,22 @@ export class RecruitDialogUI {
       y += 30;
     } else {
       items.push(
-        s.add.text(PAD, y, 'Mora numa Casa da vila.', { ...TEXT, fontSize: '13px' }),
-        s.add.text(PAD, y + 18, 'Trabalho: nenhum ainda (chega no próximo marco).', {
+        s.add.text(PAD, y, `Trabalho: ${npc.jobId === null ? 'nenhum' : jobTitle(npc, this.world.buildings)}`, {
           ...TEXT,
-          fontSize: '12px',
-          color: '#a89a80',
+          fontSize: '13px',
         }),
+        s.add.text(
+          PAD,
+          y + 18,
+          npc.jobId === null
+            ? 'Designe pelo painel de um prédio de trabalho (E nele).'
+            : (this.world.npcStatus(npc.id) ?? 'Trabalhando.'),
+          {
+            ...TEXT,
+            fontSize: '12px',
+            color: '#a89a80',
+          },
+        ),
       );
       y += 44;
     }

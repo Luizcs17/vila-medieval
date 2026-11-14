@@ -61,7 +61,7 @@ explorar → coletar → construir → recrutar → designar NPCs a prédios →
 3. ✅ **Regeneração de recursos + ciclo de dia e noite + inventário estilo Minecraft**
 4. ✅ **Construção de prédios + limite de carga por peso** (os prédios de trabalho só ganham função no marco 6, com os aldeões)
 5. ✅ **NPCs aparecendo pelo mapa + recrutamento** (casa livre, pedidos por nível, traços definidos)
-6. Designar NPCs a prédios + produção automática
+6. ✅ **Notas de habilidade + designar aldeões a prédios + produção automática**
 7. Necessidades dos NPCs (fome, morte) + traços
 8. Animais (caça e perigosos)
 9. Evolução do protagonista
