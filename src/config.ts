@@ -63,6 +63,13 @@ export const PLAYER_REGEN_DELAY = 8;
 export const ATTACK_COOLDOWN = 0.45;
 export const ATTACK_REACH = 1.3;
 export const VILLAGER_HP = 6;
+/** Extra HP for soldiers (Quartel). */
+export const SOLDIER_BONUS_HP = 6;
+/** Soldiers react to hostiles this close, but won't chase further than GUARD_LEASH from their barracks. */
+export const GUARD_RANGE = 8;
+export const GUARD_LEASH = 14;
+/** Hit points a player restores per second when repairing (costs 1 wood per 10 HP). */
+export const REPAIR_RATE = 15;
 /** HP restored by eating one meat (F). */
 export const MEAT_HEAL = 2;
 export const ANIMAL_SPAWN_INTERVAL = 15;

@@ -28,6 +28,7 @@ export interface WildlifeHost {
   humans(): Human[];
   /** An animal hit a person (player or villager). */
   onHumanHit(target: Human, damage: number, animal: Animal): void;
+  hitBuildingAt(tx: number, ty: number, damage: number): void;
   popup(x: number, y: number, text: string, color?: string): void;
 }
 
@@ -53,6 +54,7 @@ export class Wildlife {
       now: () => host.now(),
       humans: () => host.humans(),
       hit: (t, dmg, from) => host.onHumanHit(t, dmg, from),
+      hitBuildingAt: (tx, ty, dmg) => host.hitBuildingAt(tx, ty, dmg),
     };
   }
 
@@ -112,6 +114,21 @@ export class Wildlife {
     this.host.popup(s.x, s.y - s.height, `-${damage}`, '#ff8a7a');
     if (killed) this.host.popup(s.x, s.y - s.height - 10, `${target.def.name} abatido!`, '#ffe08a');
     return target;
+  }
+
+  /** Nearest live animal that is dangerous right now (aggressive, or a boar that's charging). */
+  nearestHostile(gx: number, gy: number, r: number): Animal | null {
+    return this.nearest(gx, gy, r, (a) => a.alive && (a.def.temper === 'aggressive' || a.hunting));
+  }
+
+  /** Damage from a soldier, tower or other source; shows a popup. Returns true if it died. */
+  damageAnimal(id: number, damage: number, from: Human): boolean {
+    const a = this.animals.get(id);
+    if (!a?.alive) return false;
+    const killed = a.damage(damage, from, this.host.now());
+    this.host.popup(a.sprite.x, a.sprite.y - a.sprite.height, `-${damage}`, '#ff8a7a');
+    if (killed) this.host.popup(a.sprite.x, a.sprite.y - a.sprite.height - 10, `${a.def.name} abatido!`, '#ffe08a');
+    return killed;
   }
 
   nearestCarcass(gx: number, gy: number, reach: number): Animal | null {

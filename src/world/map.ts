@@ -19,6 +19,8 @@ export enum Obj {
   Building,
   /** Halfway between stump and grown tree. Walkable. */
   Sapling,
+  /** A palisade gate: people walk through, animals and raiders don't. */
+  Gate,
 }
 
 /** Objects that block movement. Anything not listed here can be walked over. */

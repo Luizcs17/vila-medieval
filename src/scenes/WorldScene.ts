@@ -13,14 +13,14 @@ import {
   MEAT_HEAL,
   NPC_REACH,
   PLAYER_RADIUS,
+  REPAIR_RATE,
   TILE_H,
   TILE_W,
-  VILLAGER_HP,
   WANDERER_STAY,
   ZOOM_LEVELS,
 } from '../config';
 import type { Animal, Human } from '../entities/Animal';
-import { Npc, type NpcWorld } from '../entities/Npc';
+import { Npc, type NpcWorld, type Target } from '../entities/Npc';
 import { Player } from '../entities/Player';
 import { BUILDING_DEFS, type Building, Buildings, type BuildingType, type PlaceCheck } from '../game/buildings';
 import { type CraftCheck, craft } from '../game/crafting';
@@ -29,7 +29,17 @@ import { Gatherer, NODE_DEFS, nearestTile, ResourceNodes } from '../game/gatheri
 import { Inventory, RESOURCE_LABEL, RESOURCES, type Resource } from '../game/inventory';
 import { ITEM_DEFS, type ItemId, type Recipe, type ToolType } from '../game/items';
 import { isStarving, updateNeeds } from '../game/needs';
-import { compass, generateWanderer, jobTitle, type NpcData, Population, pickSpawnTile, WandererSpawner } from '../game/npcs';
+import {
+  compass,
+  generateWanderer,
+  jobTitle,
+  maxHpOf,
+  type NpcData,
+  Population,
+  payFrom,
+  pickSpawnTile,
+  WandererSpawner,
+} from '../game/npcs';
 import { PER_LEVEL, PlayerStats, XP } from '../game/player';
 import { clearSave, readSave, SAVE_VERSION, type SaveData, writeSave } from '../game/save';
 import { SlotInventory } from '../game/slots';
@@ -65,6 +75,10 @@ const BUILDING_KEY: Record<BuildingType, string> = {
   quarry: 'bld_quarry',
   mine: 'bld_mine',
   hunter: 'bld_hunter',
+  palisade: 'bld_palisade',
+  gate: 'bld_gate',
+  tower: 'bld_tower',
+  barracks: 'bld_barracks',
 };
 
 /** Ground is drawn beneath everything; objects and characters are depth-sorted by their screen y. */
@@ -112,7 +126,7 @@ interface BuildingView {
   baseDepth: number;
 }
 
-const isInteractable = (o: Obj) => o === Obj.Building || NODE_DEFS[o] !== undefined;
+const isInteractable = (o: Obj) => o === Obj.Building || o === Obj.Gate || NODE_DEFS[o] !== undefined;
 
 export class WorldScene extends Phaser.Scene {
   map!: WorldMap;
@@ -134,6 +148,9 @@ export class WorldScene extends Phaser.Scene {
   factions!: Faction[];
   territory!: Territory;
   private townTimer = 0;
+  private towerCd = new Map<number, number>();
+  private buildingFx!: Phaser.GameObjects.Graphics;
+  private repairAcc = 0;
   /** Set by UIScene while the inventory panel is open: freezes movement and gathering. */
   inventoryOpen = false;
   /** Selected hotbar slot (0-based). No effect yet; tools will use it. */
@@ -220,6 +237,14 @@ export class WorldScene extends Phaser.Scene {
       shoot: (from, id, dmg) => this.wildlife.shoot(from, id, dmg),
       findCarcass: (cx, cy, r) => this.wildlife.findCarcass(cx, cy, r),
       takeMeat: (id, max) => this.wildlife.takeMeat(id, max),
+      findHostile: (f, gx, gy, r) => this.findHostile(f, gx, gy, r),
+      strike: (from, target, dmg) =>
+        this.strikeTarget(target, dmg, `um soldado de ${this.factions[from.data.faction].name}`, {
+          kind: 'npc',
+          id: from.data.id,
+          gx: from.gx,
+          gy: from.gy,
+        }),
     };
 
     if (save) {
@@ -241,6 +266,8 @@ export class WorldScene extends Phaser.Scene {
     this.territory.recompute(this.buildings.list);
 
     this.selection = this.add.graphics().setDepth(GROUND_DEPTH + 1);
+    this.buildingFx = this.add.graphics().setDepth(900_000);
+    this.towerCd = new Map();
     this.ghost = this.add.image(0, 0, 'bld_house').setOrigin(0.5, 1).setAlpha(0.65).setDepth(1_000_000).setVisible(false);
     this.player = new Player(this, this.map, this.map.spawn.x, this.map.spawn.y);
 
@@ -256,6 +283,7 @@ export class WorldScene extends Phaser.Scene {
       avoidPoints: () => [...this.factions.map((f) => f.center), { x: this.player.gx, y: this.player.gy }],
       humans: () => this.humans(),
       onHumanHit: (t, dmg, a) => this.onHumanHit(t, dmg, a),
+      hitBuildingAt: (tx, ty, dmg) => this.hitBuildingAt(tx, ty, dmg),
       popup: (x, y, text, color) => this.popup(x, y, text, color),
     });
     if (save) this.applySave(save);
@@ -405,6 +433,8 @@ export class WorldScene extends Phaser.Scene {
     this.selection.clear();
     if (this.placement) this.updatePlacement();
     else this.updateInteraction(dt, x !== 0 || y !== 0);
+    this.updateDefenses(worldDt);
+    this.drawBuildingHealth();
     this.sortBuildingsAroundPlayer();
     this.fadeObjectsInFrontOfPlayer();
     this.autosave(dt);
@@ -448,13 +478,18 @@ export class WorldScene extends Phaser.Scene {
   }
 
   private onHumanHit(target: Human, damage: number, animal: Animal): void {
+    this.hurtHuman(target, damage, `um ${animal.def.name.toLowerCase()}`);
+  }
+
+  /** Damage to the player or a villager from `source` (e.g. "um lobo"). */
+  private hurtHuman(target: Human, damage: number, source: string): void {
     if (target.kind === 'player') {
       const p = this.player.sprite;
       this.popup(p.x, p.y - p.height, `-${damage}`, '#ff6a5a');
       p.setTint(0xff7060);
       this.time.delayedCall(150, () => p.clearTint());
       this.cameras.main.shake(80, 0.004);
-      if (this.stats.hurt(damage)) this.knockOut(animal);
+      if (this.stats.hurt(damage)) this.knockOut(source);
       return;
     }
     const npc = this.npcs.get(target.id);
@@ -463,7 +498,10 @@ export class WorldScene extends Phaser.Scene {
     npc.sprite.setTint(0xff7060);
     this.time.delayedCall(150, () => npc.sprite.clearTint());
     this.popup(npc.sprite.x, npc.sprite.y - npc.sprite.height, `-${damage}`, '#ff6a5a');
-    if (npc.data.hp <= 0) this.removeVillager(npc.data.id, `${npc.data.name} foi morto por um ${animal.def.name.toLowerCase()}.`);
+    if (npc.data.hp <= 0) {
+      const mine = npc.data.faction === PLAYER_FACTION;
+      this.removeVillager(npc.data.id, mine ? `${npc.data.name} foi morto por ${source}.` : null);
+    }
   }
 
   /** A villager dies: frees their bed and job, fades them out, tells the player. */
@@ -489,7 +527,7 @@ export class WorldScene extends Phaser.Scene {
   }
 
   /** The player's HP hit zero: wake up at the village, losing carried resources (tools are kept). */
-  private knockOut(animal: Animal): void {
+  private knockOut(source: string): void {
     const lost = this.inventory.takeAllResources();
     const any = RESOURCES.some((r) => lost[r] > 0);
     const c = this.villageCenter;
@@ -498,7 +536,112 @@ export class WorldScene extends Phaser.Scene {
     this.stats.hp = this.stats.maxHp;
     this.cameras.main.flash(400, 120, 0, 0);
     const lostText = any ? ' e perdeu os recursos que carregava' : '';
-    this.toast(`Um ${animal.def.name.toLowerCase()} te derrubou. Você acordou na vila${lostText}.`, '#ff8a7a');
+    this.toast(`Você foi derrubado por ${source}. Acordou na vila${lostText}.`, '#ff8a7a');
+  }
+
+  /** Are two factions at war? (Diplomacy arrives in milestone 15.) */
+  atWar(_a: number, _b: number): boolean {
+    return false;
+  }
+
+  /** Nearest thing hostile to `faction` within `r` of (gx, gy): dangerous animals, or people of a faction at war with it. */
+  findHostile(faction: number, gx: number, gy: number, r: number): Target | null {
+    let best: Target | null = null;
+    let bestD = r;
+    const a = this.wildlife.nearestHostile(gx, gy, r);
+    if (a) {
+      best = { kind: 'animal', id: a.data.id, gx: a.data.gx, gy: a.data.gy };
+      bestD = Math.hypot(a.data.gx - gx, a.data.gy - gy);
+    }
+    for (const n of this.npcs.values()) {
+      if (n.data.role !== 'villager' || !this.atWar(faction, n.data.faction)) continue;
+      const d = Math.hypot(n.gx - gx, n.gy - gy);
+      if (d < bestD) {
+        bestD = d;
+        best = { kind: 'npc', id: n.data.id, gx: n.gx, gy: n.gy };
+      }
+    }
+    if (this.atWar(faction, PLAYER_FACTION)) {
+      const d = Math.hypot(this.player.gx - gx, this.player.gy - gy);
+      if (d < bestD) best = { kind: 'player', id: 0, gx: this.player.gx, gy: this.player.gy };
+    }
+    return best;
+  }
+
+  /** A hit from a soldier (`from`) or a tower on `target`. */
+  private strikeTarget(target: Target, damage: number, source: string, from: Human): void {
+    if (target.kind === 'animal') this.wildlife.damageAnimal(target.id, damage, from);
+    else this.hurtHuman({ kind: target.kind, id: target.id, gx: target.gx, gy: target.gy }, damage, source);
+  }
+
+  /** Towers shoot the nearest hostile in range on their cooldown. */
+  private updateDefenses(worldDt: number): void {
+    for (const b of this.buildings.list) {
+      const def = BUILDING_DEFS[b.type];
+      if (!b.built || !def.defense) continue;
+      const cd = (this.towerCd.get(b.id) ?? 0) - worldDt;
+      this.towerCd.set(b.id, cd);
+      if (cd > 0) continue;
+      const cx = b.tx + def.size / 2;
+      const cy = b.ty + def.size / 2;
+      const target = this.findHostile(b.faction, cx, cy, def.defense.range);
+      if (!target) continue;
+      this.towerCd.set(b.id, def.defense.cooldown);
+      const view = this.buildingViews.get(b.id);
+      if (view) {
+        const t = gridToScreen(target.gx, target.gy);
+        const g = this.add.graphics().setDepth(900_001);
+        g.lineStyle(1, 0xf3e9d2, 0.9).lineBetween(view.img.x, view.img.y - view.img.height + 10, t.x, t.y - 6);
+        this.time.delayedCall(120, () => g.destroy());
+      }
+      const name = this.factions[b.faction].name;
+      this.strikeTarget(target, def.defense.damage, `uma torre de ${name}`, { kind: 'npc', id: -b.id, gx: cx, gy: cy });
+    }
+  }
+
+  /** An animal (or raider) hits whatever building stands on (tx, ty). */
+  hitBuildingAt(tx: number, ty: number, damage: number): void {
+    if (tx < 0 || ty < 0 || tx >= this.map.w || ty >= this.map.h) return;
+    const b = this.buildings.at(tileIndex(this.map, tx, ty));
+    if (b) this.damageBuilding(b, damage);
+  }
+
+  damageBuilding(b: Building, damage: number): void {
+    const view = this.buildingViews.get(b.id);
+    if (view) {
+      view.img.setTint(0xff8070);
+      this.time.delayedCall(120, () => view.img.clearTint());
+    }
+    if (!this.buildings.damage(b, damage)) return;
+    // Destroyed.
+    const def = BUILDING_DEFS[b.type];
+    if (b.faction === PLAYER_FACTION) this.toast(`${def.name} foi destruída!`, '#ff8a7a');
+    view?.img.destroy();
+    view?.sign?.destroy();
+    this.buildingViews.delete(b.id);
+    for (const n of this.population.npcs) {
+      if (n.homeId === b.id) n.homeId = null;
+      if (n.jobId === b.id) n.jobId = null;
+    }
+    this.buildings.remove(b);
+    for (const i of this.buildings.footprint(b.type, b.tx, b.ty)) this.replaceObjectImage(i);
+    this.territory.recompute(this.buildings.list);
+  }
+
+  /** Health bars over damaged buildings. */
+  private drawBuildingHealth(): void {
+    const g = this.buildingFx.clear();
+    for (const b of this.buildings.list) {
+      const max = BUILDING_DEFS[b.type].maxHp;
+      if (!b.built || b.hp >= max) continue;
+      const view = this.buildingViews.get(b.id);
+      if (!view) continue;
+      const w = 20;
+      const x = Math.round(view.img.x - w / 2);
+      const y = Math.round(view.img.y - view.img.height - 6);
+      g.fillStyle(0x000000, 0.7).fillRect(x - 1, y - 1, w + 2, 4);
+      g.fillStyle(b.hp / max > 0.5 ? 0xe0c060 : 0xff5040, 1).fillRect(x, y, Math.round((w * b.hp) / max), 2);
+    }
   }
 
   private popup(x: number, y: number, text: string, color?: string): void {
@@ -539,6 +682,15 @@ export class WorldScene extends Phaser.Scene {
           this.territory.recompute(this.buildings.list);
         }
       }
+      const hasTower = this.buildings.list.some((b) => b.faction === f.id && b.type === 'tower');
+      if (!hasTower && f.stock.canAfford(BUILDING_DEFS.tower.cost)) {
+        const spot = findSpot(this.buildings, 'tower', f.center, 4, 9, Math.random);
+        if (spot && this.territory.canBuild(f.id, spot.x, spot.y, 1)) {
+          f.stock.pay(BUILDING_DEFS.tower.cost);
+          this.addBuildingView(this.buildings.place('tower', spot.x, spot.y, true, f.id));
+          this.territory.recompute(this.buildings.list);
+        }
+      }
       for (const b of this.buildings.list) {
         if (b.faction !== f.id || !BUILDING_DEFS[b.type].job) continue;
         for (const n of this.population.unemployed(undefined, f.id)) if (!this.population.assign(n, b)) break;
@@ -563,7 +715,7 @@ export class WorldScene extends Phaser.Scene {
     const regen = this.villagerRegen >= 30;
     if (regen) this.villagerRegen = 0;
     for (const npc of [...this.npcs.values()]) {
-      if (regen && npc.data.hp < VILLAGER_HP && !isStarving(npc.data)) npc.data.hp++;
+      if (regen && npc.data.hp < maxHpOf(npc.data, this.buildings) && !isStarving(npc.data)) npc.data.hp++;
       const talking = this.talkingTo?.id === npc.data.id;
       npc.update(worldDt, this.npcWorld, talking, talking ? this.player.sprite.x : undefined);
       if (npc.data.role === 'wanderer' && !talking && this.clock.seconds >= npc.data.leavesAt) {
@@ -665,7 +817,7 @@ export class WorldScene extends Phaser.Scene {
       text: `Obra: ${def.name}`,
       color: '#ffe08a',
     } satisfies PopupEvent);
-    this.cancelPlacing();
+    if (!def.repeatPlace) this.cancelPlacing();
     return true;
   }
 
@@ -740,7 +892,7 @@ export class WorldScene extends Phaser.Scene {
       return;
     }
 
-    if (this.map.objects[target] === Obj.Building) {
+    if (this.map.objects[target] === Obj.Building || this.map.objects[target] === Obj.Gate) {
       this.gatherer.tick(dt, null, false, 1);
       this.interactWithBuilding(this.buildings.at(target)!, dt, moving);
       return;
@@ -844,6 +996,29 @@ export class WorldScene extends Phaser.Scene {
       return;
     }
 
+    if (b.hp < def.maxHp) {
+      const active = this.keys.E.isDown && !moving;
+      if (active) {
+        this.player.face(x);
+        this.repairAcc += REPAIR_RATE * dt;
+        while (this.repairAcc >= 10) {
+          if (!payFrom({ wood: 1 }, this.inventory, this.stockpile)) {
+            this.repairAcc = 0;
+            break;
+          }
+          this.repairAcc -= 10;
+          this.buildings.repair(b, 10);
+        }
+      }
+      this.interaction = {
+        x,
+        y,
+        text: `[segure E] Reparar ${def.name} (${b.hp}/${def.maxHp}) · 1 madeira a cada 10`,
+        progress: active ? b.hp / def.maxHp : null,
+      };
+      if (!def.deposit || !Phaser.Input.Keyboard.JustDown(this.keys.E)) return;
+    }
+
     if (def.deposit) {
       if (Phaser.Input.Keyboard.JustDown(this.keys.E)) this.deposit(x, y);
       const hasItems = this.inventory.slots.some((s) => s !== null);
@@ -872,8 +1047,9 @@ export class WorldScene extends Phaser.Scene {
   }
 
   /** Building condition for the UI (building HP arrives in milestone 13). */
-  buildingHealthLabel(_b: Building): string {
-    return 'pronto';
+  buildingHealthLabel(b: Building): string {
+    const max = BUILDING_DEFS[b.type].maxHp;
+    return b.hp >= max ? 'pronto' : `vida ${b.hp}/${max}`;
   }
 
   /** Opens a villager's card from another panel (management screen). */
@@ -1017,6 +1193,8 @@ export class WorldScene extends Phaser.Scene {
         .image(view.img.x + 6, view.img.y - view.img.height + 2, 'flag')
         .setOrigin(0.2, 1)
         .setTint(this.factions[b.faction]?.color ?? 0xffffff);
+    } else if (b.built && b.type === 'barracks') {
+      view.sign = this.add.image(view.img.x, view.img.y - view.img.height - 3, 'icon_iron_sword').setOrigin(0.5, 1);
     } else if (b.built && def.sign) {
       view.sign = this.add.image(view.img.x, view.img.y - view.img.height - 3, `icon_${def.sign}`).setOrigin(0.5, 1);
     }

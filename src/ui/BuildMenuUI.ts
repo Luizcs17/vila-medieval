@@ -3,7 +3,7 @@ import { BUILD_MENU, BUILDING_DEFS, type BuildingType } from '../game/buildings'
 import { type Inventory, RESOURCES } from '../game/inventory';
 
 const ROW_W = 300;
-const ROW_H = 48;
+const ROW_H = 40;
 const PAD = 10;
 
 const TEXT = { fontFamily: 'monospace', color: '#f3e9d2' } satisfies Phaser.Types.GameObjects.Text.TextStyle;
@@ -46,9 +46,9 @@ export class BuildMenuUI {
         .on('pointerdown', (p: Phaser.Input.Pointer) => {
           if (p.leftButtonDown()) onSelect(type);
         });
-      const name = scene.add.text(PAD + 8, y + 5, `${def.name}  ${def.size}×${def.size}`, { ...TEXT, fontSize: '13px' });
+      const name = scene.add.text(PAD + 8, y + 4, `${def.name}  ${def.size}×${def.size}`, { ...TEXT, fontSize: '13px' });
       const info = def.near ? `Perto de ${def.near.label}` : def.description;
-      const sub = scene.add.text(PAD + 8, y + 26, info, { ...TEXT, fontSize: '11px', color: '#a89a80' });
+      const sub = scene.add.text(PAD + 8, y + 22, info, { ...TEXT, fontSize: '10px', color: '#a89a80' });
       const objects: Phaser.GameObjects.GameObject[] = [bg, name, sub];
       const costs: Row['costs'] = [];
       let cx = PAD + ROW_W - 8;
