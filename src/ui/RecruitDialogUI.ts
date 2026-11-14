@@ -85,7 +85,7 @@ export class RecruitDialogUI {
 
   private build(npc: NpcData): void {
     const s = this.scene;
-    const c = s.add.container(0, 0).setDepth(150);
+    const c = s.add.container(0, 0).setDepth(280);
     const items: Phaser.GameObjects.GameObject[] = [];
     let y = PAD;
 

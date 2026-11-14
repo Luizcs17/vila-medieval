@@ -55,7 +55,7 @@ export class Minimap {
       .setStrokeStyle(1, 0x5a4630);
     this.image = scene.add.image(0, 0, 'minimap').setOrigin(0);
     this.dots = scene.add.graphics();
-    this.label = scene.add.text(0, 0, 'M: mapa', { fontFamily: 'monospace', fontSize: '10px', color: '#a89a80' });
+    this.label = scene.add.text(0, 0, 'N: ocultar · M: mapa', { fontFamily: 'monospace', fontSize: '10px', color: '#a89a80' });
     this.paintTerrain();
   }
 
