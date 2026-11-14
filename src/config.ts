@@ -41,6 +41,22 @@ export const WANDERER_INTERVAL = 150;
 /** How long a wanderer stays on the map before leaving, if not recruited. */
 export const WANDERER_STAY = 720;
 
+/** Combat and animals. Damage/HP are in hit points. */
+export const PLAYER_MAX_HP = 10;
+/** Game seconds between +1 HP once the player hasn't been hit for PLAYER_REGEN_DELAY. */
+export const PLAYER_REGEN_EVERY = 15;
+export const PLAYER_REGEN_DELAY = 8;
+export const ATTACK_COOLDOWN = 0.45;
+export const ATTACK_REACH = 1.3;
+export const VILLAGER_HP = 6;
+export const ANIMAL_SPAWN_INTERVAL = 30;
+/** Animals spawn at least this far from the village centre and the player. */
+export const ANIMAL_SPAWN_DISTANCE = 14;
+/** Carcasses rot away after this many game seconds. */
+export const CARCASS_LIFETIME = 480;
+/** Hunters shoot from this far (tiles). */
+export const HUNTER_RANGE = 3.5;
+
 /** Length of one in-game day, in real seconds at normal speed. */
 export const DAY_SECONDS = 480;
 export const START_HOUR = 7;

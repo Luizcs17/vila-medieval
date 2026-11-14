@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import {
+  ATTACK_COOLDOWN,
   BEDS_PER_HOUSE,
   DEFAULT_ZOOM_INDEX,
   FAST_FORWARD,
@@ -10,19 +11,23 @@ import {
   NPC_REACH,
   PLAYER_RADIUS,
   TILE_H,
+  VILLAGER_HP,
   WANDERER_STAY,
   ZOOM_LEVELS,
 } from '../config';
+import type { Animal, Human } from '../entities/Animal';
 import { Npc, type NpcWorld } from '../entities/Npc';
 import { Player } from '../entities/Player';
 import { BUILDING_DEFS, type Building, Buildings, type BuildingType, type PlaceCheck } from '../game/buildings';
 import { Gatherer, NODE_DEFS, nearestTile, ResourceNodes } from '../game/gathering';
 import { Inventory, RESOURCE_LABEL, RESOURCES, type Resource } from '../game/inventory';
 import { compass, generateWanderer, jobTitle, type NpcData, Population, pickSpawnTile, WandererSpawner } from '../game/npcs';
+import { PlayerStats } from '../game/player';
 import { SlotInventory } from '../game/slots';
 import { GameClock } from '../game/time';
 import { createPlaceholderTextures } from '../gfx/textures';
 import { gridToScreen, screenToGrid } from '../iso';
+import { Wildlife } from '../systems/Wildlife';
 import { Ground, generateMap, Obj, tileCenter, tileIndex, type WorldMap } from '../world/map';
 
 const GROUND_KEY: Record<Ground, string> = {
@@ -113,11 +118,16 @@ export class WorldScene extends Phaser.Scene {
   selectedHotbar = 0;
   /** True while world time is being fast-forwarded (T held). */
   fastForward = false;
+  readonly stats = new PlayerStats();
+  wildlife!: Wildlife;
+  private attackCd = 0;
+  private villagerRegen = 0;
+  private slash!: Phaser.GameObjects.Image;
 
   private nodes!: ResourceNodes;
   private readonly gatherer = new Gatherer();
   private keys!: Record<
-    'W' | 'A' | 'S' | 'D' | 'UP' | 'DOWN' | 'LEFT' | 'RIGHT' | 'SHIFT' | 'E' | 'T',
+    'W' | 'A' | 'S' | 'D' | 'UP' | 'DOWN' | 'LEFT' | 'RIGHT' | 'SHIFT' | 'E' | 'T' | 'SPACE',
     Phaser.Input.Keyboard.Key
   >;
   private readonly objectImages = new Map<number, Phaser.GameObjects.Image>();
@@ -145,6 +155,12 @@ export class WorldScene extends Phaser.Scene {
       isNight: () => this.clock.isNight,
       harvest: (i) => this.workerHarvest(i),
       deposit: (r, n) => this.stockpile.add(r, n),
+      threat: (gx, gy) => this.wildlife.threat(gx, gy),
+      findPrey: (cx, cy, r) => this.wildlife.findPrey(cx, cy, r),
+      prey: (id) => this.wildlife.prey(id),
+      shoot: (from, id, dmg) => this.wildlife.shoot(from, id, dmg),
+      findCarcass: (cx, cy, r) => this.wildlife.findCarcass(cx, cy, r),
+      takeMeat: (id, max) => this.wildlife.takeMeat(id, max),
     };
 
     this.drawMap();
@@ -159,7 +175,20 @@ export class WorldScene extends Phaser.Scene {
     this.player = new Player(this, this.map, this.map.spawn.x, this.map.spawn.y);
 
     const kb = this.input.keyboard!;
-    this.keys = kb.addKeys('W,A,S,D,UP,DOWN,LEFT,RIGHT,SHIFT,E,T') as typeof this.keys;
+    this.keys = kb.addKeys('W,A,S,D,UP,DOWN,LEFT,RIGHT,SHIFT,E,T,SPACE') as typeof this.keys;
+    this.slash = this.add.image(0, 0, 'slash').setVisible(false).setDepth(900_002);
+
+    this.wildlife = new Wildlife({
+      scene: this,
+      map: this.map,
+      isNight: () => this.clock.isNight,
+      now: () => this.clock.seconds,
+      avoidPoints: () => [this.villageCenter, { x: this.player.gx, y: this.player.gy }],
+      humans: () => this.humans(),
+      onHumanHit: (t, dmg, a) => this.onHumanHit(t, dmg, a),
+      popup: (x, y, text, color) => this.popup(x, y, text, color),
+    });
+    this.wildlife.populate();
 
     const cam = this.cameras.main;
     const left = gridToScreen(0, this.map.h).x;
@@ -193,12 +222,87 @@ export class WorldScene extends Phaser.Scene {
     for (const i of this.nodes.update(worldDt, (t) => !this.playerOverlapsTile(t))) this.replaceObjectImage(i);
 
     this.player.update(dt, { x, y, run: k.SHIFT.isDown });
+    this.stats.update(worldDt);
+    this.wildlife.update(worldDt);
     this.updateNpcs(worldDt);
+    this.attackCd -= dt;
+    if (!frozen && !this.placement && Phaser.Input.Keyboard.JustDown(k.SPACE)) this.attack();
     this.selection.clear();
     if (this.placement) this.updatePlacement();
     else this.updateInteraction(dt, x !== 0 || y !== 0);
     this.sortBuildingsAroundPlayer();
     this.fadeObjectsInFrontOfPlayer();
+  }
+
+  // ---------- combat ----------
+
+  /** People animals can see: the player and every villager. */
+  private humans(): Human[] {
+    const list: Human[] = [{ kind: 'player', id: 0, gx: this.player.gx, gy: this.player.gy }];
+    for (const n of this.npcs.values())
+      if (n.data.role === 'villager') list.push({ kind: 'npc', id: n.data.id, gx: n.gx, gy: n.gy });
+    return list;
+  }
+
+  /** Damage the player deals with a melee swing. Weapons raise it (crafting). */
+  playerDamage(): number {
+    return 1;
+  }
+
+  private attack(): void {
+    if (this.attackCd > 0) return;
+    this.attackCd = ATTACK_COOLDOWN;
+    const p = this.player.sprite;
+    const dir = p.flipX ? -1 : 1;
+    this.slash
+      .setPosition(p.x + dir * 9, p.y - 9)
+      .setFlipX(dir < 0)
+      .setVisible(true)
+      .setAlpha(1);
+    this.tweens.add({ targets: this.slash, alpha: 0, duration: 160, onComplete: () => this.slash.setVisible(false) });
+    const hit = this.wildlife.playerAttack(this.player.gx, this.player.gy, this.playerDamage(), this.humans()[0]);
+    if (hit) this.player.face(hit.sprite.x);
+  }
+
+  private onHumanHit(target: Human, damage: number, animal: Animal): void {
+    if (target.kind === 'player') {
+      const p = this.player.sprite;
+      this.popup(p.x, p.y - p.height, `-${damage}`, '#ff6a5a');
+      p.setTint(0xff7060);
+      this.time.delayedCall(150, () => p.clearTint());
+      this.cameras.main.shake(80, 0.004);
+      if (this.stats.hurt(damage)) this.knockOut(animal);
+      return;
+    }
+    const npc = this.npcs.get(target.id);
+    if (!npc) return;
+    npc.data.hp -= damage;
+    npc.sprite.setTint(0xff7060);
+    this.time.delayedCall(150, () => npc.sprite.clearTint());
+    this.popup(npc.sprite.x, npc.sprite.y - npc.sprite.height, `-${damage}`, '#ff6a5a');
+    if (npc.data.hp <= 0) {
+      this.npcs.delete(npc.data.id);
+      this.population.remove(npc.data.id);
+      npc.leave(() => {});
+      this.toast(`${npc.data.name} foi morto por um ${animal.def.name.toLowerCase()}.`, '#ff8a7a');
+    }
+  }
+
+  /** The player's HP hit zero: wake up at the village, losing carried resources (tools are kept). */
+  private knockOut(animal: Animal): void {
+    const lost = this.inventory.takeAllResources();
+    const any = RESOURCES.some((r) => lost[r] > 0);
+    const c = this.villageCenter;
+    this.player.gx = c.x - 1;
+    this.player.gy = c.y + 1.5;
+    this.stats.hp = this.stats.maxHp;
+    this.cameras.main.flash(400, 120, 0, 0);
+    const lostText = any ? ' e perdeu os recursos que carregava' : '';
+    this.toast(`Um ${animal.def.name.toLowerCase()} te derrubou. Você acordou na vila${lostText}.`, '#ff8a7a');
+  }
+
+  private popup(x: number, y: number, text: string, color?: string): void {
+    this.events.emit('popup', { x, y, text, color } satisfies PopupEvent);
   }
 
   // ---------- NPCs ----------
@@ -212,7 +316,11 @@ export class WorldScene extends Phaser.Scene {
   private updateNpcs(worldDt: number): void {
     if (this.spawner.update(worldDt, this.population.wanderers.length)) this.spawnWanderer();
 
+    this.villagerRegen += worldDt;
+    const regen = this.villagerRegen >= 30;
+    if (regen) this.villagerRegen = 0;
     for (const npc of [...this.npcs.values()]) {
+      if (regen && npc.data.hp < VILLAGER_HP) npc.data.hp++;
       const talking = this.talkingTo?.id === npc.data.id;
       npc.update(worldDt, this.npcWorld, talking, talking ? this.player.sprite.x : undefined);
       if (npc.data.role === 'wanderer' && !talking && this.clock.seconds >= npc.data.leavesAt) {
@@ -258,6 +366,11 @@ export class WorldScene extends Phaser.Scene {
     npc.becomeVillager(home);
     this.toast(`${npc.data.name} entrou para a vila!`, '#a8ffa8');
     return true;
+  }
+
+  /** All NPC entities (for the minimap). */
+  npcList(): Npc[] {
+    return [...this.npcs.values()];
   }
 
   stopTalking(): void {
@@ -338,6 +451,22 @@ export class WorldScene extends Phaser.Scene {
         this.talkingTo = d;
         this.player.face(npc.sprite.x);
         this.events.emit('talk', d);
+      }
+      return;
+    }
+
+    const carcass = this.inventoryOpen ? null : this.wildlife.nearestCarcass(this.player.gx, this.player.gy, 1.2);
+    if (carcass) {
+      this.gatherer.tick(dt, null, false, 1);
+      const s = carcass.sprite;
+      const room = this.inventory.space('meat');
+      const name = carcass.def.name.toLowerCase();
+      const text = room > 0 ? `[E] Pegar carne de ${name} (${carcass.data.meat})` : 'Peso máximo! Leve ao estoque';
+      this.interaction = { x: s.x, y: s.y - 14, text, progress: null };
+      if (room > 0 && Phaser.Input.Keyboard.JustDown(this.keys.E)) {
+        const n = this.wildlife.takeMeat(carcass.data.id, room);
+        this.inventory.add('meat', n);
+        this.popup(s.x, s.y - 14, `+${n} Carne`);
       }
       return;
     }
