@@ -59,13 +59,20 @@ export function foundTown(buildings: Buildings, faction: Faction, rng: Rng): Bui
  * Creates `count` villagers for a rival town, housed and employed (the first is the ruler).
  * Returns them (already added to the population).
  */
-export function populateTown(pop: Population, buildings: Buildings, faction: Faction, rng: Rng, count: number): NpcData[] {
+export function populateTown(
+  pop: Population,
+  buildings: Buildings,
+  faction: Faction,
+  rng: Rng,
+  count: number,
+  now = 0,
+): NpcData[] {
   const mine = buildings.list.filter((b) => b.faction === faction.id);
   const houses = mine.filter((b) => b.type === 'house');
   const work = mine.filter((b) => b.type !== 'house' && b.type !== 'stockpile' && b.type !== 'depot');
   const made: NpcData[] = [];
   for (let k = 0; k < count && houses.length > 0; k++) {
-    const n = generateWanderer(rng, pop.newId(), Infinity);
+    const n = generateWanderer(rng, pop.newId(), Infinity, now);
     n.role = 'villager';
     n.faction = faction.id;
     n.homeId = houses[k % houses.length].id;

@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import {
+  ADULT_AGE,
   ATTACK_COOLDOWN,
   AUTOSAVE_SECONDS,
   BEDS_PER_HOUSE,
@@ -25,6 +26,7 @@ import { Player } from '../entities/Player';
 import { BUILDING_DEFS, type Building, Buildings, type BuildingType, type PlaceCheck } from '../game/buildings';
 import { type CraftCheck, craft } from '../game/crafting';
 import { createFactions, type Faction, PLAYER_FACTION } from '../game/factions';
+import { ageOf, Families, fullName, PLAYER_ID } from '../game/families';
 import { Gatherer, NODE_DEFS, nearestTile, ResourceNodes } from '../game/gathering';
 import { Inventory, RESOURCE_LABEL, RESOURCES, type Resource } from '../game/inventory';
 import { ITEM_DEFS, type ItemId, type Recipe, type ToolType } from '../game/items';
@@ -148,6 +150,7 @@ export class WorldScene extends Phaser.Scene {
   factions!: Faction[];
   territory!: Territory;
   private townTimer = 0;
+  families!: Families;
   private towerCd = new Map<number, number>();
   private buildingFx!: Phaser.GameObjects.Graphics;
   private repairAcc = 0;
@@ -223,6 +226,8 @@ export class WorldScene extends Phaser.Scene {
     this.nodes = new ResourceNodes(this.map);
     this.buildings = new Buildings(this.map);
     this.population = new Population(this.buildings);
+    this.population.now = () => this.clock.seconds;
+    this.families = new Families(this.population);
     this.factions = createFactions(this.map.sites, this.stockpile);
     this.territory = new Territory(this.map);
     this.npcWorld = {
@@ -294,7 +299,8 @@ export class WorldScene extends Phaser.Scene {
         f.stock.add('wood', 20);
         f.stock.add('stone', 10);
         f.stock.add('meat', 20);
-        for (const n of populateTown(this.population, this.buildings, f, Math.random, 6)) this.spawnVillagerEntity(n);
+        for (const n of populateTown(this.population, this.buildings, f, Math.random, 6, this.clock.seconds))
+          this.spawnVillagerEntity(n);
       }
     }
     this.lastSaveDay = this.clock.day;
@@ -352,6 +358,7 @@ export class WorldScene extends Phaser.Scene {
       selectedHotbar: this.selectedHotbar,
       player: { gx: this.player.gx, gy: this.player.gy, ...this.stats.snapshot() },
       population: this.population.snapshot(),
+      families: { affinity: { ...this.families.affinity }, chattedOn: { ...this.families.chattedOn } },
       npcPositions: [...this.npcs.values()].map((n) => [n.data.id, n.gx, n.gy]),
       animals: this.wildlife.snapshot(),
     };
@@ -385,6 +392,8 @@ export class WorldScene extends Phaser.Scene {
     this.player.gx = save.player.gx;
     this.player.gy = save.player.gy;
     this.population.restore(save.population);
+    this.families.affinity = { ...save.families.affinity };
+    this.families.chattedOn = { ...save.families.chattedOn };
     const pos = new Map(save.npcPositions.map(([id, x, y]) => [id, { x, y }]));
     for (const data of this.population.npcs) this.spawnVillagerEntity(data, pos.get(data.id) ?? this.villageCenter);
     this.wildlife.restore(save.animals);
@@ -702,7 +711,8 @@ export class WorldScene extends Phaser.Scene {
     if (this.spawner.update(worldDt, this.population.wanderers.length)) this.spawnWanderer();
 
     for (const f of this.factions) {
-      for (const e of updateNeeds(this.population.villagersOf(f.id), f.stock, worldDt)) {
+      const childFactor = (n: NpcData) => (ageOf(n, this.clock.seconds) < ADULT_AGE ? 0.5 : 1);
+      for (const e of updateNeeds(this.population.villagersOf(f.id), f.stock, worldDt, childFactor)) {
         if (!f.isPlayer) {
           if (e.type === 'died') this.removeVillager(e.npc.id, null);
         } else if (e.type === 'starving') this.toast(`${e.npc.name} está com fome! Falta carne no estoque.`, '#ffb070');
@@ -710,12 +720,14 @@ export class WorldScene extends Phaser.Scene {
       }
     }
     this.updateTowns(worldDt);
+    this.updateFamilies(worldDt);
 
     this.villagerRegen += worldDt;
     const regen = this.villagerRegen >= 30;
     if (regen) this.villagerRegen = 0;
     for (const npc of [...this.npcs.values()]) {
       if (regen && npc.data.hp < maxHpOf(npc.data, this.buildings) && !isStarving(npc.data)) npc.data.hp++;
+      npc.setChild(npc.data.role === 'villager' && ageOf(npc.data, this.clock.seconds) < ADULT_AGE);
       const talking = this.talkingTo?.id === npc.data.id;
       npc.update(worldDt, this.npcWorld, talking, talking ? this.player.sprite.x : undefined);
       if (npc.data.role === 'wanderer' && !talking && this.clock.seconds >= npc.data.leavesAt) {
@@ -742,7 +754,7 @@ export class WorldScene extends Phaser.Scene {
     const center = this.villageCenter;
     const tile = pickSpawnTile(this.map, Math.random, center);
     if (!tile) return;
-    const data = generateWanderer(Math.random, this.population.newId(), this.clock.seconds + WANDERER_STAY);
+    const data = generateWanderer(Math.random, this.population.newId(), this.clock.seconds + WANDERER_STAY, this.clock.seconds);
     this.population.npcs.push(data);
     this.npcs.set(data.id, new Npc(this, this.map, data, tile));
     const who = data.gender === 'f' ? 'Uma andarilha' : 'Um andarilho';
@@ -859,6 +871,7 @@ export class WorldScene extends Phaser.Scene {
       if (d.role === 'villager' && d.faction !== PLAYER_FACTION) text = `[E] ${d.name} · ${this.factions[d.faction].name}`;
       this.interaction = { x: npc.sprite.x, y: npc.sprite.y - npc.sprite.height - 6, text, progress: null };
       if (Phaser.Input.Keyboard.JustDown(this.keys.E)) {
+        if (d.role === 'villager' && d.faction === PLAYER_FACTION) this.families.chat(d, this.clock.day);
         this.talkingTo = d;
         this.player.face(npc.sprite.x);
         this.events.emit('talk', d);
@@ -1042,8 +1055,48 @@ export class WorldScene extends Phaser.Scene {
   }
 
   /** Age for the UI (families arrive in milestone 14). */
-  ageLabel(_n: NpcData): string {
-    return '—';
+  ageLabel(n: NpcData): string {
+    const age = ageOf(n, this.clock.seconds);
+    return age < ADULT_AGE ? `${age} (criança)` : `${age}`;
+  }
+
+  private updateFamilies(worldDt: number): void {
+    const events = this.families.update(worldDt, {
+      now: this.clock.seconds,
+      rng: Math.random,
+      playerFaction: PLAYER_FACTION,
+      together: (a, b) => {
+        if (a.homeId !== null && a.homeId === b.homeId) return true;
+        const ea = this.npcs.get(a.id);
+        const eb = this.npcs.get(b.id);
+        return !!ea && !!eb && Math.hypot(ea.gx - eb.gx, ea.gy - eb.gy) < 4;
+      },
+      hasFood: (f) => (this.factions[f]?.stock.items.meat ?? 0) >= 4,
+    });
+    for (const e of events) {
+      if (e.type === 'married') {
+        if (e.a.faction === PLAYER_FACTION && e.b) this.toast(`${fullName(e.a)} e ${fullName(e.b)} se casaram!`, '#ffb0d0');
+      } else if (e.type === 'born') {
+        const c = e.child;
+        this.spawnVillagerEntity(c);
+        if (c.faction === PLAYER_FACTION) {
+          const parents = c.parents
+            .map((id) => (id === PLAYER_ID ? 'você' : (this.population.person(id)?.name ?? '?')))
+            .join(' e ');
+          this.toast(`Nasceu ${fullName(c)}, ${c.gender === 'f' ? 'filha' : 'filho'} de ${parents}!`, '#ffb0d0');
+        }
+      } else if (e.type === 'died') {
+        const mine = e.npc.faction === PLAYER_FACTION;
+        this.removeVillager(e.npc.id, mine ? `${fullName(e.npc)} morreu de velhice aos ${e.age} anos.` : null);
+      }
+    }
+  }
+
+  /** Player marriage proposal (from the villager card). */
+  propose(npc: NpcData): boolean {
+    const ok = this.families.propose(npc, this.clock.seconds);
+    if (ok) this.toast(`Você e ${fullName(npc)} se casaram!`, '#ffb0d0');
+    return ok;
   }
 
   /** Building condition for the UI (building HP arrives in milestone 13). */

@@ -2,6 +2,15 @@
 
 Each milestone from `docs/GDD.md` is a minor version.
 
+## 1.4.0: Milestone 14, families and dynasties
+
+- One game day is one year. Everyone has a surname and an age; wanderers arrive as adults (16–45). Children are drawn smaller, eat half and can't be hired until 16. After 65, villagers may die of old age.
+- Single adults of the same village who live or work close together build affinity (shared traits help, clashing ones hurt) and marry at 100, moving in together when there's a bed.
+- Couples sharing a house with a free bed and food have children (up to 4). Children take a parent's surname, ratings near their parents' average and sometimes a parent's trait. Rival villages grow the same way.
+- The player can marry: talking to one of your villagers (E) raises their affinity with you once a day; at 60% the card offers "Pedir em casamento". Your children carry the dynasty name Valverde.
+- Dinastia tab in village management: a family tree for your dynasty, each rival ruler's, and your village's founding families. The dead stay in the tree (†); rulers are framed in gold.
+- Villager cards show full name, age, spouse, children and affinity with you. Save format v3.
+
 ## 1.3.0: Milestone 13, defences and soldiers
 
 - New buildings: Paliçada (log wall, blocks animals and enemies), Portão (gate: your people walk through, animals and raiders don't), Torre de vigia (shoots aggressive animals and enemies within 6 tiles; claims 8 tiles of territory), Quartel (4 soldier slots). Walls and gates stay in placement mode so you can lay them in a row.

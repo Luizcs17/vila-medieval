@@ -31,6 +31,7 @@ function sampleSave(): SaveData {
     selectedHotbar: 0,
     player: { gx: 10.5, gy: 11.5, hp: 7, maxHp: 11, level: 2, xp: 3 },
     population: { npcs: [], nextId: 1 },
+    families: { affinity: {}, chattedOn: {} },
     npcPositions: [],
     animals: [],
   };

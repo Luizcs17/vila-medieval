@@ -45,6 +45,8 @@ export const MAX_CARRY_WEIGHT = 40;
 export const NPC_SPEED = 1.6;
 export const NPC_REACH = 1.1;
 export const BEDS_PER_HOUSE = 4;
+/** One in-game day is one year of life; villagers are adults (can work, marry) from this age. */
+export const ADULT_AGE = 16;
 /** Units a worker carries before walking to the stockpile. */
 export const WORKER_LOAD = 5;
 /** Workers take this many times the player's base time per unit (before their productivity). */
