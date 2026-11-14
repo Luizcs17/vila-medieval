@@ -64,7 +64,7 @@ export const NODE_DEFS: Partial<Record<Obj, NodeDef>> = {
   },
 };
 
-interface Regrowth {
+export interface Regrowth {
   i: number;
   original: Obj;
   timeLeft: number;
@@ -79,6 +79,11 @@ export interface HarvestResult {
   depleted: boolean;
   /** The tile's object after harvesting (changes only when depleted). */
   obj: Obj;
+}
+
+export interface NodesSnapshot {
+  remaining: [number, number][];
+  regrowing: Regrowth[];
 }
 
 /** Tracks how much is left in each resource node, depletes it on the map and grows it back over time. */
@@ -136,6 +141,16 @@ export class ResourceNodes {
 
   get regrowingCount(): number {
     return this.regrowing.length;
+  }
+
+  snapshot(): NodesSnapshot {
+    return { remaining: [...this.remaining.entries()], regrowing: this.regrowing.map((r) => ({ ...r })) };
+  }
+
+  restore(s: NodesSnapshot): void {
+    this.remaining.clear();
+    for (const [i, n] of s.remaining) this.remaining.set(i, n);
+    this.regrowing = s.regrowing.map((r) => ({ ...r }));
   }
 }
 

@@ -2,6 +2,12 @@
 
 Each milestone from `docs/GDD.md` is a minor version.
 
+## 1.0.0: Milestone 10, save/load (v1 complete)
+
+- The game saves to browser storage automatically (every 2 real minutes, at each new day, and when the page is hidden or closed) and loads the last save on start.
+- Esc with nothing open pauses: Continue, Save, Load last save, New game (asks twice), plus a controls list.
+- Saves include map changes, regrowth timers, buildings, stockpile, inventory (with durability), player HP/level/position, villagers (jobs, hunger, HP, positions) and animals. Saves from a different format version are ignored safely.
+
 ## 0.9.0: Milestone 9, crafting and progression
 
 - Crafting menu (C): stone/iron axes and pickaxes, a spear and an iron sword. Materials come from what you carry first, then the stockpile.

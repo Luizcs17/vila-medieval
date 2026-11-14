@@ -59,6 +59,9 @@ export const CARCASS_LIFETIME = 480;
 /** Hunters shoot from this far (tiles). */
 export const HUNTER_RANGE = 3.5;
 
+/** Real seconds between autosaves (also saves at each new day and when the page closes). */
+export const AUTOSAVE_SECONDS = 120;
+
 /** Length of one in-game day, in real seconds at normal speed. */
 export const DAY_SECONDS = 480;
 export const START_HOUR = 7;

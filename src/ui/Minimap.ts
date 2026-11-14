@@ -47,6 +47,7 @@ export class Minimap {
     const m = world.map;
     this.w = Math.ceil((m.w + m.h) * K);
     this.h = Math.ceil(((m.w + m.h) * K) / 2);
+    if (scene.textures.exists('minimap')) scene.textures.remove('minimap'); // scene restart
     this.tex = scene.textures.createCanvas('minimap', this.w, this.h)!;
     this.frame = scene.add
       .rectangle(0, 0, this.w + PAD * 2, this.h + PAD * 2, 0x000000, 0.55)

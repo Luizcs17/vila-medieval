@@ -506,6 +506,7 @@ const TOOL_ICONS: Record<string, [keyof typeof TOOL_SHAPES, string]> = {
 };
 
 export function createPlaceholderTextures(scene: Phaser.Scene): void {
+  if (scene.textures.exists('grass_0')) return; // already made (scene restart)
   for (const [item, [shape, metal]] of Object.entries(TOOL_ICONS)) {
     fromRows(scene, `icon_${item}`, TOOL_SHAPES[shape], { k: '#2b1d14', g: metal, b: '#8a5a2b' });
   }
