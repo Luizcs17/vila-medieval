@@ -52,9 +52,34 @@ explorar → coletar → construir → recrutar → designar NPCs a prédios →
 | Perigo       | Animais agressivos (lobos e ursos) e o javali quando ferido                                                                                                                                                                                                                                                                                                                                                  |
 | Objetivo     | Infinito                                                                                                                                                                                                                                                                                                                                                                                                     |
 
+## v2: Vilas rivais, território, famílias e diplomacia
+
+Pedido em 14/11/2026. Decisões tomadas para começar (ajustáveis):
+
+| Tema          | Decisão                                                                                                                                                                                                                                                                                                                                        |
+| ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Mundo         | O mapa passa para 128×128 (fixo), com 3 vilas rivais além da sua, cada uma com nome, cor, governante, prédios e aldeões que trabalham de verdade (mesma IA dos seus)                                                                                                                                                                           |
+| Território    | Cada construção reivindica um raio em volta (Estoque/Salão 9, Torre 8, Depósito 5, demais 4, Paliçada 0). Cada quadrado pertence à construção mais próxima. Você só constrói dentro do seu território (ou expandindo a borda)                                                                                                                  |
+| Mapa          | M abre o mapa em tela cheia com o território de cada vila colorido, fronteiras, nomes e legenda. O minimapa também mostra o território                                                                                                                                                                                                         |
+| Gerenciamento | V abre a gestão da vila em abas: Resumo, Aldeões, Prédios, Diplomacia e Dinastia                                                                                                                                                                                                                                                               |
+| Defesa        | Paliçada (bloqueia a passagem), Torre de vigia (atira em animais agressivos e inimigos; amplia o território), Quartel (treina soldados). Prédios têm vida e podem ser reparados                                                                                                                                                                |
+| Habilidades   | Ganham Combate e Diplomacia (notas de 1 a 5, como as outras)                                                                                                                                                                                                                                                                                   |
+| Famílias      | 1 dia de jogo = 1 ano. Adultos (16+) sem par criam afinidade convivendo; com afinidade alta, casam. Casais numa casa com cama livre e comida têm filhos. Filhos herdam sobrenome, parte das habilidades e às vezes traços, e viram adultos aos 16. Idosos morrem de velhice depois dos 65. O protagonista também pode se casar e ter herdeiros |
+| Casa          | Passa a ter 4 camas (um casal e dois filhos)                                                                                                                                                                                                                                                                                                   |
+| Dinastia      | A aba Dinastia mostra a árvore genealógica (sua família e as dos governantes rivais)                                                                                                                                                                                                                                                           |
+| Diplomacia    | Relação de -100 a 100 com cada vila (paz, aliança, guerra). Diplomatas, aldeões designados à Embaixada, viajam a pé até a outra vila para levar presentes, propor aliança ou paz. O sucesso depende da nota de Diplomacia e da relação. Declarar guerra é imediato                                                                             |
+| Guerra        | Vilas em guerra mandam ataques de soldados contra a sua; você pode mandar seus soldados atacar. Uma vila cujo Salão é tomado é **conquistada**: território, prédios e aldeões passam a ser seus. Aliados não atacam você e entram nas suas guerras                                                                                             |
+
+### Marcos da v2
+
+11. Mundo maior, vilas rivais, facções e território
+12. Mapa em tela cheia com território + interface de gerenciamento da vila
+13. Construções defensivas, soldados e vida dos prédios
+14. Relacionamentos, famílias, filhos e árvore genealógica
+15. Diplomatas, diplomacia, alianças, guerras e conquista
+
 ## Fora da v1 (futuro)
 
-- Outras cidades, diplomacia e conflito. O fim do jogo futuro é **conquistar todas as vilas**.
 - Agricultura / fazendas
 - Estações do ano
 - Cadeias de produção (minério → fundição → ferro)
