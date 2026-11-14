@@ -613,6 +613,12 @@ export class Npc {
     else this.carryIcon.setTexture(`icon_${this.carrying.resource}`);
   }
 
+  /** Children are drawn smaller (set by the world from their age). */
+  setChild(child: boolean): void {
+    const k = child ? 0.7 : 1;
+    if (this.sprite.scaleY !== k) this.sprite.setScale(k);
+  }
+
   private sync(): void {
     const s = gridToScreen(this.gx, this.gy);
     this.sprite.setPosition(s.x, s.y).setDepth(s.y);

@@ -37,11 +37,16 @@ export type NeedsEvent = { type: 'starving' | 'died'; npc: NpcData };
  * Advances hunger by `dt` game seconds. Hungry villagers eat meat straight from the stockpile.
  * Returns events for villagers who just started starving or who died (the caller removes the dead).
  */
-export function updateNeeds(villagers: NpcData[], stock: Inventory, dt: number): NeedsEvent[] {
+export function updateNeeds(
+  villagers: NpcData[],
+  stock: Inventory,
+  dt: number,
+  factor: (n: NpcData) => number = () => 1,
+): NeedsEvent[] {
   const events: NeedsEvent[] = [];
   for (const v of villagers) {
     const wasStarving = isStarving(v);
-    v.food = Math.max(0, v.food - (HUNGER_PER_DAY / DAY_SECONDS) * appetite(v) * dt);
+    v.food = Math.max(0, v.food - (HUNGER_PER_DAY / DAY_SECONDS) * appetite(v) * factor(v) * dt);
     while (v.food < EAT_BELOW && stock.items.meat > 0) {
       stock.items.meat -= 1;
       v.food = Math.min(MAX_FOOD, v.food + MEAL_SATIETY);

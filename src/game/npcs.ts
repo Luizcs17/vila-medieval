@@ -1,4 +1,13 @@
-import { BEDS_PER_HOUSE, MAX_WANDERERS, SOLDIER_BONUS_HP, VILLAGER_HP, WANDERER_FIRST_SPAWN, WANDERER_INTERVAL } from '../config';
+import {
+  ADULT_AGE,
+  BEDS_PER_HOUSE,
+  DAY_SECONDS,
+  MAX_WANDERERS,
+  SOLDIER_BONUS_HP,
+  VILLAGER_HP,
+  WANDERER_FIRST_SPAWN,
+  WANDERER_INTERVAL,
+} from '../config';
 import { isWalkable, type WorldMap } from '../world/map';
 import { BUILDING_DEFS, type Building, type Buildings } from './buildings';
 import { type Amounts, type Inventory, RESOURCE_LABEL, RESOURCES } from './inventory';
@@ -123,6 +132,34 @@ const REQUESTS: Record<Tier, Partial<Amounts>[]> = {
   master: [{ iron: 5, stone: 10 }, { iron: 8 }, { wood: 15, iron: 4 }],
 };
 
+export const SURNAMES = [
+  'Almeida',
+  'Barros',
+  'Cardoso',
+  'Coelho',
+  'Correia',
+  'Costa',
+  'Dias',
+  'Ferreira',
+  'Gomes',
+  'Lopes',
+  'Machado',
+  'Martins',
+  'Mendes',
+  'Monteiro',
+  'Nunes',
+  'Pereira',
+  'Pinto',
+  'Rocha',
+  'Santos',
+  'Teixeira',
+  'Vieira',
+];
+
+export const ageOf = (n: Pick<NpcData, 'born'>, now: number) => Math.max(0, Math.floor((now - n.born) / DAY_SECONDS));
+export const isAdult = (n: Pick<NpcData, 'born'>, now: number) => ageOf(n, now) >= ADULT_AGE;
+export const fullName = (n: Pick<NpcData, 'name' | 'surname'>) => `${n.name} ${n.surname}`;
+
 /** Number of sprite colour variants (see textures.ts). */
 export const NPC_VARIANTS = 8;
 
@@ -146,6 +183,14 @@ export interface NpcData {
   hp: number;
   /** Satiety 0–100 (see needs.ts). */
   food: number;
+  /** Family name (children inherit it). */
+  surname: string;
+  /** Game time of birth (age in years = days since then). */
+  born: number;
+  /** Spouse id (0 = the player), or null. */
+  partnerId: number | null;
+  /** Parent ids (0 = the player), empty for people who arrived as wanderers. */
+  parents: number[];
   /** Game seconds spent at zero satiety. */
   starving: number;
   /** Game time (clock seconds) when a wanderer gives up and leaves. */
@@ -154,7 +199,7 @@ export interface NpcData {
 
 const pick = <T>(rng: Rng, list: readonly T[]): T => list[Math.floor(rng() * list.length)];
 
-export function generateWanderer(rng: Rng, id: number, leavesAt: number): NpcData {
+export function generateWanderer(rng: Rng, id: number, leavesAt: number, now = 0): NpcData {
   const roll = rng();
   const tier: Tier = roll < 0.6 ? 'common' : roll < 0.9 ? 'skilled' : 'master';
   const gender: Gender = rng() < 0.5 ? 'f' : 'm';
@@ -184,6 +229,10 @@ export function generateWanderer(rng: Rng, id: number, leavesAt: number): NpcDat
     hp: VILLAGER_HP,
     food: 100,
     starving: 0,
+    surname: pick(rng, SURNAMES),
+    born: now - (ADULT_AGE + Math.floor(rng() * 30)) * DAY_SECONDS,
+    partnerId: null,
+    parents: [],
     leavesAt,
   };
 }
@@ -213,14 +262,35 @@ export function describeCost(cost: Partial<Amounts>): string {
 
 // ---------- population & housing ----------
 
+export interface PopulationSnapshot {
+  npcs: NpcData[];
+  nextId: number;
+  deceased?: Deceased[];
+  playerPartnerId?: number | null;
+}
+
 export interface RecruitCheck {
   bed: boolean;
   items: boolean;
   ok: boolean;
 }
 
+/** What family trees remember about someone who died. */
+export type Deceased = Pick<
+  NpcData,
+  'id' | 'name' | 'surname' | 'gender' | 'parents' | 'partnerId' | 'born' | 'faction' | 'variant'
+> & {
+  diedAt: number;
+};
+
 export class Population {
   readonly npcs: NpcData[] = [];
+  /** People who died, for family trees. */
+  deceased: Deceased[] = [];
+  /** The player's spouse, if married. */
+  playerPartnerId: number | null = null;
+  /** Game clock (set by the world) for ages. */
+  now: () => number = () => 0;
   private nextId = 1;
 
   constructor(private readonly buildings: Buildings) {}
@@ -229,14 +299,21 @@ export class Population {
     return this.nextId++;
   }
 
-  snapshot(): { npcs: NpcData[]; nextId: number } {
-    return { npcs: this.npcs.map((n) => structuredClone(n)), nextId: this.nextId };
+  snapshot(): PopulationSnapshot {
+    return {
+      npcs: this.npcs.map((n) => structuredClone(n)),
+      nextId: this.nextId,
+      deceased: structuredClone(this.deceased),
+      playerPartnerId: this.playerPartnerId,
+    };
   }
 
-  restore(s: { npcs: NpcData[]; nextId: number }): void {
+  restore(s: PopulationSnapshot): void {
     this.npcs.length = 0;
     for (const n of s.npcs) this.npcs.push(structuredClone(n));
     this.nextId = s.nextId;
+    this.deceased = structuredClone(s.deceased ?? []);
+    this.playerPartnerId = s.playerPartnerId ?? null;
   }
 
   /** The player's villagers. */
@@ -302,9 +379,21 @@ export class Population {
     return home;
   }
 
+  /** Removes someone (death, leaving). Villagers are remembered for family trees; spouses are widowed. */
   remove(id: number): void {
     const i = this.npcs.findIndex((n) => n.id === id);
-    if (i >= 0) this.npcs.splice(i, 1);
+    if (i < 0) return;
+    const [n] = this.npcs.splice(i, 1);
+    if (n.role !== 'villager') return;
+    const { name, surname, gender, parents, partnerId, born, faction, variant } = n;
+    this.deceased.push({ id, name, surname, gender, parents, partnerId, born, faction, variant, diedAt: this.now() });
+    for (const o of this.npcs) if (o.partnerId === id) o.partnerId = null;
+    if (this.playerPartnerId === id) this.playerPartnerId = null;
+  }
+
+  /** Living or dead person by id (for family trees). */
+  person(id: number): NpcData | Deceased | undefined {
+    return this.npcs.find((n) => n.id === id) ?? this.deceased.find((n) => n.id === id);
   }
 
   workers(buildingId: number): NpcData[] {
@@ -313,7 +402,7 @@ export class Population {
 
   /** Villagers without a job, best first for `skill` (if given). */
   unemployed(skill?: Skill, faction = 0): NpcData[] {
-    const list = this.villagersOf(faction).filter((n) => n.jobId === null);
+    const list = this.villagersOf(faction).filter((n) => n.jobId === null && isAdult(n, this.now()));
     if (skill) list.sort((a, b) => productivity(b, skill) - productivity(a, skill));
     return list;
   }
@@ -322,6 +411,7 @@ export class Population {
   assign(npc: NpcData, building: Building): boolean {
     const job = BUILDING_DEFS[building.type].job;
     if (!job || !building.built || npc.role !== 'villager' || building.faction !== npc.faction) return false;
+    if (!isAdult(npc, this.now())) return false; // children don't work
     if (this.workers(building.id).length >= job.slots) return false;
     npc.jobId = building.id;
     return true;

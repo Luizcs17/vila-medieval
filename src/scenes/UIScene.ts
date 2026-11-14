@@ -8,6 +8,7 @@ import { ambientAt, formatClock } from '../game/time';
 import { BuildingPanelUI } from '../ui/BuildingPanelUI';
 import { BuildMenuUI } from '../ui/BuildMenuUI';
 import { CraftingUI } from '../ui/CraftingUI';
+import { renderDynasty } from '../ui/DynastyTab';
 import { FullMapUI } from '../ui/FullMapUI';
 import { InventoryUI } from '../ui/InventoryUI';
 import { ManagementUI } from '../ui/ManagementUI';
@@ -151,6 +152,7 @@ export class UIScene extends Phaser.Scene {
       (n) => this.world.openNpcCard(n),
       (b) => this.world.openBuildingPanel(b),
     );
+    this.management.renderers.dynasty = renderDynasty;
     kb.on('keydown', (e: KeyboardEvent) => {
       const key = e.key.toLowerCase();
       if (this.pause.isOpen) {

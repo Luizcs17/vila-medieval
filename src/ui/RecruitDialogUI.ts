@@ -1,5 +1,6 @@
 import type Phaser from 'phaser';
-import { DAY_SECONDS } from '../config';
+import { ADULT_AGE, DAY_SECONDS } from '../config';
+import { ageOf, fullName, PLAYER_ID } from '../game/families';
 import { RESOURCE_LABEL, RESOURCES } from '../game/inventory';
 import { isStarving } from '../game/needs';
 import { jobTitle, type NpcData, roleLabel, SKILL_LABEL, SKILLS, stars, TIER_COLOR, TRAITS, tierLabel } from '../game/npcs';
@@ -90,12 +91,18 @@ export class RecruitDialogUI {
     let y = PAD;
 
     const portrait = s.add.image(PAD + 22, y + 36, `${npcSpriteKey(npc.variant, npc.gender)}_idle`).setScale(4);
-    const name = s.add.text(PAD + 64, y, npc.name, { ...TEXT, fontSize: '18px' });
-    const sub = s.add.text(PAD + 64, y + 26, `${roleLabel(npc.role, npc.gender)} · ${tierLabel(npc.tier, npc.gender)}`, {
-      ...TEXT,
-      fontSize: '13px',
-      color: TIER_COLOR[npc.tier],
-    });
+    const name = s.add.text(PAD + 64, y, fullName(npc), { ...TEXT, fontSize: '18px' });
+    const age = ageOf(npc, this.world.clock.seconds);
+    const sub = s.add.text(
+      PAD + 64,
+      y + 26,
+      `${roleLabel(npc.role, npc.gender)} · ${tierLabel(npc.tier, npc.gender)} · ${age} anos`,
+      {
+        ...TEXT,
+        fontSize: '13px',
+        color: TIER_COLOR[npc.tier],
+      },
+    );
     items.push(portrait, name, sub);
     y += 78;
 
@@ -160,6 +167,29 @@ export class RecruitDialogUI {
       );
       y += 30;
     } else {
+      // Family: spouse, and (for your villagers) affinity with you and a proposal.
+      const f = npc.gender === 'f';
+      const spouse =
+        npc.partnerId === null
+          ? f
+            ? 'Solteira'
+            : 'Solteiro'
+          : npc.partnerId === PLAYER_ID
+            ? `${f ? 'Casada' : 'Casado'} com você`
+            : `${f ? 'Casada' : 'Casado'} com ${this.world.population.person(npc.partnerId)?.name ?? '?'}`;
+      const kids = this.world.population.allVillagers.filter((c) => c.parents.includes(npc.id)).length;
+      items.push(
+        s.add.text(PAD, y, `${spouse}${kids ? ` · ${kids} ${kids > 1 ? 'filhos' : 'filho(a)'}` : ''}`, {
+          ...TEXT,
+          fontSize: '12px',
+          color: '#ffb0d0',
+        }),
+      );
+      if (npc.faction === 0 && npc.partnerId === null && age >= ADULT_AGE) {
+        const aff = Math.round(this.world.families.getAffinity(PLAYER_ID, npc.id));
+        items.push(s.add.text(PAD + 230, y, `Afinidade com você ${aff}%`, { ...TEXT, fontSize: '12px', color: '#ffb0d0' }));
+      }
+      y += 20;
       y += 18; // room for the "lives in" line
       items.push(
         s.add.text(PAD + 230, y, `Fome ${Math.round(100 - npc.food)}%${isStarving(npc) ? ' (FAMINTO)' : ''}`, {
@@ -203,6 +233,11 @@ export class RecruitDialogUI {
       return { bg, label: text };
     };
     if (npc.role === 'wanderer') this.recruitBtn = btn(PAD, 'Recrutar  [Enter]', () => this.confirm());
+    else if (this.world.families.canPropose(npc, this.world.clock.seconds)) {
+      btn(PAD, 'Pedir em casamento ♥', () => {
+        if (this.world.propose(npc)) this.close();
+      });
+    }
     btn(W - PAD - 190, 'Fechar  [Esc]', () => this.close());
     y += 30 + PAD;
 
