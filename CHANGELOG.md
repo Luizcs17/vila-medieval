@@ -2,6 +2,14 @@
 
 Each milestone from `docs/GDD.md` is a minor version.
 
+## 1.3.0: Milestone 13, defences and soldiers
+
+- New buildings: Paliçada (log wall, blocks animals and enemies), Portão (gate: your people walk through, animals and raiders don't), Torre de vigia (shoots aggressive animals and enemies within 6 tiles; claims 8 tiles of territory), Quartel (4 soldier slots). Walls and gates stay in placement mode so you can lay them in a row.
+- Buildings have HP: animals blocked by walls chew on them, health bars appear when damaged, destroyed buildings free their tiles and territory. Hold E on your damaged building to repair it (1 wood per 10 HP, from what you carry or the stockpile).
+- Soldiers patrol around the barracks day and night, charge hostiles within 8 tiles (up to 14 from the barracks) and fight. Damage is 1–3 from the new Combate rating; soldiers have +6 HP.
+- New skill ratings: Combate and Diplomacia (diplomats arrive in milestone 15).
+- Rival towns build a watchtower once they can afford one.
+
 ## 1.2.0: Milestone 12, territory map and village management
 
 - M opens a full-screen map: terrain, each village's territory in its colour with strong borders, buildings, village names, villagers and wanderers, you, and a legend with population and land per village. The minimap is now toggled with N.

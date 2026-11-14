@@ -13,7 +13,18 @@ export interface JobDef {
   title: { f: string; m: string };
 }
 
-export type BuildingType = 'stockpile' | 'house' | 'lumberjack' | 'quarry' | 'mine' | 'hunter' | 'depot';
+export type BuildingType =
+  | 'stockpile'
+  | 'house'
+  | 'lumberjack'
+  | 'quarry'
+  | 'mine'
+  | 'hunter'
+  | 'depot'
+  | 'palisade'
+  | 'gate'
+  | 'tower'
+  | 'barracks';
 
 export interface BuildingDef {
   name: string;
@@ -35,11 +46,18 @@ export interface BuildingDef {
   job?: JobDef;
   /** Territory radius (tiles) this building claims for its faction. */
   claim: number;
+  /** Hit points when finished (raids and animals can damage buildings). */
+  maxHp: number;
+  /** Towers: shoot at hostiles within `range` tiles for `damage` every `cooldown` seconds. */
+  defense?: { range: number; damage: number; cooldown: number };
+  /** Walls and gates: placement mode stays on so you can lay several in a row. */
+  repeatPlace?: boolean;
 }
 
 export const BUILDING_DEFS: Record<BuildingType, BuildingDef> = {
   stockpile: {
     claim: 9,
+    maxHp: 250,
     name: 'Estoque central',
     size: 1,
     cost: {},
@@ -50,6 +68,7 @@ export const BUILDING_DEFS: Record<BuildingType, BuildingDef> = {
   },
   house: {
     claim: 4,
+    maxHp: 100,
     name: 'Casa',
     size: 2,
     cost: { wood: 20, stone: 10 },
@@ -59,6 +78,7 @@ export const BUILDING_DEFS: Record<BuildingType, BuildingDef> = {
   },
   lumberjack: {
     claim: 4,
+    maxHp: 100,
     name: 'Cabana do lenhador',
     size: 2,
     cost: { wood: 15, stone: 5 },
@@ -71,6 +91,7 @@ export const BUILDING_DEFS: Record<BuildingType, BuildingDef> = {
   },
   quarry: {
     claim: 4,
+    maxHp: 100,
     name: 'Pedreira',
     size: 2,
     cost: { wood: 20 },
@@ -83,6 +104,7 @@ export const BUILDING_DEFS: Record<BuildingType, BuildingDef> = {
   },
   mine: {
     claim: 4,
+    maxHp: 120,
     name: 'Mina',
     size: 2,
     cost: { wood: 20, stone: 15 },
@@ -95,6 +117,7 @@ export const BUILDING_DEFS: Record<BuildingType, BuildingDef> = {
   },
   hunter: {
     claim: 4,
+    maxHp: 100,
     name: 'Cabana do caçador',
     size: 2,
     cost: { wood: 15, stone: 5 },
@@ -106,6 +129,7 @@ export const BUILDING_DEFS: Record<BuildingType, BuildingDef> = {
   },
   depot: {
     claim: 5,
+    maxHp: 80,
     name: 'Depósito',
     size: 1,
     cost: { wood: 10, stone: 5 },
@@ -113,6 +137,50 @@ export const BUILDING_DEFS: Record<BuildingType, BuildingDef> = {
     description: 'Outro ponto para guardar no estoque.',
     deposit: true,
     buildable: true,
+  },
+  palisade: {
+    claim: 0,
+    name: 'Paliçada',
+    size: 1,
+    cost: { wood: 3 },
+    buildSeconds: 3,
+    description: 'Muro de troncos: bloqueia animais e inimigos.',
+    buildable: true,
+    repeatPlace: true,
+    maxHp: 60,
+  },
+  gate: {
+    claim: 0,
+    name: 'Portão',
+    size: 1,
+    cost: { wood: 5 },
+    buildSeconds: 4,
+    description: 'Passagem na paliçada só para o seu povo.',
+    buildable: true,
+    repeatPlace: true,
+    maxHp: 80,
+  },
+  tower: {
+    claim: 8,
+    name: 'Torre de vigia',
+    size: 1,
+    cost: { wood: 15, stone: 10 },
+    buildSeconds: 15,
+    description: 'Atira em animais agressivos e inimigos. Amplia o território.',
+    buildable: true,
+    maxHp: 120,
+    defense: { range: 6, damage: 1, cooldown: 1.5 },
+  },
+  barracks: {
+    claim: 5,
+    name: 'Quartel',
+    size: 2,
+    cost: { wood: 25, stone: 15 },
+    buildSeconds: 25,
+    description: 'Soldados protegem a vila (e atacam em guerras).',
+    buildable: true,
+    maxHp: 150,
+    job: { skill: 'combat', slots: 4, nodes: [], radius: 10, title: { f: 'Soldada', m: 'Soldado' } },
   },
 };
 
@@ -131,6 +199,8 @@ export interface Building {
   built: boolean;
   /** Seconds of construction done so far. */
   progress: number;
+  /** Current hit points (max is BUILDING_DEFS[type].maxHp). */
+  hp: number;
 }
 
 export type PlaceCheck = { ok: true } | { ok: false; reason: string };
@@ -182,9 +252,9 @@ export class Buildings {
 
   /** Places a building or construction site. Does not check or pay; call `check` first. */
   place(type: BuildingType, tx: number, ty: number, built = false, faction = 0): Building {
-    const b: Building = { id: this.nextId++, type, faction, tx, ty, built, progress: 0 };
+    const b: Building = { id: this.nextId++, type, faction, tx, ty, built, progress: 0, hp: BUILDING_DEFS[type].maxHp };
     for (const i of this.footprint(type, tx, ty)) {
-      this.map.objects[i] = Obj.Building;
+      this.map.objects[i] = type === 'gate' ? Obj.Gate : Obj.Building;
       this.byTile.set(i, b);
     }
     this.list.push(b);
@@ -202,12 +272,25 @@ export class Buildings {
     for (const b of s.list) {
       const copy = { ...b };
       for (const i of this.footprint(copy.type, copy.tx, copy.ty)) {
-        this.map.objects[i] = Obj.Building;
+        this.map.objects[i] = copy.type === 'gate' ? Obj.Gate : Obj.Building;
         this.byTile.set(i, copy);
       }
       this.list.push(copy);
     }
     this.nextId = s.nextId;
+  }
+
+  /** Damages a building. Returns true if it was destroyed (the caller removes it). */
+  damage(b: Building, amount: number): boolean {
+    b.hp = Math.max(0, b.hp - amount);
+    return b.hp === 0;
+  }
+
+  /** Restores hit points, up to the maximum. Returns how much was restored. */
+  repair(b: Building, amount: number): number {
+    const before = b.hp;
+    b.hp = Math.min(BUILDING_DEFS[b.type].maxHp, b.hp + amount);
+    return b.hp - before;
   }
 
   /** Removes a building (destroyed or demolished); its tiles become empty. */

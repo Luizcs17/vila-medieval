@@ -1,7 +1,7 @@
 import type Phaser from 'phaser';
 import { type AnimalData, hurtAnimal, SPECIES } from '../game/animals';
 import { gridToScreen } from '../iso';
-import { isWalkable, type WorldMap } from '../world/map';
+import { isWalkable, Obj, type WorldMap } from '../world/map';
 
 /** Someone animals react to: the player or a villager. */
 export interface Human {
@@ -19,6 +19,8 @@ export interface AnimalWorld {
   humans(): Human[];
   /** An animal's attack lands on `target`. */
   hit(target: Human, damage: number, from: Animal): void;
+  /** A chasing animal blocked by a wall or gate bites it. */
+  hitBuildingAt(tx: number, ty: number, damage: number): void;
 }
 
 type Mode = 'wander' | 'flee' | 'chase' | 'return';
@@ -143,7 +145,14 @@ export class Animal {
       }
     }
 
+    const before = { x: this.data.gx, y: this.data.gy };
     this.move(world.map, this.dir.x * speed * dt, this.dir.y * speed * dt);
+    // Stuck while charging: chew on whatever wall is in the way.
+    const stuck = before.x === this.data.gx && before.y === this.data.gy;
+    if (this.mode === 'chase' && stuck && (this.dir.x !== 0 || this.dir.y !== 0) && this.attackCd <= 0) {
+      this.attackCd = def.attackCooldown;
+      world.hitBuildingAt(Math.floor(this.data.gx + this.dir.x * 0.7), Math.floor(this.data.gy + this.dir.y * 0.7), def.damage);
+    }
     this.sync();
   }
 
@@ -201,7 +210,9 @@ export class Animal {
       [-RADIUS, RADIUS],
       [RADIUS, RADIUS],
     ]) {
-      if (!isWalkable(map, Math.floor(gx + ox), Math.floor(gy + oy))) return true;
+      const tx = Math.floor(gx + ox);
+      const ty = Math.floor(gy + oy);
+      if (!isWalkable(map, tx, ty) || map.objects[ty * map.w + tx] === Obj.Gate) return true;
     }
     return false;
   }

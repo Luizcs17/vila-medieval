@@ -375,6 +375,33 @@ function isoBuilding(scene: Phaser.Scene, key: string, size: number, st: HouseSt
   });
 }
 
+/** Sharpened log wall along the tile's diagonal; the gate version has a plank door in the middle. */
+function palisade(scene: Phaser.Scene, key: string, gate: boolean): void {
+  const W = TILE_W;
+  const H = 30;
+  const log = ['#8a5a2b', '#a0703a', '#6e4824'].map(hex);
+  const outline = hex('#2b1d14');
+  const door = hex('#5a3a1a');
+  const band = hex('#3a2a1a');
+  paint(scene, key, W, H, (x, y) => {
+    // Logs stand on the line from the left vertex to the right vertex (screen-horizontal at the tile centre).
+    const base = H - 9;
+    const k = Math.floor(x / 3);
+    const top = base - 18 + ((k * 7) % 3);
+    const tip = top - (x % 3 === 1 ? 2 : 1);
+    if (x < 2 || x > W - 3) return null;
+    if (gate && x >= 11 && x <= 20) {
+      if (y < base - 15 || y > base + 1) return null;
+      if (y === base - 15 || y === base + 1 || x === 11 || x === 20) return outline;
+      if (y === base - 10 || y === base - 4) return band;
+      return door;
+    }
+    if (y < tip || y > base + 1) return null;
+    if (y === tip || y === base + 1 || x % 3 === 0) return outline;
+    return log[k % 3];
+  });
+}
+
 /** Construction site: dirt footprint, corner posts, beams and a plank pile. */
 function constructionSite(scene: Phaser.Scene, key: string, size: number): void {
   const W = TILE_W * size;
@@ -569,6 +596,27 @@ export function createPlaceholderTextures(scene: Phaser.Scene): void {
     door: true,
     window: true,
   });
+  isoBuilding(scene, 'bld_tower', 1, {
+    wallL: '#b0aaa0',
+    wallR: '#8a857d',
+    roofL: '#8a5a2b',
+    roofR: '#6e4824',
+    wallH: 30,
+    roofH: 14,
+    window: true,
+  });
+  isoBuilding(scene, 'bld_barracks', 2, {
+    wallL: '#a8a39b',
+    wallR: '#86817a',
+    roofL: '#8a3a2a',
+    roofR: '#6a2a1e',
+    wallH: 18,
+    roofH: 20,
+    door: true,
+    window: true,
+  });
+  palisade(scene, 'bld_palisade', false);
+  palisade(scene, 'bld_gate', true);
   constructionSite(scene, 'site_1', 1);
   constructionSite(scene, 'site_2', 2);
 

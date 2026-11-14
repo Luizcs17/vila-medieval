@@ -1,10 +1,10 @@
 import Phaser from 'phaser';
-import { HUNTER_RANGE, NPC_SPEED, WORKER_LOAD, WORKER_TIME_FACTOR } from '../config';
+import { GUARD_LEASH, GUARD_RANGE, HUNTER_RANGE, NPC_SPEED, WORKER_LOAD, WORKER_TIME_FACTOR } from '../config';
 import { BUILDING_DEFS, type Building, type Buildings } from '../game/buildings';
 import { NODE_DEFS } from '../game/gathering';
 import type { Resource } from '../game/inventory';
 import { isStarving } from '../game/needs';
-import { type NpcData, productivity, TIER_COLOR } from '../game/npcs';
+import { type NpcData, productivity, soldierDamage, TIER_COLOR } from '../game/npcs';
 import { npcSpriteKey } from '../gfx/textures';
 import { gridToScreen } from '../iso';
 import { inBounds, isWalkable, tileIndex, type WorldMap } from '../world/map';
@@ -29,6 +29,18 @@ export interface NpcWorld {
   /** Nearest carcass with meat within `r` tiles of (cx, cy). */
   findCarcass(cx: number, cy: number, r: number): Prey | null;
   takeMeat(id: number, max: number): number;
+  /** Nearest thing hostile to `faction` within `r` tiles (aggressive animals, enemies at war). */
+  findHostile(faction: number, gx: number, gy: number, r: number): Target | null;
+  /** A soldier's blow lands on `target`. */
+  strike(from: Npc, target: Target, damage: number): void;
+}
+
+/** Something a soldier or tower can attack. */
+export interface Target {
+  kind: 'animal' | 'npc' | 'player';
+  id: number;
+  gx: number;
+  gy: number;
 }
 
 export interface Prey {
@@ -71,6 +83,7 @@ export class Npc {
   private preyId: number | null = null;
   private shotTimer = 0;
   private repath = 0;
+  private attackCd = 0;
   private readonly key: string;
   /** Vertical bob offset for the marker, animated by a tween. */
   private readonly bob = { v: 0 };
@@ -125,13 +138,15 @@ export class Npc {
       return;
     }
 
-    if (this.data.role === 'villager' && this.flee(dt, world)) {
+    const workplace = this.workplace(world);
+    const soldier = workplace !== undefined && BUILDING_DEFS[workplace.type].job?.skill === 'combat';
+    if (this.data.role === 'villager' && !soldier && this.flee(dt, world)) {
       this.sync();
       return;
     }
 
-    const workplace = this.workplace(world);
-    if (workplace && !world.isNight()) this.work(dt, world, workplace);
+    // Soldiers stand guard day and night; everyone else works by day.
+    if (workplace && (soldier || !world.isNight())) this.work(dt, world, workplace);
     else this.live(dt, world);
     this.sync();
   }
@@ -293,6 +308,52 @@ export class Npc {
     this.walk(dt);
   }
 
+  /** Soldier loop: patrol around the barracks; charge and fight hostiles that come close. */
+  private guard(dt: number, world: NpcWorld, barracks: Building): void {
+    this.attackCd -= dt;
+    const f = footprintOf(barracks);
+    const cx = f.x + f.s / 2;
+    const cy = f.y + f.s / 2;
+    const target = world.findHostile(this.data.faction, this.gx, this.gy, GUARD_RANGE);
+    const inLeash = target && Math.hypot(target.gx - cx, target.gy - cy) < GUARD_LEASH;
+    if (target && inLeash) {
+      this.status = 'Combatendo!';
+      const d = Math.hypot(target.gx - this.gx, target.gy - this.gy);
+      if (d <= 0.95) {
+        this.path = [];
+        this.stopWalking();
+        this.sprite.setFlipX(target.gx - target.gy < this.gx - this.gy);
+        if (this.attackCd <= 0) {
+          this.attackCd = 1.1;
+          world.strike(this, target, soldierDamage(this.data));
+          this.scene.tweens.add({ targets: this.sprite, scaleX: 1.15, duration: 70, yoyo: true });
+        }
+        return;
+      }
+      this.repath -= dt;
+      if (this.path.length === 0 || this.repath <= 0) {
+        this.repath = 0.6;
+        this.goNear(target.gx, target.gy, 0);
+      }
+      this.walk(dt * 1.3);
+      return;
+    }
+    this.status = null;
+    // Patrol: stroll around the barracks.
+    this.anchor = { x: Math.floor(cx), y: f.y + f.s };
+    this.roam = 5;
+    if (this.path.length > 0) {
+      this.walk(dt);
+      return;
+    }
+    this.stopWalking();
+    this.idle -= dt;
+    if (this.idle <= 0) {
+      this.idle = 2 + Math.random() * 3;
+      this.path = this.planStroll() ?? [];
+    }
+  }
+
   /** Path to any walkable tile within `r` tiles of (x, y). */
   private goNear(x: number, y: number, r: number): boolean {
     const tx = Math.floor(x);
@@ -349,6 +410,10 @@ export class Npc {
     const job = BUILDING_DEFS[workplace.type].job!;
     if (job.skill === 'hunting') {
       this.hunt(dt, world, workplace);
+      return;
+    }
+    if (job.skill === 'combat') {
+      this.guard(dt, world, workplace);
       return;
     }
 

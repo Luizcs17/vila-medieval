@@ -1,4 +1,4 @@
-import { BEDS_PER_HOUSE, MAX_WANDERERS, VILLAGER_HP, WANDERER_FIRST_SPAWN, WANDERER_INTERVAL } from '../config';
+import { BEDS_PER_HOUSE, MAX_WANDERERS, SOLDIER_BONUS_HP, VILLAGER_HP, WANDERER_FIRST_SPAWN, WANDERER_INTERVAL } from '../config';
 import { isWalkable, type WorldMap } from '../world/map';
 import { BUILDING_DEFS, type Building, type Buildings } from './buildings';
 import { type Amounts, type Inventory, RESOURCE_LABEL, RESOURCES } from './inventory';
@@ -35,7 +35,7 @@ export const TRAITS: Record<TraitId, { name: string; description: string; positi
 
 // ---------- skills (rated 1–5 stars) ----------
 
-export const SKILLS = ['woodcutting', 'stonework', 'mining', 'hunting'] as const;
+export const SKILLS = ['woodcutting', 'stonework', 'mining', 'hunting', 'combat', 'diplomacy'] as const;
 export type Skill = (typeof SKILLS)[number];
 export type Skills = Record<Skill, number>;
 
@@ -44,10 +44,12 @@ export const SKILL_LABEL: Record<Skill, string> = {
   stonework: 'Cantaria',
   mining: 'Mineração',
   hunting: 'Caça',
+  combat: 'Combate',
+  diplomacy: 'Diplomacia',
 };
 
 /** The trait that gives +50% in each skill's job. */
-const SKILL_TRAIT: Record<Skill, TraitId> = { woodcutting: 'axe', stonework: 'stone', mining: 'iron', hunting: 'aim' };
+const SKILL_TRAIT: Partial<Record<Skill, TraitId>> = { woodcutting: 'axe', stonework: 'stone', mining: 'iron', hunting: 'aim' };
 
 export const stars = (rating: number) => '★'.repeat(rating) + '☆'.repeat(5 - rating);
 
@@ -72,7 +74,8 @@ export function rollSkills(rng: Rng, tier: Tier): Skills {
  */
 export function productivity(npc: Pick<NpcData, 'skills' | 'traits'>, skill: Skill): number {
   let m = 0.5 + 0.25 * npc.skills[skill];
-  if (npc.traits.includes(SKILL_TRAIT[skill])) m *= 1.5;
+  const trait = SKILL_TRAIT[skill];
+  if (trait && npc.traits.includes(trait)) m *= 1.5;
   if (npc.traits.includes('tireless')) m *= 1.2;
   if (npc.traits.includes('slow')) m *= 0.8;
   return m;
@@ -327,6 +330,18 @@ export class Population {
   unassign(npc: NpcData): void {
     npc.jobId = null;
   }
+}
+
+/** Melee damage of a soldier: 1 + half their Combate rating (1–3), halved while starving. */
+export function soldierDamage(npc: Pick<NpcData, 'skills' | 'food'>): number {
+  const base = 1 + Math.floor(npc.skills.combat / 2);
+  return npc.food <= 0 ? Math.max(1, Math.floor(base / 2)) : base;
+}
+
+/** Soldiers are tougher. */
+export function maxHpOf(npc: NpcData, buildings: Buildings): number {
+  const b = npc.jobId !== null ? buildings.list.find((x) => x.id === npc.jobId) : undefined;
+  return VILLAGER_HP + (b?.type === 'barracks' ? SOLDIER_BONUS_HP : 0);
 }
 
 /** Display title for a villager: job title, or "Aldeã/Aldeão" when unemployed. */
