@@ -13,7 +13,8 @@ const CONTROLS = [
   '1–9: escolher ferramenta da hotbar',
   'B: construir   C: criar   I/Tab: inventário',
   'V: gestão da vila   M: mapa   N: minimapa',
-  'G: companheiros e soldados por perto seguem você (de novo: dispensa)',
+  'F1: ordens rápidas (F1 de novo: siga-me, F2: fiquem)',
+  'G: largar 1 do item selecionado (Shift+G: a pilha)',
   'T (segurar): acelerar tempo',
 ];
 

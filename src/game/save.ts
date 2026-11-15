@@ -1,6 +1,7 @@
 import type { AnimalData } from './animals';
 import type { Building } from './buildings';
 import type { MissionKind, Proposal, Relation } from './diplomacy';
+import type { Drop } from './drops';
 import type { TradePolicy } from './factions';
 import type { NodesSnapshot } from './gathering';
 import type { Amounts } from './inventory';
@@ -59,6 +60,8 @@ export interface SaveData {
   /** NPC positions by id. */
   npcPositions: [number, number, number][];
   animals: AnimalData[];
+  /** Items lying on the ground (G). */
+  drops?: { list: Drop[]; nextId: number };
 }
 
 type Store = Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>;

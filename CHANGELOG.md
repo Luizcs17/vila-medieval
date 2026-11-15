@@ -2,6 +2,12 @@
 
 Each milestone from `docs/GDD.md` is a minor version.
 
+## 1.17.0: Milestone 27, quick orders (F1) and dropping items (G)
+
+- F1 opens a table on the right listing your companions and soldiers within 15 tiles (stance and current order). With it open, F1 again makes all of them follow you and F2 makes each one stay where they stand. Esc closes it. You can keep walking while it's open. The individual orders on each person's card are unchanged. The browser no longer grabs F1/F2.
+- G drops one of the selected hotbar item at your feet (Shift+G: the whole stack). Dropping the same resource on the same spot makes one pile. E picks it up again (as much as fits); tools keep their wear. Items on the ground are saved and vanish after 3 days.
+- G no longer calls the group (that's F1 now).
+
 ## 1.16.0: Milestone 26, orders and stances
 
 - Your companions and soldiers take individual orders from their card (E on them): "Siga-me", "Fique aqui", "Vá até…" (then click a spot on the map; right click cancels) and "Liberar" (back to the default: companions follow you, soldiers guard their barracks). A direct order also calls a soldier back from a raid.

@@ -68,6 +68,8 @@ export const COMPANION_MAX = 4;
 /** Companions fight hostiles this close to them, as long as the fight stays this close to you. */
 export const COMPANION_RANGE = 6;
 export const COMPANION_LEASH = 10;
+/** F1/F2 quick orders reach your companions and soldiers this close to you. */
+export const QUICK_ORDER_RADIUS = 15;
 
 /** Combat and animals. Damage/HP are in hit points. */
 export const PLAYER_MAX_HP = 10;

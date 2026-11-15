@@ -15,6 +15,7 @@ import { FullMapUI } from '../ui/FullMapUI';
 import { InventoryUI } from '../ui/InventoryUI';
 import { ManagementUI } from '../ui/ManagementUI';
 import { Minimap } from '../ui/Minimap';
+import { OrdersPanelUI } from '../ui/OrdersPanelUI';
 import { PauseMenuUI } from '../ui/PauseMenuUI';
 import { PeddleUI } from '../ui/PeddleUI';
 import { RecruitDialogUI } from '../ui/RecruitDialogUI';
@@ -68,6 +69,7 @@ export class UIScene extends Phaser.Scene {
   private panel!: BuildingPanelUI;
   private storagePanel!: StoragePanelUI;
   private peddle!: PeddleUI;
+  private orders!: OrdersPanelUI;
   private popText!: Phaser.GameObjects.Text;
   private popups: Popup[] = [];
   private toasts: { text: Phaser.GameObjects.Text; age: number }[] = [];
@@ -122,7 +124,7 @@ export class UIScene extends Phaser.Scene {
     this.add.text(
       12,
       52,
-      'WASD andar · clique atacar · E usar · F comer · G chamar o grupo · B construir · C criar · I inventário · V vila · M mapa · T acelerar',
+      'WASD andar · clique atacar · E usar · F comer · F1 ordens · G largar · B construir · C criar · I inventário · V vila · M mapa · T acelerar',
       { ...TEXT, fontSize: '12px', backgroundColor: '#00000088', padding: { x: 8, y: 5 } },
     );
     this.debug = this.add.text(12, 80, '', { ...TEXT, fontSize: '11px', color: '#cdb98e' });
@@ -169,6 +171,7 @@ export class UIScene extends Phaser.Scene {
 
     this.storagePanel = new StoragePanelUI(this, this.world);
     this.peddle = new PeddleUI(this, this.world);
+    this.orders = new OrdersPanelUI(this, this.world);
     this.world.events.on('peddle', (faction: number) => {
       if (this.inventory.isOpen) this.toggleInventory();
       this.closeBuildMode();
@@ -187,7 +190,7 @@ export class UIScene extends Phaser.Scene {
     });
 
     const kb = this.input.keyboard!;
-    kb.addCapture('TAB');
+    kb.addCapture('TAB,F1,F2');
     this.pause = new PauseMenuUI(this, this.world);
     this.fullMap = new FullMapUI(this, this.world);
     this.management = new ManagementUI(
@@ -229,6 +232,20 @@ export class UIScene extends Phaser.Scene {
       }
       if (this.management.isOpen) {
         if (key === 'escape' || key === 'v') this.management.close();
+        return;
+      }
+      // F1: the quick-orders table (F1 again: follow me, F2: stay). Walking keeps working meanwhile.
+      if (key === 'f1') {
+        if (this.orders.isOpen) this.orders.order('follow');
+        else this.orders.open();
+        return;
+      }
+      if (key === 'f2') {
+        if (this.orders.isOpen) this.orders.order('stay');
+        return;
+      }
+      if (this.orders.isOpen && key === 'escape') {
+        this.orders.close();
         return;
       }
       if (key === 'm') {
@@ -277,7 +294,7 @@ export class UIScene extends Phaser.Scene {
         if (this.inventory.isOpen) this.toggleInventory();
         this.crafting.setOpen(false);
         this.closeBuildMode();
-      } else if (key === 'g') this.world.rallyNearby();
+      } else if (key === 'g') this.world.dropSelected(e.shiftKey);
       else if (key === 'n') this.minimap.toggle();
       else if (key >= '1' && key <= '9') this.world.selectedHotbar = Number(key) - 1;
     });
@@ -372,6 +389,7 @@ export class UIScene extends Phaser.Scene {
     this.dialog.update();
     this.panel.update();
     this.storagePanel.update(deltaMs / 1000);
+    this.orders.update(deltaMs / 1000);
     this.updateToasts(deltaMs / 1000);
   }
 
@@ -510,6 +528,7 @@ export class UIScene extends Phaser.Scene {
     this.panel.layout(width, height);
     this.storagePanel?.layout();
     this.peddle?.layout();
+    this.orders?.layout();
     this.minimap.layout(width, height);
     this.pause?.layout(width, height);
     this.fullMap?.layout();
