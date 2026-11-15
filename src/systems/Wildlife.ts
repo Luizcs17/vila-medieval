@@ -10,6 +10,7 @@ import {
   pickAnimalTile,
   SPECIES,
   type Species,
+  takeLeather,
   takeMeat,
   targetPopulation,
 } from '../game/animals';
@@ -88,7 +89,7 @@ export class Wildlife {
       if (a.alive) {
         a.update(dt, this.world);
         alive[a.data.species]++;
-      } else if (a.data.meat <= 0 || now - a.data.diedAt > CARCASS_LIFETIME) {
+      } else if ((a.data.meat <= 0 && (a.data.leather ?? 0) <= 0) || now - a.data.diedAt > CARCASS_LIFETIME) {
         this.remove(a);
       }
     }
@@ -132,7 +133,16 @@ export class Wildlife {
   }
 
   nearestCarcass(gx: number, gy: number, reach: number): Animal | null {
-    return this.nearest(gx, gy, reach, (a) => !a.alive && a.data.meat > 0);
+    return this.nearest(gx, gy, reach, (a) => !a.alive && (a.data.meat > 0 || (a.data.leather ?? 0) > 0));
+  }
+
+  /** Removes up to `max` leather from carcass `id`. */
+  takeLeather(id: number, max: number): number {
+    const a = this.animals.get(id);
+    if (!a) return 0;
+    const n = takeLeather(a.data, max);
+    if (a.data.meat <= 0 && (a.data.leather ?? 0) <= 0) this.remove(a);
+    return n;
   }
 
   /** Removes up to `max` meat from carcass `id`. */
@@ -140,7 +150,7 @@ export class Wildlife {
     const a = this.animals.get(id);
     if (!a) return 0;
     const n = takeMeat(a.data, max);
-    if (a.data.meat <= 0) this.remove(a);
+    if (a.data.meat <= 0 && (a.data.leather ?? 0) <= 0) this.remove(a);
     return n;
   }
 

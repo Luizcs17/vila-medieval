@@ -16,6 +16,8 @@ export interface SpeciesDef {
   hp: number;
   /** Meat left on the carcass. */
   meat: number;
+  /** Hide left on the carcass (becomes leather). */
+  leather: number;
   /** Tiles per second while wandering / running. */
   speed: number;
   runSpeed: number;
@@ -37,6 +39,7 @@ export const SPECIES: Record<Species, SpeciesDef> = {
     name: 'Coelho',
     hp: 1,
     meat: 1,
+    leather: 0,
     speed: 1.2,
     runSpeed: 3.4,
     temper: 'skittish',
@@ -51,6 +54,7 @@ export const SPECIES: Record<Species, SpeciesDef> = {
     name: 'Cervo',
     hp: 3,
     meat: 4,
+    leather: 2,
     speed: 1.3,
     runSpeed: 3.2,
     temper: 'skittish',
@@ -65,6 +69,7 @@ export const SPECIES: Record<Species, SpeciesDef> = {
     name: 'Javali',
     hp: 5,
     meat: 5,
+    leather: 3,
     speed: 1.1,
     runSpeed: 2.8,
     temper: 'defensive',
@@ -79,6 +84,7 @@ export const SPECIES: Record<Species, SpeciesDef> = {
     name: 'Lobo',
     hp: 4,
     meat: 2,
+    leather: 1,
     speed: 1.4,
     runSpeed: 3.0,
     temper: 'aggressive',
@@ -94,6 +100,7 @@ export const SPECIES: Record<Species, SpeciesDef> = {
     name: 'Urso',
     hp: 10,
     meat: 8,
+    leather: 4,
     speed: 1.0,
     runSpeed: 2.6,
     temper: 'aggressive',
@@ -120,6 +127,8 @@ export interface AnimalData {
   dead: boolean;
   /** Meat left on the carcass. */
   meat: number;
+  /** Hide left on the carcass. */
+  leather: number;
   /** Game time of death (carcasses rot after a while). */
   diedAt: number;
 }
@@ -136,6 +145,7 @@ export function newAnimal(id: number, species: Species, tile: { x: number; y: nu
     homeY: tile.y + 0.5,
     dead: false,
     meat: def.meat,
+    leather: def.leather,
     diedAt: 0,
   };
 }
@@ -155,6 +165,14 @@ export function takeMeat(a: AnimalData, max: number): number {
   if (!a.dead) return 0;
   const n = Math.max(0, Math.min(max, a.meat));
   a.meat -= n;
+  return n;
+}
+
+/** Takes up to `max` leather from a carcass. */
+export function takeLeather(a: AnimalData, max: number): number {
+  if (!a.dead) return 0;
+  const n = Math.max(0, Math.min(max, a.leather ?? 0));
+  a.leather = (a.leather ?? 0) - n;
   return n;
 }
 

@@ -65,7 +65,7 @@ describe('inventory', () => {
     bag.add('wood', 4);
     bag.add('iron', 1);
     const moved = bag.transferAllTo(stock);
-    expect(moved).toEqual({ wood: 4, stone: 0, iron: 1, meat: 0 });
+    expect(moved).toEqual({ wood: 4, stone: 0, iron: 1, meat: 0, leather: 0 });
     expect(bag.total).toBe(0);
     expect(stock.items.wood).toBe(4);
   });

@@ -1,6 +1,15 @@
 import type { Amounts, Resource } from './inventory';
 
-export type ToolId = 'stone_axe' | 'iron_axe' | 'stone_pick' | 'iron_pick' | 'spear' | 'iron_sword';
+/** Non-stacking gear: tools, weapons and armour (all wear out). */
+export type ToolId =
+  | 'stone_axe'
+  | 'iron_axe'
+  | 'stone_pick'
+  | 'iron_pick'
+  | 'spear'
+  | 'iron_sword'
+  | 'leather_armor'
+  | 'iron_armor';
 /** Anything that can sit in an inventory slot. */
 export type ItemId = Resource | ToolId;
 
@@ -21,13 +30,23 @@ export interface ItemDef {
     /** Melee reach bonus, in tiles. */
     reach?: number;
   };
+  /** Armour: share of incoming damage absorbed, and hits it lasts. */
+  armor?: { reduction: number; durability: number };
 }
+
+/** How many uses a piece of gear has (tools/weapons: swings or units; armour: hits taken). */
+export const maxDurability = (item: ItemId): number | undefined =>
+  ITEM_DEFS[item].tool?.durability ?? ITEM_DEFS[item].armor?.durability;
+export const isArmor = (item: ItemId) => ITEM_DEFS[item].armor !== undefined;
 
 export const ITEM_DEFS: Record<ItemId, ItemDef> = {
   wood: { label: 'Madeira', weight: 2, maxStack: 20 },
   stone: { label: 'Pedra', weight: 3, maxStack: 20 },
   iron: { label: 'Ferro', weight: 4, maxStack: 20 },
   meat: { label: 'Carne', weight: 1, maxStack: 20 },
+  leather: { label: 'Couro', weight: 1, maxStack: 20 },
+  leather_armor: { label: 'Armadura de couro', weight: 4, maxStack: 1, armor: { reduction: 0.3, durability: 60 } },
+  iron_armor: { label: 'Armadura de ferro', weight: 8, maxStack: 1, armor: { reduction: 0.55, durability: 150 } },
   stone_axe: { label: 'Machado de pedra', weight: 2, maxStack: 1, tool: { type: 'axe', speed: 1.6, damage: 2, durability: 80 } },
   iron_axe: { label: 'Machado de ferro', weight: 3, maxStack: 1, tool: { type: 'axe', speed: 2.4, damage: 3, durability: 200 } },
   stone_pick: {
@@ -58,14 +77,28 @@ export interface Recipe {
   item: ToolId;
   cost: Partial<Amounts>;
   description: string;
+  /** Game seconds a smith needs (at productivity 1). */
+  seconds: number;
 }
 
 /** Crafting costs are paid from what you carry first, then the stockpile (like recruiting). */
 export const RECIPES: Recipe[] = [
-  { item: 'stone_axe', cost: { wood: 3, stone: 2 }, description: 'Corta árvores 1,6× mais rápido. Dano 2.' },
-  { item: 'stone_pick', cost: { wood: 3, stone: 3 }, description: 'Quebra pedra 1,6× mais rápido. Permite minerar ferro.' },
-  { item: 'spear', cost: { wood: 4, stone: 2 }, description: 'Arma. Dano 3, alcance maior.' },
-  { item: 'iron_axe', cost: { wood: 2, iron: 3 }, description: 'Corta árvores 2,4× mais rápido. Dano 3.' },
-  { item: 'iron_pick', cost: { wood: 2, iron: 3 }, description: 'Pedra e ferro 2,4× mais rápido.' },
-  { item: 'iron_sword', cost: { wood: 2, iron: 4 }, description: 'Arma. Dano 5.' },
+  { item: 'stone_axe', cost: { wood: 3, stone: 2 }, seconds: 40, description: 'Corta árvores 1,6× mais rápido. Dano 2.' },
+  {
+    item: 'stone_pick',
+    cost: { wood: 3, stone: 3 },
+    seconds: 40,
+    description: 'Quebra pedra 1,6× mais rápido. Permite minerar ferro.',
+  },
+  {
+    item: 'spear',
+    cost: { wood: 4, stone: 2 },
+    seconds: 40,
+    description: 'Arma e ferramenta do caçador. Dano 3, alcance maior.',
+  },
+  { item: 'iron_axe', cost: { wood: 2, iron: 3 }, seconds: 70, description: 'Corta árvores 2,4× mais rápido. Dano 3.' },
+  { item: 'iron_pick', cost: { wood: 2, iron: 3 }, seconds: 70, description: 'Pedra e ferro 2,4× mais rápido.' },
+  { item: 'iron_sword', cost: { wood: 2, iron: 4 }, seconds: 90, description: 'Arma. Dano 5.' },
+  { item: 'leather_armor', cost: { leather: 6 }, seconds: 60, description: 'Armadura: absorve 30% do dano.' },
+  { item: 'iron_armor', cost: { iron: 8, leather: 2 }, seconds: 120, description: 'Armadura: absorve 55% do dano.' },
 ];

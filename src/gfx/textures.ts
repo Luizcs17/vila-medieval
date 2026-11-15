@@ -283,6 +283,18 @@ const ICON_ROWS: Record<string, { rows: string[]; palette: Record<string, string
     rows: ['........', '..kkkk..', '.krrrrk.', 'krrwrrrk', 'krrrrRrk', 'kRrrrRRk', '.kRRRRk.', '..kkkk..'],
     palette: { k: '#2b1d14', r: '#c0453a', R: '#8e2e27', w: '#f0d0c0' },
   },
+  icon_leather: {
+    rows: ['........', '.k.kk.k.', 'kllllllk', '.klLlLk.', '.kllllk.', 'kllLlllk', '.k.kk.k.', '........'],
+    palette: { k: '#2b1d14', l: '#a0683a', L: '#7a4c28' },
+  },
+  icon_leather_armor: {
+    rows: ['.kk..kk.', 'kllkkllk', 'klllllLk', '.kllllk.', '.klLLlk.', '.kllllk.', '.kllllk.', '..kkkk..'],
+    palette: { k: '#2b1d14', l: '#9a6236', L: '#6e4424' },
+  },
+  icon_iron_armor: {
+    rows: ['.kk..kk.', 'kggkkggk', 'kgggggdk', '.kgwggk.', '.kggggk.', '.kgdgdk.', '.kggggk.', '..kkkk..'],
+    palette: { k: '#1f1d1b', g: '#b8bec6', d: '#7d838b', w: '#eef2f6' },
+  },
 };
 
 // ---------- buildings ----------
@@ -660,6 +672,17 @@ export function createPlaceholderTextures(scene: Phaser.Scene): void {
     roofR: '#2a3249',
     wallH: 18,
     roofH: 22,
+    door: true,
+    window: true,
+  });
+  isoBuilding(scene, 'bld_smithy', 2, {
+    roof: 'slate',
+    wallL: '#55504a',
+    wallR: '#423e39',
+    roofL: '#2e3036',
+    roofR: '#23252a',
+    wallH: 15,
+    roofH: 16,
     door: true,
     window: true,
   });

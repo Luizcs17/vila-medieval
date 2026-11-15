@@ -11,7 +11,9 @@ import {
 } from '../config';
 import { BUILDING_DEFS, type Building, type Buildings } from '../game/buildings';
 import { NODE_DEFS } from '../game/gathering';
+import { toolSpeed } from '../game/gear';
 import type { Resource } from '../game/inventory';
+import type { ToolId } from '../game/items';
 import { isStarving } from '../game/needs';
 import { type NpcData, productivity, soldierDamage, TIER_COLOR } from '../game/npcs';
 import { ensurePersonTextures } from '../gfx/people';
@@ -37,7 +39,13 @@ export interface NpcWorld {
   shoot(from: Npc, id: number, damage: number): boolean;
   /** Nearest carcass with meat within `r` tiles of (cx, cy). */
   findCarcass(cx: number, cy: number, r: number): Prey | null;
-  takeMeat(id: number, max: number): number;
+  takeMeat(id: number, max: number, faction?: number): number;
+  /** The tool this worker uses from its workplace's inventory ('none' if the job needs none, null if missing). */
+  toolFor(npc: Npc): ToolId | null | 'none';
+  /** One use of the worker's tool (it may wear out). */
+  useTool(npc: Npc, tool: ToolId): void;
+  /** Is this smithy forging right now (queue and materials)? */
+  smithyBusy(b: Building): boolean;
   /** Nearest thing hostile to `faction` within `r` tiles (aggressive animals, enemies at war). */
   findHostile(faction: number, gx: number, gy: number, r: number): Target | null;
   /** A soldier's blow lands on `target`. */
@@ -104,6 +112,8 @@ export class Npc {
   private shotTimer = 0;
   private repath = 0;
   private attackCd = 0;
+  /** Tool in use for the current job ('none' when the job needs none). */
+  private tool: ToolId | 'none' = 'none';
   private readonly key: string;
   /** Vertical bob offset for the marker, animated by a tween. */
   private readonly bob = { v: 0 };
@@ -308,7 +318,7 @@ export class Npc {
         this.walk(dt);
         return;
       }
-      const got = this.preyId !== null ? world.takeMeat(this.preyId, WORKER_LOAD - load) : 0;
+      const got = this.preyId !== null ? world.takeMeat(this.preyId, WORKER_LOAD - load, this.data.faction) : 0;
       if (got > 0) {
         this.carrying = { resource: 'meat', n: load + got };
         this.updateCarryIcon();
@@ -331,6 +341,7 @@ export class Npc {
       this.shotTimer += dt * this.workRate('hunting');
       if (this.shotTimer >= 2) {
         this.shotTimer = 0;
+        if (this.tool !== 'none') world.useTool(this, this.tool);
         if (world.shoot(this, prey.id, HUNTER_DAMAGE)) this.state = 'idle';
       }
       return;
@@ -492,6 +503,31 @@ export class Npc {
     }
   }
 
+  /** Smith: stand at the smithy and hammer while there's work. */
+  private smith(dt: number, world: NpcWorld, smithy: Building): void {
+    if (!this.isNextTo(smithy)) {
+      this.status = null;
+      if (this.path.length === 0) this.goNextTo(smithy, 4000);
+      this.walk(dt);
+      return;
+    }
+    this.path = [];
+    if (world.smithyBusy(smithy)) {
+      this.status = 'Forjando';
+      const f = footprintOf(smithy);
+      this.sprite.setFlipX(f.x - f.y < this.gx - this.gy);
+      this.animateWork(dt);
+    } else {
+      this.status = 'Fila vazia ou faltam materiais';
+      this.stopWalking();
+    }
+  }
+
+  /** True when standing at building `b` (used for smiths' presence). */
+  isAt(b: Building): boolean {
+    return this.isNextTo(b) && !this.indoors;
+  }
+
   /** Path to any walkable tile within `r` tiles of (x, y). */
   private goNear(x: number, y: number, r: number, budget = 2500): boolean {
     const tx = Math.floor(x);
@@ -550,6 +586,18 @@ export class Npc {
 
   private work(dt: number, world: NpcWorld, workplace: Building): void {
     const job = BUILDING_DEFS[workplace.type].job!;
+    // Productive jobs need a tool from the building's inventory.
+    const tool = world.toolFor(this);
+    if (tool === null) {
+      this.live(dt, world);
+      this.status = 'Sem ferramenta no prédio';
+      return;
+    }
+    this.tool = tool;
+    if (job.skill === 'smithing') {
+      this.smith(dt, world, workplace);
+      return;
+    }
     if (job.skill === 'hunting') {
       this.hunt(dt, world, workplace);
       return;
@@ -600,10 +648,11 @@ export class Npc {
       }
       this.faceTile(this.node);
       this.animateWork(dt);
-      this.workTimer += dt * this.workRate(job.skill);
+      this.workTimer += dt * this.workRate(job.skill) * toolSpeed(this.tool);
       if (this.workTimer >= def.secondsPerUnit * WORKER_TIME_FACTOR) {
         this.workTimer = 0;
         const got = world.harvest(this.node);
+        if (got && this.tool !== 'none') world.useTool(this, this.tool);
         if (got) {
           if (this.carrying && this.carrying.resource !== got) this.carrying = null; // shouldn't happen: one job, one resource
           this.carrying = { resource: got, n: (this.carrying?.n ?? 0) + 1 };

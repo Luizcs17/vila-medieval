@@ -1,7 +1,10 @@
 import type Phaser from 'phaser';
 import { BEDS_PER_HOUSE } from '../config';
 import { BUILDING_DEFS, type Building } from '../game/buildings';
+import { ARMORS, recipeOf, WEAPONS, workplaceTools } from '../game/gear';
+import { ITEM_DEFS, RECIPES, type ToolId } from '../game/items';
 import { jobTitle, type NpcData, productivity, SKILL_LABEL, stars } from '../game/npcs';
+import { buildingStorage, type Storage, villageStorage } from '../game/storage';
 import { ensurePersonTextures } from '../gfx/people';
 import type { WorldScene } from '../scenes/WorldScene';
 
@@ -18,6 +21,7 @@ export class BuildingPanelUI {
   building: Building | null = null;
   private container: Phaser.GameObjects.Container | null = null;
   private signature = '';
+  private progress: Phaser.GameObjects.Rectangle | null = null;
 
   constructor(
     private readonly scene: Phaser.Scene,
@@ -44,8 +48,12 @@ export class BuildingPanelUI {
   update(): void {
     if (!this.building) return;
     // Rebuild only when the people involved change (cheap signature check).
-    const sig = this.world.population.villagers.map((n) => `${n.id}:${n.jobId}`).join(',');
-    if (sig !== this.signature) this.rebuild();
+    if (this.sig() !== this.signature) this.rebuild();
+    const b = this.building;
+    if (this.progress && b.queue?.[0]) {
+      const r = recipeOf(b.queue[0]);
+      this.progress.width = Math.max(1, (W - 2 * PAD) * Math.min(1, (b.craft ?? 0) / r.seconds));
+    }
   }
 
   layout(width: number, height: number): void {
@@ -54,12 +62,103 @@ export class BuildingPanelUI {
     this.container.setPosition(Math.round((width - W) / 2), Math.round((height - h) / 2));
   }
 
+  /** What the panel shows: people, gear and inventories. */
+  private sig(): string {
+    const b = this.building!;
+    const f = this.world.factions[b.faction];
+    return [
+      this.world.population.villagers.map((n) => `${n.id}:${n.jobId}:${n.weapon}:${n.armor}`).join(','),
+      JSON.stringify(b.storage),
+      (b.queue ?? []).join(','),
+      b.paid,
+      JSON.stringify(f.tools),
+      JSON.stringify(f.stock.items),
+    ].join('|');
+  }
+
+  private button(
+    items: Phaser.GameObjects.GameObject[],
+    x: number,
+    y: number,
+    w: number,
+    text: string,
+    color: number,
+    onClick: () => void,
+  ) {
+    const s = this.scene;
+    const bg = s.add.rectangle(x, y, w, 24, color, 1).setOrigin(0).setStrokeStyle(1, 0x8a6a3a);
+    bg.setInteractive({ useHandCursor: true }).on('pointerdown', onClick);
+    items.push(bg, s.add.text(x + w / 2, y + 12, text, { ...TEXT, fontSize: '11px' }).setOrigin(0.5));
+  }
+
+  /** Smithy: recipes to queue, the queue and progress. Returns the new y. */
+  private smithy(items: Phaser.GameObjects.GameObject[], b: Building, y: number, village: Storage): number {
+    const s = this.scene;
+    items.push(s.add.text(PAD, y, 'Encomendar (custo sai do estoque da vila)', { ...TEXT, fontSize: '13px', color: '#cdb98e' }));
+    y += 20;
+    const colW = (W - 2 * PAD - 8) / 2;
+    RECIPES.forEach((r, i) => {
+      const x = PAD + (i % 2) * (colW + 8);
+      const ry = y + Math.floor(i / 2) * 28;
+      const cost = Object.entries(r.cost)
+        .map(([k, n]) => `${n} ${ITEM_DEFS[k as ToolId].label.toLowerCase()}`)
+        .join(', ');
+      const ok = Object.entries(r.cost).every(([k, n]) => village.have(k as ToolId) >= (n ?? 0));
+      const bg = s.add
+        .rectangle(x, ry, colW, 26, ok ? 0x2e3a24 : 0x2a2420, 1)
+        .setOrigin(0)
+        .setStrokeStyle(1, 0x6a5232);
+      bg.setInteractive({ useHandCursor: true }).on('pointerdown', () => {
+        this.world.queueCraft(b, r.item);
+        this.rebuild();
+      });
+      items.push(
+        bg,
+        s.add.image(x + 12, ry + 13, `icon_${r.item}`).setScale(2),
+        s.add.text(x + 24, ry + 1, ITEM_DEFS[r.item].label, { ...TEXT, fontSize: '11px' }),
+        s.add.text(x + 24, ry + 13, `${cost} · ${r.seconds}s`, { ...TEXT, fontSize: '10px', color: ok ? '#a8c890' : '#a8977a' }),
+      );
+    });
+    y += Math.ceil(RECIPES.length / 2) * 28 + 6;
+    const queue = b.queue ?? [];
+    items.push(
+      s.add.text(PAD, y, queue.length ? `Fila (${queue.length}/8) · clique para cancelar` : 'Fila vazia', {
+        ...TEXT,
+        fontSize: '12px',
+        color: '#cdb98e',
+      }),
+    );
+    y += 18;
+    queue.forEach((t, i) => {
+      const x = PAD + i * 32;
+      const slot = s.add
+        .rectangle(x, y, 28, 28, i === 0 ? 0x4a3a1e : 0x2a2420, 1)
+        .setOrigin(0)
+        .setStrokeStyle(1, 0x8a6a3a);
+      slot.setInteractive({ useHandCursor: true }).on('pointerdown', () => {
+        this.world.cancelCraft(b, i);
+        this.rebuild();
+      });
+      items.push(slot, s.add.image(x + 14, y + 14, `icon_${t}`).setScale(2));
+    });
+    if (queue.length) {
+      y += 32;
+      items.push(s.add.rectangle(PAD, y, W - 2 * PAD, 5, 0x2a2420).setOrigin(0));
+      this.progress = s.add.rectangle(PAD, y, 1, 5, 0xe0b860).setOrigin(0);
+      items.push(this.progress);
+      y += 8;
+    } else y += 6;
+    return y + 6;
+  }
+
   private rebuild(): void {
     const b = this.building!;
     const def = BUILDING_DEFS[b.type];
     const pop = this.world.population;
-    this.signature = pop.villagers.map((n) => `${n.id}:${n.jobId}`).join(',');
+    this.signature = this.sig();
     this.container?.destroy();
+    this.progress = null;
+    const village = villageStorage(this.world.factions[b.faction]);
     const s = this.scene;
     const items: Phaser.GameObjects.GameObject[] = [];
     let y = PAD;
@@ -104,9 +203,48 @@ export class BuildingPanelUI {
         items.push(s.add.text(PAD + 8, y, 'Ninguém trabalhando aqui.', { ...TEXT, fontSize: '12px', color: '#a8977a' }));
         y += 22;
       }
+      // Tools: one per worker, kept in the building's inventory.
+      if (job.tools?.length) {
+        const have = workplaceTools(b).length;
+        items.push(
+          s.add.text(PAD, y + 4, `Ferramentas ${have}/${job.slots}: ${job.tools.map((t) => ITEM_DEFS[t].label).join(' ou ')}`, {
+            ...TEXT,
+            fontSize: '12px',
+            color: have < workers.length ? '#ff9a7a' : '#a8c890',
+            wordWrap: { width: W - 2 * PAD - 140 },
+          }),
+        );
+        this.button(items, W - PAD - 130, y, 130, 'Trazer do estoque', 0x3a3228, () => {
+          if (this.world.stockWorkplace(b) === 0)
+            this.world.toast('Não há essas ferramentas no estoque. Faça no Ferreiro (ou com C).', '#ffb070');
+          this.rebuild();
+        });
+        y += 34;
+      }
+      if (b.type === 'smithy') y = this.smithy(items, b, y, village);
+      const soldier = b.type === 'barracks';
       for (const w of workers) {
         const status = this.world.npcStatus(w.id);
-        row(w, `${w.name} · ${job.title[w.gender]}`, status ?? rate(w), {
+        if (soldier) {
+          const cycle = (slot: 'weapon' | 'armor', list: ToolId[]) => {
+            const options: (ToolId | null)[] = [
+              null,
+              ...list.filter((t) => t === w[slot] || buildingStorage(b).have(t) + village.have(t) > 0),
+            ];
+            const next = options[(options.indexOf(w[slot] ?? null) + 1) % options.length];
+            if (!this.world.equip(w, slot, next)) this.world.toast('Sem esse equipamento no quartel ou no estoque.', '#ffb070');
+            this.rebuild();
+          };
+          const short = (t: ToolId | null | undefined, none: string) => (t ? ITEM_DEFS[t].label.split(' ')[0] : none);
+          this.button(items, W - PAD - 92 - 136, y + 4, 64, short(w.weapon, 'Sem arma'), 0x2e3a4a, () =>
+            cycle('weapon', WEAPONS),
+          );
+          this.button(items, W - PAD - 92 - 68, y + 4, 64, short(w.armor, 'Sem arm.'), 0x2e3a4a, () => cycle('armor', ARMORS));
+        }
+        const sub = soldier
+          ? `${stars(w.skills.combat)} · ${w.armor ? ITEM_DEFS[w.armor].label : 'sem armadura'}`
+          : (status ?? rate(w));
+        row(w, `${w.name} · ${job.title[w.gender]}`, sub, {
           text: 'Dispensar',
           color: 0x5a2a24,
           onClick: () => {
@@ -130,7 +268,7 @@ export class BuildingPanelUI {
         y += 22;
       }
       const full = workers.length >= job.slots;
-      for (const n of free.slice(0, 6)) {
+      for (const n of free.slice(0, b.type === 'smithy' || soldier ? 3 : 6)) {
         row(n, `${n.name}`, rate(n), {
           text: full ? 'Lotado' : 'Contratar',
           color: full ? 0x3a3228 : 0x3c6a2c,
@@ -153,6 +291,17 @@ export class BuildingPanelUI {
     }
 
     y += 8;
+    if (b.type === 'barracks') {
+      items.push(
+        s.add.text(PAD, y, 'Clique na arma/armadura de um soldado para trocar (vem do quartel ou do estoque).', {
+          ...TEXT,
+          fontSize: '11px',
+          color: '#a8977a',
+          wordWrap: { width: W - 2 * PAD },
+        }),
+      );
+      y += 30;
+    }
     // Every building has its own inventory.
     const inv = s.add.rectangle(PAD, y, 170, 28, 0x3a3228, 1).setOrigin(0).setStrokeStyle(1, 0x8a6a3a);
     inv.setInteractive({ useHandCursor: true }).on('pointerdown', () => {

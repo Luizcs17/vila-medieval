@@ -2,6 +2,16 @@
 
 Each milestone from `docs/GDD.md` is a minor version.
 
+## 1.11.0: Milestone 21, smithy, tools, weapons and armour
+
+- New building: Ferreiro (smithy; 20 wood, 20 stone). Employs up to 2 smiths, rated by the new Forja skill. In its panel you queue up to 8 items; each one takes its materials from the village stock when work starts and a set time to forge (40 s stone tools and spear, 70 s iron tools, 90 s sword, 60 s leather armour, 120 s iron armour, faster with better smiths). Finished items go to the village stock. Click a queued item to cancel it (started work is refunded).
+- Productive buildings need tools in their inventory, one per worker: lumberjack an axe, quarry and mine a pick, hunter a spear. Without one, the worker stands idle ("Sem ferramenta no prédio"). Iron tools work faster than stone ones, and tools wear out with use. The panel shows "Ferramentas n/slots" with a "Trazer do estoque" button.
+- Soldiers get weapons and armour: in the barracks panel, click a soldier's weapon or armour button to cycle through what's in the barracks or the village stock. Weapons add their damage; whatever a soldier takes off goes back to the barracks.
+- Armour: leather (absorbs 30% of damage, 60 hits) and iron (55%, 150 hits). The player wears the best armour they carry automatically.
+- New resource: leather (Couro). Dead deer, boars, wolves and bears can be skinned with E; hunters skin their prey and the leather goes to the stock.
+- Rival villages start with tools and spears, and replace worn tools from their stock.
+- Old saves still load: existing workplaces receive one basic tool per job slot.
+
 ## 1.10.0: Milestone 20, storage everywhere
 
 - Every building has its own inventory (saved with the game). Workplaces and houses show an "Inventário" button in their panel; towers, walls and gates open theirs with E.

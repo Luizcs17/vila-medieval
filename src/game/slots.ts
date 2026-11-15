@@ -1,5 +1,5 @@
 import { type Amounts, emptyAmounts, RESOURCES, type Resource } from './inventory';
-import { ALL_ITEMS, ITEM_DEFS, type ItemId } from './items';
+import { ALL_ITEMS, ITEM_DEFS, type ItemId, maxDurability } from './items';
 
 export type { ItemId } from './items';
 
@@ -68,8 +68,8 @@ export class SlotInventory {
     for (let i = 0; i < this.slots.length && left > 0; i++) {
       if (this.slots[i] === null) {
         const put = Math.min(left, max);
-        const tool = ITEM_DEFS[item].tool;
-        this.slots[i] = tool ? { item, count: put, durability: tool.durability } : { item, count: put };
+        const wear = maxDurability(item);
+        this.slots[i] = wear !== undefined ? { item, count: put, durability: wear } : { item, count: put };
         left -= put;
       }
     }

@@ -39,6 +39,18 @@ import {
 import { createFactions, type Faction, PLAYER_FACTION, type TradePolicy } from '../game/factions';
 import { ageOf, Families, fullName, isAdult, PLAYER_ID } from '../game/families';
 import { Gatherer, NODE_DEFS, nearestTile, ResourceNodes } from '../game/gathering';
+import {
+  absorb,
+  basicTool,
+  grantStarterTools,
+  recipeOf,
+  smithyCanWork,
+  tickSmithy,
+  toolForWorker,
+  unqueue,
+  wearWorkplaceTool,
+  workplaceTools,
+} from '../game/gear';
 import { Inventory, RESOURCE_LABEL, RESOURCES, type Resource } from '../game/inventory';
 import { ITEM_DEFS, type ItemId, RECIPES, type Recipe, type ToolId, type ToolType } from '../game/items';
 import { isStarving, updateNeeds } from '../game/needs';
@@ -51,6 +63,7 @@ import {
   Population,
   payFrom,
   pickSpawnTile,
+  productivity,
   describeCost as summarizeCost,
   WandererSpawner,
 } from '../game/npcs';
@@ -111,6 +124,7 @@ const BUILDING_KEY: Record<BuildingType, string> = {
   embassy: 'bld_embassy',
   road: 'road',
   market: 'bld_market',
+  smithy: 'bld_smithy',
 };
 
 /** Ground is drawn beneath everything; objects and characters are depth-sorted by their screen y. */
@@ -306,7 +320,28 @@ export class WorldScene extends Phaser.Scene {
       prey: (id) => this.wildlife.prey(id),
       shoot: (from, id, dmg) => this.wildlife.shoot(from, id, dmg),
       findCarcass: (cx, cy, r) => this.wildlife.findCarcass(cx, cy, r),
-      takeMeat: (id, max) => this.wildlife.takeMeat(id, max),
+      takeMeat: (id, max, faction) => {
+        const n = this.wildlife.takeMeat(id, max);
+        // Hunters skin their prey: the leather goes straight to their village's stock.
+        if (faction !== undefined) this.factions[faction]?.stock.add('leather', this.wildlife.takeLeather(id, 99));
+        return n;
+      },
+      toolFor: (npc) => {
+        const b = this.buildings.list.find((x) => x.id === npc.data.jobId);
+        if (!b) return 'none';
+        const index = this.population
+          .workers(b.id)
+          .map((n) => n.id)
+          .sort((a, c) => a - c)
+          .indexOf(npc.data.id);
+        return toolForWorker(b, Math.max(0, index));
+      },
+      useTool: (npc, tool) => {
+        const b = this.buildings.list.find((x) => x.id === npc.data.jobId);
+        if (b && wearWorkplaceTool(b, tool) && b.faction === PLAYER_FACTION)
+          this.toast(`${ITEM_DEFS[tool].label} de ${BUILDING_DEFS[b.type].name} se gastou.`, '#ffb070');
+      },
+      smithyBusy: (b) => smithyCanWork(b, villageStorage(this.factions[b.faction])),
       findHostile: (f, gx, gy, r) => this.findHostile(f, gx, gy, r),
       atWar: (a, b) => this.atWar(a, b),
       raidTarget: (npc, target) => this.raidTarget(npc, target),
@@ -338,6 +373,8 @@ export class WorldScene extends Phaser.Scene {
     if (save) {
       this.nodes.restore(save.nodes);
       this.buildings.restore(save.buildings);
+      // Saves from before M21: workplaces get the tools their jobs now need.
+      if (save.version < 7) for (const b of this.buildings.list) grantStarterTools(b);
     }
     this.drawMap();
 
@@ -349,7 +386,12 @@ export class WorldScene extends Phaser.Scene {
       this.addBuildingView(this.buildings.place('stockpile', sx + 2, sy - 1, true));
       this.factions[0].center = { x: sx + 2, y: sy - 1 };
       for (const f of this.factions)
-        if (!f.isPlayer) for (const b of foundTown(this.buildings, f, Math.random)) this.addBuildingView(b);
+        if (!f.isPlayer)
+          for (const b of foundTown(this.buildings, f, Math.random)) {
+            grantStarterTools(b);
+            if (b.type === 'barracks') b.storage.spear = 2;
+            this.addBuildingView(b);
+          }
       for (const i of buildRoadNetwork(
         this.map,
         this.factions.map((f) => f.center),
@@ -597,15 +639,21 @@ export class WorldScene extends Phaser.Scene {
   private hurtHuman(target: Human, damage: number, source: string): void {
     if (target.kind === 'player') {
       const p = this.player.sprite;
+      const armor = this.wornArmor();
+      if (armor !== null) {
+        damage = absorb(damage, this.inventory.slots[armor]!.item as ToolId, Math.random);
+        if (this.inventory.wear(armor)) this.toast('Sua armadura se desfez!', '#ffb070');
+      }
       this.popup(p.x, p.y - p.height, `-${damage}`, '#ff6a5a');
       p.setTint(0xff7060);
       this.time.delayedCall(150, () => p.clearTint());
       this.cameras.main.shake(80, 0.004);
-      if (this.stats.hurt(damage)) this.knockOut(source);
+      if (damage > 0 && this.stats.hurt(damage)) this.knockOut(source);
       return;
     }
     const npc = this.npcs.get(target.id);
     if (!npc) return;
+    damage = absorb(damage, npc.data.armor, Math.random);
     npc.data.hp -= damage;
     npc.sprite.setTint(0xff7060);
     this.time.delayedCall(150, () => npc.sprite.clearTint());
@@ -613,6 +661,102 @@ export class WorldScene extends Phaser.Scene {
     if (npc.data.hp <= 0) {
       const mine = npc.data.faction === PLAYER_FACTION;
       this.removeVillager(npc.data.id, mine ? `${npc.data.name} foi morto por ${source}.` : null);
+    }
+  }
+
+  /** Slot of the best armour the player carries (worn automatically), or null. */
+  wornArmor(): number | null {
+    let best: number | null = null;
+    this.inventory.slots.forEach((s, i) => {
+      const a = s ? ITEM_DEFS[s.item].armor : undefined;
+      if (a && (best === null || a.reduction > ITEM_DEFS[this.inventory.slots[best]!.item].armor!.reduction)) best = i;
+    });
+    return best;
+  }
+
+  // ---------- gear: smithies, workplace tools, soldiers ----------
+
+  /** Smiths standing at their smithy forge its queue; finished gear lands in the smithy's inventory. */
+  private updateSmithies(worldDt: number): void {
+    for (const b of this.buildings.list) {
+      if (b.type !== 'smithy' || !b.built) continue;
+      let workforce = 0;
+      for (const n of this.population.workers(b.id)) {
+        const npc = this.npcs.get(n.id);
+        if (npc?.isAt(b) && !this.clock.isNight) workforce += productivity(n, 'smithing');
+      }
+      const f = this.factions[b.faction];
+      const e = tickSmithy(b, workforce, worldDt, villageStorage(f), villageStorage(f));
+      if (e?.type === 'made' && f.isPlayer)
+        this.toast(`Ferreiro: ${ITEM_DEFS[e.item].label} pronto(a), guardado(a) no estoque.`, '#a8ffa8');
+      if (e?.type === 'blocked' && f.isPlayer && !b.blockedNotice) {
+        b.blockedNotice = true;
+        this.toast(`Ferreiro: faltam materiais para ${ITEM_DEFS[e.item].label}.`, '#ffb070');
+      }
+      if (e?.type !== 'blocked') b.blockedNotice = false;
+    }
+  }
+
+  /** Adds an item to a smithy's production queue. */
+  queueCraft(b: Building, item: ToolId): void {
+    b.queue ??= [];
+    if (b.queue.length < 8) b.queue.push(item);
+  }
+
+  /** Removes queue entry `i` (refunding started work). */
+  cancelCraft(b: Building, i: number): void {
+    unqueue(b, i, villageStorage(this.factions[b.faction]));
+  }
+
+  /** Moves accepted tools from the village warehouse into a workplace until every worker has one. */
+  stockWorkplace(b: Building): number {
+    const job = BUILDING_DEFS[b.type].job;
+    const village = villageStorage(this.factions[b.faction]);
+    let moved = 0;
+    for (const t of job?.tools ?? []) {
+      const want = job!.slots - workplaceTools(b).length;
+      if (want <= 0) break;
+      const k = village.remove(t, Math.min(want, village.have(t)));
+      if (k > 0) buildingStorage(b).add(t, k);
+      moved += k;
+    }
+    return moved;
+  }
+
+  /** Gives a soldier a weapon or armour (null takes it off). Gear comes from the barracks, then the village. */
+  equip(npc: NpcData, slot: 'weapon' | 'armor', item: ToolId | null): boolean {
+    const barracks = this.buildings.list.find((x) => x.id === npc.jobId);
+    const village = villageStorage(this.factions[npc.faction]);
+    const store = barracks ? buildingStorage(barracks) : village;
+    if (item) {
+      const from = store.have(item) > 0 ? store : village.have(item) > 0 ? village : null;
+      if (!from) return false;
+      from.remove(item, 1);
+    }
+    const old = npc[slot];
+    if (old) store.add(old, 1);
+    npc[slot] = item;
+    return true;
+  }
+
+  /** Rival towns keep their workplaces tooled and soldiers armed, paying recipe costs from their stock. */
+  private supplyTown(f: Faction): void {
+    for (const b of this.buildings.list) {
+      if (b.faction !== f.id) continue;
+      const job = BUILDING_DEFS[b.type].job;
+      const t = basicTool(b);
+      if (job && t && workplaceTools(b).length < this.population.workers(b.id).length) {
+        if ((f.tools[t] ?? 0) > 0) f.tools[t]!--;
+        else if (!f.stock.pay(recipeOf(t).cost)) continue;
+        b.storage[t] = (b.storage[t] ?? 0) + 1;
+      }
+    }
+    for (const n of this.soldiers(f.id)) {
+      if (n.weapon) continue;
+      const b = this.buildings.list.find((x) => x.id === n.jobId);
+      if (b && (b.storage.spear ?? 0) > 0) b.storage.spear!--;
+      else if (!f.stock.pay(recipeOf('spear').cost)) continue;
+      n.weapon = 'spear';
     }
   }
 
@@ -1224,6 +1368,7 @@ export class WorldScene extends Phaser.Scene {
         if (b.faction !== f.id || !BUILDING_DEFS[b.type].job) continue;
         for (const n of this.population.unemployed(undefined, f.id)) if (!this.population.assign(n, b)) break;
       }
+      this.supplyTown(f);
     }
   }
 
@@ -1240,6 +1385,7 @@ export class WorldScene extends Phaser.Scene {
       }
     }
     this.updateTowns(worldDt);
+    this.updateSmithies(worldDt);
     this.updateFamilies(worldDt);
     this.updateDiplomacy(worldDt);
     this.updateTrade(worldDt);
@@ -1319,7 +1465,7 @@ export class WorldScene extends Phaser.Scene {
     this.talkingTo = null;
   }
 
-  private toast(text: string, color?: string): void {
+  toast(text: string, color?: string): void {
     this.events.emit('toast', { text, color } satisfies ToastEvent);
   }
 
@@ -1532,14 +1678,18 @@ export class WorldScene extends Phaser.Scene {
     if (carcass) {
       this.gatherer.tick(dt, null, false, 1);
       const s = carcass.sprite;
-      const room = this.inventory.space('meat');
+      const meat = carcass.data.meat;
+      const leather = carcass.data.leather ?? 0;
+      const room = (meat > 0 ? this.inventory.space('meat') : 0) + (leather > 0 ? this.inventory.space('leather') : 0);
       const name = carcass.def.name.toLowerCase();
-      const text = room > 0 ? `[E] Pegar carne de ${name} (${carcass.data.meat})` : 'Peso máximo! Leve ao estoque';
+      const what = [meat > 0 ? `${meat} carne` : '', leather > 0 ? `${leather} couro` : ''].filter(Boolean).join(', ');
+      const text = room > 0 ? `[E] Esfolar ${name} (${what})` : 'Peso máximo! Leve ao estoque';
       this.interaction = { x: s.x, y: s.y - 14, text, progress: null };
       if (room > 0 && Phaser.Input.Keyboard.JustDown(this.keys.E)) {
-        const n = this.wildlife.takeMeat(carcass.data.id, room);
-        this.inventory.add('meat', n);
-        this.popup(s.x, s.y - 14, `+${n} Carne`);
+        const id = carcass.data.id;
+        const m = meat > 0 ? this.inventory.add('meat', this.wildlife.takeMeat(id, this.inventory.space('meat'))) : 0;
+        const l = leather > 0 ? this.inventory.add('leather', this.wildlife.takeLeather(id, this.inventory.space('leather'))) : 0;
+        this.popup(s.x, s.y - 14, [m ? `+${m} Carne` : '', l ? `+${l} Couro` : ''].filter(Boolean).join('  '));
       }
       return;
     }
