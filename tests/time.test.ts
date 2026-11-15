@@ -21,7 +21,7 @@ describe('clock', () => {
   });
 
   it('is clear at noon and dark at midnight', () => {
-    expect(ambientAt(12).alpha).toBe(0);
+    expect(ambientAt(12).alpha).toBeLessThan(0.2); // a dim, warm day
     expect(ambientAt(0).alpha).toBeGreaterThan(0.4);
     const dusk = ambientAt(19).alpha;
     expect(dusk).toBeGreaterThan(0);

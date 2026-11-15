@@ -7,7 +7,7 @@ import type { WorldScene } from '../scenes/WorldScene';
 const ROW_W = 340;
 const ROW_H = 48;
 const PAD = 10;
-const TEXT = { fontFamily: 'monospace', color: '#f3e9d2' } satisfies Phaser.Types.GameObjects.Text.TextStyle;
+const TEXT = { fontFamily: '"Alegreya", Georgia, serif', color: '#e8d8b0' } satisfies Phaser.Types.GameObjects.Text.TextStyle;
 
 interface Row {
   bg: Phaser.GameObjects.Rectangle;
@@ -31,28 +31,30 @@ export class CraftingUI {
     this.container = scene.add.container(12, 110).setDepth(90);
     const height = PAD * 2 + 22 + RECIPES.length * (ROW_H + 4);
     const panel = scene.add
-      .rectangle(0, 0, ROW_W + PAD * 2, height, 0x1a140e, 0.94)
+      .rectangle(0, 0, ROW_W + PAD * 2, height, 0x140f0a, 0.94)
       .setOrigin(0)
-      .setStrokeStyle(2, 0x5a4630)
+      .setStrokeStyle(2, 0x8a6a3a)
       .setInteractive();
-    const title = scene.add.text(PAD, PAD - 2, 'Criar  (C fecha) · usa o que você carrega + estoque', {
+    const title = scene.add.text(PAD, PAD - 4, 'Criar  (C fecha) · usa o que você carrega + estoque', {
       ...TEXT,
-      fontSize: '12px',
+      fontFamily: '"MedievalSharp", "Alegreya", Georgia, serif',
+      color: '#e0b860',
+      fontSize: '14px',
     });
     this.container.add([panel, title]);
 
     RECIPES.forEach((recipe, k) => {
       const y = PAD + 22 + k * (ROW_H + 4);
-      const bg = scene.add.rectangle(PAD, y, ROW_W, ROW_H, 0x2a2118, 0.95).setOrigin(0).setStrokeStyle(1, 0x5a4630);
+      const bg = scene.add.rectangle(PAD, y, ROW_W, ROW_H, 0x241a12, 0.95).setOrigin(0).setStrokeStyle(1, 0x8a6a3a);
       bg.setInteractive({ useHandCursor: true })
         .on('pointerover', () => bg.setStrokeStyle(1, 0xffe08a))
-        .on('pointerout', () => bg.setStrokeStyle(1, 0x5a4630))
+        .on('pointerout', () => bg.setStrokeStyle(1, 0x8a6a3a))
         .on('pointerdown', (p: Phaser.Input.Pointer) => {
           if (p.leftButtonDown()) this.world.craftItem(recipe);
         });
       const icon = scene.add.image(PAD + 16, y + ROW_H / 2, `icon_${recipe.item}`).setScale(3);
       const name = scene.add.text(PAD + 34, y + 6, ITEM_DEFS[recipe.item].label, { ...TEXT, fontSize: '13px' });
-      const desc = scene.add.text(PAD + 34, y + 26, recipe.description, { ...TEXT, fontSize: '10px', color: '#a89a80' });
+      const desc = scene.add.text(PAD + 34, y + 26, recipe.description, { ...TEXT, fontSize: '10px', color: '#a8977a' });
       const objects: Phaser.GameObjects.GameObject[] = [bg, icon, name, desc];
       const costs: Row['costs'] = [];
       let cx = PAD + ROW_W - 8;
@@ -86,10 +88,10 @@ export class CraftingUI {
       const row = this.rows[k];
       for (const c of row.costs) {
         const have = w.inventory.count(c.r) + w.stockpile.items[c.r];
-        c.text.setColor(have >= c.need ? '#f3e9d2' : '#ff8070');
+        c.text.setColor(have >= c.need ? '#e8d8b0' : '#ff8070');
       }
       const ok = checkCraft(recipe, w.inventory, w.stockpile) === 'ok';
-      row.name.setColor(ok ? '#f3e9d2' : '#8a7e68');
+      row.name.setColor(ok ? '#e8d8b0' : '#8a7e68');
     });
   }
 }

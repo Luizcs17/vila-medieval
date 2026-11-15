@@ -8,7 +8,7 @@ import type { Stack } from './slots';
 
 export const SAVE_KEY = 'vila-medieval-save';
 /** Bump when the shape changes; older saves are then ignored instead of half-loaded. */
-export const SAVE_VERSION = 4;
+export const SAVE_VERSION = 5;
 
 /** Everything needed to rebuild a game. The map layout itself comes from the fixed seed. */
 export interface SaveData {

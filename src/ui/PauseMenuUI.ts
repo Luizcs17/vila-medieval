@@ -4,7 +4,7 @@ import type { WorldScene } from '../scenes/WorldScene';
 
 const W = 380;
 const PAD = 18;
-const TEXT = { fontFamily: 'monospace', color: '#f3e9d2' } satisfies Phaser.Types.GameObjects.Text.TextStyle;
+const TEXT = { fontFamily: '"Alegreya", Georgia, serif', color: '#e8d8b0' } satisfies Phaser.Types.GameObjects.Text.TextStyle;
 
 const CONTROLS = [
   'WASD / setas: andar   Shift: correr',
@@ -57,7 +57,16 @@ export class PauseMenuUI {
     const s = this.scene;
     const items: Phaser.GameObjects.GameObject[] = [];
     let y = PAD;
-    items.push(s.add.text(W / 2, y, 'Pausado', { ...TEXT, fontSize: '20px' }).setOrigin(0.5, 0));
+    items.push(
+      s.add
+        .text(W / 2, y, 'Pausado', {
+          ...TEXT,
+          fontFamily: '"MedievalSharp", "Alegreya", Georgia, serif',
+          fontSize: '26px',
+          color: '#e0b860',
+        })
+        .setOrigin(0.5, 0),
+    );
     y += 34;
 
     const save = readSave();
@@ -67,7 +76,7 @@ export class PauseMenuUI {
         .text(W / 2, y, when ? `Último salvamento: ${when}` : 'Nenhum jogo salvo ainda', {
           ...TEXT,
           fontSize: '11px',
-          color: '#a89a80',
+          color: '#a8977a',
         })
         .setOrigin(0.5, 0),
     );
@@ -77,9 +86,9 @@ export class PauseMenuUI {
       const bg = s.add
         .rectangle(PAD, y, W - PAD * 2, 32, enabled ? color : 0x2a2420, 1)
         .setOrigin(0)
-        .setStrokeStyle(1, 0x5a4630);
+        .setStrokeStyle(1, 0x8a6a3a);
       const text = s.add
-        .text(W / 2, y + 16, label, { ...TEXT, fontSize: '13px', color: enabled ? '#f3e9d2' : '#6a604e' })
+        .text(W / 2, y + 16, label, { ...TEXT, fontSize: '13px', color: enabled ? '#e8d8b0' : '#6a604e' })
         .setOrigin(0.5);
       if (enabled) bg.setInteractive({ useHandCursor: true }).on('pointerdown', onClick);
       items.push(bg, text);
@@ -106,10 +115,10 @@ export class PauseMenuUI {
     );
 
     y += 6;
-    items.push(s.add.text(PAD, y, 'Controles', { ...TEXT, fontSize: '13px', color: '#cfc3a8' }));
+    items.push(s.add.text(PAD, y, 'Controles', { ...TEXT, fontSize: '13px', color: '#cdb98e' }));
     y += 20;
     for (const line of CONTROLS) {
-      items.push(s.add.text(PAD, y, line, { ...TEXT, fontSize: '11px', color: '#a89a80' }));
+      items.push(s.add.text(PAD, y, line, { ...TEXT, fontSize: '11px', color: '#a8977a' }));
       y += 16;
     }
     y += 8;
@@ -123,7 +132,7 @@ export class PauseMenuUI {
     );
     y += 30;
 
-    const bg = s.add.rectangle(0, 0, W, y, 0x1a140e, 0.97).setOrigin(0).setStrokeStyle(2, 0x5a4630).setInteractive();
+    const bg = s.add.rectangle(0, 0, W, y, 0x140f0a, 0.97).setOrigin(0).setStrokeStyle(2, 0x8a6a3a).setInteractive();
     const c = s.add.container(0, 0, [bg, ...items]).setDepth(300);
     c.setData('height', y);
     this.container = c;

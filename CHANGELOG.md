@@ -2,6 +2,14 @@
 
 Each milestone from `docs/GDD.md` is a minor version.
 
+## 1.6.0: Milestone 16, dark medieval look
+
+- Darker, earthier palette for ground, water, trees and rocks; dim warm days, deeper nights and a vignette around the screen.
+- Half-timbered houses with thatch, slate and plank roofs, and weathered walls; darker palisades and stone.
+- Medieval typography: bundled MedievalSharp (titles) and Alegreya (text) fonts, loaded before the game starts; dark oak panels with bronze trim and parchment-coloured text.
+- Villagers look different: skin tone, hair colour and style (short, long, tied, bald), beards, hoods, caps, straw hats, aprons, and 12 tunic and 5 trouser dyes, randomized per person. Children inherit skin and hair from their parents.
+- Save format v5.
+
 ## 1.5.0: Milestone 15, diplomacy, war and conquest
 
 - Relations with every village (-100..100; peace, alliance, war). They drift toward neutral, shared borders cause friction, and the AI declares wars, makes peace and forms alliances among the villages. Toward you it only proposes; answer in V → Diplomacia.

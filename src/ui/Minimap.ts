@@ -10,17 +10,17 @@ const PAD = 6;
 const TERRAIN_REFRESH = 2; // seconds
 
 const GROUND_COLOR: Record<Ground, string> = {
-  [Ground.Grass]: '#4f8a3c',
-  [Ground.Water]: '#2f6fa3',
-  [Ground.Sand]: '#d8c48a',
-  [Ground.Dirt]: '#7a6a55',
+  [Ground.Grass]: '#34502a',
+  [Ground.Water]: '#1e3a50',
+  [Ground.Sand]: '#8a7a58',
+  [Ground.Dirt]: '#4e4236',
 };
 const OBJ_COLOR: Partial<Record<Obj, string>> = {
-  [Obj.Tree]: '#2a5a22',
-  [Obj.Pine]: '#1f4a2c',
-  [Obj.Rock]: '#9a958e',
-  [Obj.Iron]: '#d0843f',
-  [Obj.Building]: '#a0703a',
+  [Obj.Tree]: '#1f3a1a',
+  [Obj.Pine]: '#17301f',
+  [Obj.Rock]: '#6a655e',
+  [Obj.Iron]: '#a8622e',
+  [Obj.Building]: '#7a5530',
 };
 
 /**
@@ -52,10 +52,14 @@ export class Minimap {
     this.frame = scene.add
       .rectangle(0, 0, this.w + PAD * 2, this.h + PAD * 2, 0x000000, 0.55)
       .setOrigin(0)
-      .setStrokeStyle(1, 0x5a4630);
+      .setStrokeStyle(1, 0x8a6a3a);
     this.image = scene.add.image(0, 0, 'minimap').setOrigin(0);
     this.dots = scene.add.graphics();
-    this.label = scene.add.text(0, 0, 'N: ocultar · M: mapa', { fontFamily: 'monospace', fontSize: '10px', color: '#a89a80' });
+    this.label = scene.add.text(0, 0, 'N: ocultar · M: mapa', {
+      fontFamily: '"Alegreya", Georgia, serif',
+      fontSize: '10px',
+      color: '#a8977a',
+    });
     this.paintTerrain();
   }
 

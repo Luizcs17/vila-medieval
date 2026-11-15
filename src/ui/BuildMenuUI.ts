@@ -6,7 +6,7 @@ const ROW_W = 300;
 const ROW_H = 40;
 const PAD = 10;
 
-const TEXT = { fontFamily: 'monospace', color: '#f3e9d2' } satisfies Phaser.Types.GameObjects.Text.TextStyle;
+const TEXT = { fontFamily: '"Alegreya", Georgia, serif', color: '#e8d8b0' } satisfies Phaser.Types.GameObjects.Text.TextStyle;
 
 interface Row {
   type: BuildingType;
@@ -29,26 +29,31 @@ export class BuildMenuUI {
     this.container = scene.add.container(12, 110).setDepth(90);
     const height = PAD * 2 + 22 + BUILD_MENU.length * (ROW_H + 4);
     const panel = scene.add
-      .rectangle(0, 0, ROW_W + PAD * 2, height, 0x1a140e, 0.94)
+      .rectangle(0, 0, ROW_W + PAD * 2, height, 0x140f0a, 0.94)
       .setOrigin(0)
-      .setStrokeStyle(2, 0x5a4630);
+      .setStrokeStyle(2, 0x8a6a3a);
     panel.setInteractive(); // swallow clicks so they don't place buildings underneath
-    const title = scene.add.text(PAD, PAD - 2, 'Construir  (B fecha)', { ...TEXT, fontSize: '14px' });
+    const title = scene.add.text(PAD, PAD - 2, 'Construir  (B fecha)', {
+      ...TEXT,
+      fontFamily: '"MedievalSharp", "Alegreya", Georgia, serif',
+      fontSize: '16px',
+      color: '#e0b860',
+    });
     this.container.add([panel, title]);
 
     BUILD_MENU.forEach((type, k) => {
       const def = BUILDING_DEFS[type];
       const y = PAD + 22 + k * (ROW_H + 4);
-      const bg = scene.add.rectangle(PAD, y, ROW_W, ROW_H, 0x2a2118, 0.95).setOrigin(0).setStrokeStyle(1, 0x5a4630);
+      const bg = scene.add.rectangle(PAD, y, ROW_W, ROW_H, 0x241a12, 0.95).setOrigin(0).setStrokeStyle(1, 0x8a6a3a);
       bg.setInteractive({ useHandCursor: true })
         .on('pointerover', () => bg.setFillStyle(0x3a2e20, 1))
-        .on('pointerout', () => bg.setFillStyle(0x2a2118, 0.95))
+        .on('pointerout', () => bg.setFillStyle(0x241a12, 0.95))
         .on('pointerdown', (p: Phaser.Input.Pointer) => {
           if (p.leftButtonDown()) onSelect(type);
         });
       const name = scene.add.text(PAD + 8, y + 4, `${def.name}  ${def.size}×${def.size}`, { ...TEXT, fontSize: '13px' });
       const info = def.near ? `Perto de ${def.near.label}` : def.description;
-      const sub = scene.add.text(PAD + 8, y + 22, info, { ...TEXT, fontSize: '10px', color: '#a89a80' });
+      const sub = scene.add.text(PAD + 8, y + 22, info, { ...TEXT, fontSize: '10px', color: '#a8977a' });
       const objects: Phaser.GameObjects.GameObject[] = [bg, name, sub];
       const costs: Row['costs'] = [];
       let cx = PAD + ROW_W - 8;
@@ -80,7 +85,7 @@ export class BuildMenuUI {
     if (!this.isOpen) return;
     for (const row of this.rows) {
       const cost = BUILDING_DEFS[row.type].cost;
-      for (const c of row.costs) c.text.setColor(this.stockpile.items[c.r] >= (cost[c.r] ?? 0) ? '#f3e9d2' : '#ff8070');
+      for (const c of row.costs) c.text.setColor(this.stockpile.items[c.r] >= (cost[c.r] ?? 0) ? '#e8d8b0' : '#ff8070');
     }
   }
 }

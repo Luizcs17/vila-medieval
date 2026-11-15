@@ -2,9 +2,9 @@ import { ALLIANCE_MIN, GIFT_COST, missionChance } from '../game/diplomacy';
 import { RESOURCE_LABEL, RESOURCES } from '../game/inventory';
 import type { ManagementUI } from './ManagementUI';
 
-const MUTED = '#a89a80';
+const MUTED = '#a8977a';
 const STATUS: Record<string, [string, string]> = {
-  peace: ['Paz', '#cfc3a8'],
+  peace: ['Paz', '#cdb98e'],
   alliance: ['Aliança', '#a8ffa8'],
   war: ['Guerra', '#ff6a5a'],
 };
@@ -47,7 +47,7 @@ export function renderDiplomacy(ui: ManagementUI, x: number, y: number, w: numbe
         .setOrigin(0)
         .setAlpha(f.alive ? 1 : 0.3),
     );
-    ui.text(x + 18, yy, f.name, 14, f.alive ? '#f3e9d2' : MUTED);
+    ui.text(x + 18, yy, f.name, 14, f.alive ? '#e8d8b0' : MUTED);
     if (!f.alive) {
       ui.text(x + 200, yy + 2, 'conquistada', 12, MUTED);
       yy += 34;
@@ -122,7 +122,7 @@ export function renderDiplomacy(ui: ManagementUI, x: number, y: number, w: numbe
   const pending = world.diplomacy.pending;
   if (pending.length > 0) {
     yy += 6;
-    ui.text(x, yy, 'Propostas recebidas', 13, '#cfc3a8');
+    ui.text(x, yy, 'Propostas recebidas', 13, '#cdb98e');
     yy += 20;
     for (const p of pending) {
       const name = world.factions[p.from].name;
