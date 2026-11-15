@@ -26,9 +26,11 @@ function update() {
   else run('git checkout --detach main', prod);
   // Reinstall only when dependencies changed: a running prod server keeps native files in
   // node_modules locked on Windows, which makes `npm ci` fail.
-  const lockHash = createHash('sha1')
-    .update(readFileSync(join(prod, 'package-lock.json')))
-    .digest('hex');
+  // Hash only the dependency tree: the project's own version (bumped every milestone) doesn't count.
+  const lock = JSON.parse(readFileSync(join(prod, 'package-lock.json'), 'utf8'));
+  delete lock.version;
+  if (lock.packages?.['']) delete lock.packages[''].version;
+  const lockHash = createHash('sha1').update(JSON.stringify(lock)).digest('hex');
   const marker = join(prod, 'node_modules', '.installed-lock');
   const installed = existsSync(marker) ? readFileSync(marker, 'utf8') : '';
   if (installed !== lockHash) {
