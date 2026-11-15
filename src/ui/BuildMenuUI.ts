@@ -1,6 +1,6 @@
 import type Phaser from 'phaser';
-import { BUILD_MENU, BUILDING_DEFS, type BuildingType } from '../game/buildings';
-import { type Inventory, RESOURCES } from '../game/inventory';
+import { BUILDING_DEFS, type BuildingType } from '../game/buildings';
+import { RESOURCES, type Resource } from '../game/inventory';
 
 const ROW_W = 290;
 const ROW_H = 40;
@@ -15,22 +15,37 @@ interface Row {
   objects: Phaser.GameObjects.GameObject[];
 }
 
-/** Left-side list of buildings with their stockpile costs. Clicking a row starts placement. */
+/**
+ * Left-side list of buildings with their costs. Clicking a row starts placement. The list is
+ * rebuilt each time it opens, from `available()` (before you have a village only your house
+ * and claiming land are offered), with `hint()` as a line under the title.
+ */
 export class BuildMenuUI {
   isOpen = false;
   private readonly container: Phaser.GameObjects.Container;
-  private readonly rows: Row[] = [];
+  private rows: Row[] = [];
 
   constructor(
-    scene: Phaser.Scene,
-    private readonly stockpile: Inventory,
-    onSelect: (type: BuildingType) => void,
-    onDemolish: () => void,
+    private readonly scene: Phaser.Scene,
+    private readonly have: (r: Resource) => number,
+    private readonly available: () => BuildingType[],
+    private readonly hint: () => string | null,
+    private readonly onSelect: (type: BuildingType) => void,
+    private readonly onDemolish: () => void,
   ) {
-    this.container = scene.add.container(12, 96).setDepth(90);
+    this.container = scene.add.container(12, 96).setDepth(90).setVisible(false);
+  }
+
+  private build(): void {
+    const { scene, onSelect, onDemolish } = this;
+    this.container.removeAll(true);
+    this.rows = [];
+    const menu = this.available();
+    const note = this.hint();
+    const top = note ? 52 : 30;
     // Two columns so the growing list fits short screens.
-    const rowsPerCol = Math.ceil(BUILD_MENU.length / 2);
-    const height = PAD * 2 + 30 + rowsPerCol * (ROW_H + 4);
+    const rowsPerCol = Math.max(1, Math.ceil(menu.length / 2));
+    const height = PAD * 2 + top + rowsPerCol * (ROW_H + 4);
     const panel = scene.add
       .rectangle(0, 0, ROW_W * 2 + PAD * 3, height, 0x140f0a, 0.94)
       .setOrigin(0)
@@ -54,12 +69,16 @@ export class BuildMenuUI {
       .text(ROW_W * 2 + PAD * 2 - 75, PAD + 8, '⚒ Demolir (X)', { ...TEXT, fontSize: '13px' })
       .setOrigin(0.5);
     this.container.add([panel, title, dBg, dText]);
+    if (note)
+      this.container.add(
+        scene.add.text(PAD, PAD + 22, note, { ...TEXT, fontSize: '12px', color: '#ffe08a', wordWrap: { width: ROW_W * 2 } }),
+      );
 
-    BUILD_MENU.forEach((type, k) => {
+    menu.forEach((type, k) => {
       const def = BUILDING_DEFS[type];
       const col = Math.floor(k / rowsPerCol);
       const x0 = PAD + col * (ROW_W + PAD);
-      const y = PAD + 30 + (k % rowsPerCol) * (ROW_H + 4);
+      const y = PAD + top + (k % rowsPerCol) * (ROW_H + 4);
       const bg = scene.add.rectangle(x0, y, ROW_W, ROW_H, 0x241a12, 0.95).setOrigin(0).setStrokeStyle(1, 0x8a6a3a);
       bg.setInteractive({ useHandCursor: true })
         .on('pointerover', () => bg.setFillStyle(0x3a2e20, 1))
@@ -88,11 +107,10 @@ export class BuildMenuUI {
       this.container.add(objects);
       this.rows.push({ type, bg, costs, objects });
     });
-
-    this.container.setVisible(false);
   }
 
   setOpen(open: boolean): void {
+    if (open) this.build();
     this.isOpen = open;
     this.container.setVisible(open);
   }
@@ -101,7 +119,7 @@ export class BuildMenuUI {
     if (!this.isOpen) return;
     for (const row of this.rows) {
       const cost = BUILDING_DEFS[row.type].cost;
-      for (const c of row.costs) c.text.setColor(this.stockpile.items[c.r] >= (cost[c.r] ?? 0) ? '#e8d8b0' : '#ff8070');
+      for (const c of row.costs) c.text.setColor(this.have(c.r) >= (cost[c.r] ?? 0) ? '#e8d8b0' : '#ff8070');
     }
   }
 }

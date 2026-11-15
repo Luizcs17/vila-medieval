@@ -4,6 +4,7 @@ import {
   ATTACK_COOLDOWN,
   AUTOSAVE_SECONDS,
   BEDS_PER_HOUSE,
+  CLAIM_NEAR_HOME,
   DAY_SECONDS,
   DEFAULT_ZOOM_INDEX,
   FAST_FORWARD,
@@ -13,9 +14,11 @@ import {
   MAX_CARRY_WEIGHT,
   MEAT_HEAL,
   NPC_REACH,
+  PLAYER_HUNGER_PER_DAY,
   PLAYER_RADIUS,
   RAID_INTERVAL,
   REPAIR_RATE,
+  START_HOUR,
   TILE_H,
   TILE_W,
   WANDERER_STAY,
@@ -24,7 +27,15 @@ import {
 import type { Animal, Human } from '../entities/Animal';
 import { Npc, type NpcWorld, type Target } from '../entities/Npc';
 import { Player } from '../entities/Player';
-import { BUILDING_DEFS, type Building, Buildings, type BuildingType, demolitionRefund, type PlaceCheck } from '../game/buildings';
+import {
+  BUILD_MENU,
+  BUILDING_DEFS,
+  type Building,
+  Buildings,
+  type BuildingType,
+  demolitionRefund,
+  type PlaceCheck,
+} from '../game/buildings';
 import { type CraftCheck, craft } from '../game/crafting';
 import {
   ALLIANCE_MIN,
@@ -37,6 +48,7 @@ import {
   type Proposal,
 } from '../game/diplomacy';
 import {
+  COLONY_MIN_DISTANCE,
   COLONY_NAMES,
   COLONY_START,
   colonySiteOk,
@@ -136,6 +148,8 @@ const BUILDING_KEY: Record<BuildingType, string> = {
   market: 'bld_market',
   smithy: 'bld_smithy',
   colony: 'stockpile',
+  home: 'bld_home',
+  claim: 'stockpile',
 };
 
 /** Ground is drawn beneath everything; objects and characters are depth-sorted by their screen y. */
@@ -396,11 +410,11 @@ export class WorldScene extends Phaser.Scene {
 
     if (save) for (const b of this.buildings.list) this.addBuildingView(b);
     else {
-      // The central stockpile stands in the spawn clearing, next to where the player starts.
+      // You start with nothing: no hall, no land, no coins. Your village comes from claiming land (B).
       const sx = Math.floor(this.map.spawn.x);
       const sy = Math.floor(this.map.spawn.y);
-      this.addBuildingView(this.buildings.place('stockpile', sx + 2, sy - 1, true));
       this.factions[0].center = { x: sx + 2, y: sy - 1 };
+      this.factions[0].coins = 0;
       for (const f of this.factions)
         if (!f.isPlayer)
           for (const b of foundTown(this.buildings, f, Math.random)) {
@@ -597,7 +611,12 @@ export class WorldScene extends Phaser.Scene {
     this.player.update(dt, { x, y, run: k.SHIFT.isDown, aimX: aim?.x });
     const heldItem = this.inventory.slots[this.selectedHotbar]?.item;
     this.player.hold(heldItem && ITEM_DEFS[heldItem].tool ? heldItem : null);
-    this.stats.update(worldDt);
+    if (this.stats.update(worldDt) > 0) {
+      const p = this.player.sprite;
+      this.popup(p.x, p.y - p.height, '-1 ♥ fome', '#ff8a7a');
+      if (this.stats.hp <= 0) this.knockOut('a fome');
+    }
+    this.hungerNotice();
     this.wildlife.update(worldDt);
     this.updateNpcs(worldDt);
     this.attackCd -= dt;
@@ -826,26 +845,61 @@ export class WorldScene extends Phaser.Scene {
   /** F: eat one meat you carry to heal. */
   private eat(): void {
     const p = this.player.sprite;
-    if (this.stats.hp >= this.stats.maxHp) return;
+    if (!this.stats.wantsFood()) {
+      this.popup(p.x, p.y - p.height, 'Sem fome', '#cdb98e');
+      return;
+    }
     if (this.inventory.remove('meat', 1) === 0) {
       this.popup(p.x, p.y - p.height, 'Sem carne na mochila', '#cdb98e');
       return;
     }
-    this.stats.heal(MEAT_HEAL);
-    this.popup(p.x, p.y - p.height, `+${MEAT_HEAL} ♥`, '#a8ffa8');
+    this.stats.eat(MEAT_HEAL);
+    this.popup(p.x, p.y - p.height, `Comeu · +${MEAT_HEAL} ♥`, '#a8ffa8');
+  }
+
+  /** Warns once when you get hungry, and again when you start starving. */
+  private hungerStage = 0;
+  private hungerNotice(): void {
+    const stage = this.stats.starving ? 2 : this.stats.hungry ? 1 : 0;
+    if (stage > this.hungerStage) {
+      if (stage === 1) this.toast('Você está com fome. Coma carne com F (cace animais).', '#ffc060');
+      else this.toast('Você está faminto! Sem comer, vai perdendo vida.', '#ff8a7a');
+    }
+    this.hungerStage = stage;
+  }
+
+  /** Sleeps in your house until morning (only at night): full HP, but you wake up hungrier. */
+  sleep(): boolean {
+    if (!this.clock.isNight) return false;
+    const dh = (START_HOUR - this.clock.hour + 24) % 24;
+    const dt = (dh / 24) * DAY_SECONDS;
+    this.clock.advance(dt);
+    this.stats.food = Math.max(0, this.stats.food - (PLAYER_HUNGER_PER_DAY / DAY_SECONDS) * dt * 0.5);
+    this.stats.hp = this.stats.maxHp;
+    this.cameras.main.fadeIn(800, 0, 0, 0);
+    this.toast(`Você dormiu até o amanhecer do dia ${this.clock.day}.`, '#a8c8ff');
+    return true;
   }
 
   /** The player's HP hit zero: wake up at the village, losing carried resources (tools are kept). */
   private knockOut(source: string): void {
     const lost = this.inventory.takeAllResources();
     const any = RESOURCES.some((r) => lost[r] > 0);
+    const home = this.myHome();
     const c = this.villageCenter;
-    this.player.gx = c.x - 1;
-    this.player.gy = c.y + 1.5;
+    if (home) {
+      this.player.gx = home.tx + 1;
+      this.player.gy = home.ty + BUILDING_DEFS.home.size + 0.5;
+    } else if (this.settled) {
+      this.player.gx = c.x - 1;
+      this.player.gy = c.y + 1.5;
+    }
     this.stats.hp = this.stats.maxHp;
+    if (this.stats.food < 25) this.stats.food = 25; // someone gave you a bite
     this.cameras.main.flash(400, 120, 0, 0);
     const lostText = any ? ' e perdeu os recursos que carregava' : '';
-    this.toast(`Você foi derrubado por ${source}. Acordou na vila${lostText}.`, '#ff8a7a');
+    const where = home ? 'em casa' : this.settled ? 'na vila' : 'onde caiu';
+    this.toast(`Você foi derrubado por ${source}. Acordou ${where}${lostText}.`, '#ff8a7a');
   }
 
   /** Are two factions at war? (Diplomacy arrives in milestone 15.) */
@@ -1189,7 +1243,7 @@ export class WorldScene extends Phaser.Scene {
     this.diploTimer += worldDt;
     if (this.diploTimer >= DAY_SECONDS) {
       this.diploTimer = 0;
-      const ids = this.realms();
+      const ids = this.realms().filter((id) => id !== PLAYER_FACTION || this.settled);
       const touching = this.touchingBorders();
       const realmTouch = new Set<string>();
       for (const k of touching) {
@@ -1214,6 +1268,7 @@ export class WorldScene extends Phaser.Scene {
       if (f.isPlayer || !f.alive) continue;
       for (const e of this.factions) {
         if (e.id === f.id || !e.alive || !this.atWar(f.id, e.id)) continue;
+        if (e.id === PLAYER_FACTION && !this.settled) continue;
         const k = `${f.id}>${e.id}`;
         const t = (this.raidTimers.get(k) ?? 0) + worldDt;
         this.raidTimers.set(k, t);
@@ -1362,6 +1417,10 @@ export class WorldScene extends Phaser.Scene {
 
   /** Village centre for spawn distances and compass directions: the central stockpile. */
   private get villageCenter(): { x: number; y: number } {
+    if (!this.settled) {
+      const h = this.myHome();
+      return h ? { x: h.tx + 1, y: h.ty + 1 } : { x: this.player.gx, y: this.player.gy };
+    }
     const c = this.factions[PLAYER_FACTION].center;
     return { x: c.x + 0.5, y: c.y + 0.5 };
   }
@@ -1487,7 +1546,8 @@ export class WorldScene extends Phaser.Scene {
     this.population.npcs.push(data);
     this.npcs.set(data.id, new Npc(this, this.map, data, tile));
     const who = data.gender === 'f' ? 'Uma andarilha' : 'Um andarilho';
-    this.toast(`${who} apareceu ${compass(tile.x + 0.5 - center.x, tile.y + 0.5 - center.y)} da vila.`, '#ffe08a');
+    const from = this.settled ? 'da vila' : 'de você';
+    this.toast(`${who} apareceu ${compass(tile.x + 0.5 - center.x, tile.y + 0.5 - center.y)} ${from}.`, '#ffe08a');
   }
 
   /** Nearest NPC within reach of the player, or null. */
@@ -1627,6 +1687,62 @@ export class WorldScene extends Phaser.Scene {
     return this.factions[f]?.isPlayer === true;
   }
 
+  /** You have a village (a hall of your own). Before that: survival, your house, claiming land. */
+  get settled(): boolean {
+    return this.buildings.list.some((b) => b.type === 'stockpile' && b.faction === PLAYER_FACTION);
+  }
+
+  /** Your own house (one at most). */
+  myHome(): Building | undefined {
+    return this.buildings.list.find((b) => b.type === 'home' && b.faction === PLAYER_FACTION);
+  }
+
+  /** What the build menu offers now. */
+  buildMenu(): BuildingType[] {
+    const home = this.myHome();
+    if (!this.settled) return [...(home ? [] : (['home'] as const)), ...(home?.built ? (['claim'] as const) : [])];
+    return BUILD_MENU.filter((t) => t !== 'claim' && (t !== 'home' || !home));
+  }
+
+  buildMenuHint(): string | null {
+    if (this.settled) return null;
+    const home = this.myHome();
+    if (!home) return 'Você ainda não tem vila. Comece pela sua casa (em terra sem dono).';
+    if (!home.built) return 'Termine a sua casa (segure E na obra) para poder reivindicar terras.';
+    return 'Reivindique terras perto da sua casa: o Salão funda a sua vila. Paga com a mochila + o guardado em casa.';
+  }
+
+  /** Why the claim can't go at (tx, ty), or null if it can. */
+  private claimSiteOk(tx: number, ty: number): string | null {
+    const home = this.myHome();
+    if (!home?.built) return 'Construa sua casa primeiro';
+    if (Math.hypot(tx - home.tx - 1, ty - home.ty - 1) > CLAIM_NEAR_HOME) return 'Longe demais da sua casa';
+    for (const f of this.factions)
+      if (f.id !== PLAYER_FACTION && f.alive && Math.hypot(f.center.x - tx, f.center.y - ty) < COLONY_MIN_DISTANCE)
+        return `Perto demais de ${f.name}`;
+    for (let y = ty - 10; y <= ty + 10; y++)
+      for (let x = tx - 10; x <= tx + 10; x++) {
+        const o = this.territory.ownerAt(x, y);
+        if (o !== -1 && !this.isMine(o)) return 'Perto demais de terras de outra vila';
+      }
+    return null;
+  }
+
+  /** The hall goes up: your village is born. */
+  private claimLand(tx: number, ty: number): void {
+    const hall = this.buildings.place('stockpile', tx, ty, true, PLAYER_FACTION);
+    for (const i of this.buildings.footprint('stockpile', tx, ty)) this.replaceObjectImage(i);
+    this.addBuildingView(hall);
+    this.factions[PLAYER_FACTION].center = { x: tx, y: ty };
+    this.territory.recompute(this.buildings.list);
+    this.onSettled();
+    this.toast('Terras reivindicadas! Sua vila nasceu: construa (B), recrute e governe (V).', '#ffe08a');
+    this.toast('O que estava guardado na sua casa agora é o estoque da vila (no Salão).', '#cdb98e');
+  }
+
+  /** Hook for what changes when the village is founded. */
+  private onSettled(): void {}
+
   /** Independent villages (colonies share their founder's relations). */
   private realms(): number[] {
     return this.factions.filter((f) => f.alive && f.parent === undefined).map((f) => f.id);
@@ -1720,6 +1836,7 @@ export class WorldScene extends Phaser.Scene {
   // ---------- build mode (driven by UIScene) ----------
 
   startPlacing(type: BuildingType): void {
+    if (!this.buildMenu().includes(type)) return;
     this.placement = { type, check: { ok: false, reason: '' } };
     this.ghost.setTexture(BUILDING_KEY[type]).setVisible(true);
     this.interaction = null;
@@ -1740,6 +1857,11 @@ export class WorldScene extends Phaser.Scene {
     if (!payFrom(def.cost, this.inventory, this.factions[fid].stock)) return false;
     if (type === 'colony') {
       this.foundColony(this.placeTile.x, this.placeTile.y);
+      this.cancelPlacing();
+      return true;
+    }
+    if (type === 'claim') {
+      this.claimLand(this.placeTile.x, this.placeTile.y);
       this.cancelPlacing();
       return true;
     }
@@ -1782,6 +1904,16 @@ export class WorldScene extends Phaser.Scene {
     } else if (p.type === 'colony') {
       const why = check.ok ? colonySiteOk(this.factions, tx, ty, (r) => this.landNear(tx, ty, r)) : null;
       if (why) check = { ok: false, reason: why };
+    } else if (p.type === 'claim') {
+      const why = check.ok ? this.claimSiteOk(tx, ty) : null;
+      if (why) check = { ok: false, reason: why };
+    } else if (p.type === 'home') {
+      // Your house goes on land nobody owns (or your own).
+      for (let y = ty; y < ty + def.size && check.ok; y++)
+        for (let x = tx; x < tx + def.size && check.ok; x++) {
+          const o = this.territory.ownerAt(x, y);
+          if (o !== -1 && !this.isMine(o)) check = { ok: false, reason: 'Território de outra vila' };
+        }
     } else if (check.ok && !this.territory.canBuild(this.buildFaction(p.type, tx, ty, def.size), tx, ty, def.size))
       check = { ok: false, reason: 'Fora do seu território' };
     const payer = this.factions[this.buildFaction(p.type, tx, ty, def.size)];
@@ -1983,7 +2115,7 @@ export class WorldScene extends Phaser.Scene {
       this.interaction = { x, y, text: `[E] Estoque da vila`, progress: null };
       return;
     }
-    if (!def.job && b.type !== 'house') {
+    if (!def.job && b.type !== 'house' && b.type !== 'home') {
       // Towers, walls, gates…: just their own inventory.
       if (Phaser.Input.Keyboard.JustDown(this.keys.E)) this.openStorage(def.name, buildingStorage(b));
       this.interaction = { x, y, text: `[E] ${def.name} · inventário`, progress: null };
@@ -1993,8 +2125,9 @@ export class WorldScene extends Phaser.Scene {
     let text = `${def.name}: ${def.description}`;
     if (def.job) text = `[E] ${def.name} (${this.population.workers(b.id).length}/${def.job.slots} trabalhando)`;
     else if (b.type === 'house') text = `[E] ${def.name} (${this.population.residents(b.id).length}/${BEDS_PER_HOUSE} moradores)`;
+    else if (b.type === 'home') text = `[E] ${def.name}${this.clock.isNight ? ' · dormir' : ''}`;
     this.interaction = { x, y, text, progress: null };
-    if ((def.job || b.type === 'house') && Phaser.Input.Keyboard.JustDown(this.keys.E)) {
+    if ((def.job || b.type === 'house' || b.type === 'home') && Phaser.Input.Keyboard.JustDown(this.keys.E)) {
       this.panelBuilding = b;
       this.events.emit('building', b);
     }
@@ -2078,6 +2211,9 @@ export class WorldScene extends Phaser.Scene {
 
   /** A building's own inventory, for the building panel's "Inventário" button. */
   storageOf(b: Building): Storage {
+    // Before you have a village, your house is your larder: what you store there is your stock
+    // (it pays for claiming land, and becomes the village's stock afterwards).
+    if (b.type === 'home' && !this.settled) return villageStorage(this.factions[PLAYER_FACTION]);
     return buildingStorage(b);
   }
 

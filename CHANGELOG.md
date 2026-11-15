@@ -2,6 +2,15 @@
 
 Each milestone from `docs/GDD.md` is a minor version.
 
+## 1.14.0: Milestone 24, survival start
+
+- New games start with nothing: no hall, no land, no stock and no coins. Existing saves keep their village.
+- The player gets hungry. A bar next to HP shows hunger (70 a day). F eats one meat: +35 satiety and +2 HP. When hungry you get a warning. At zero you don't regenerate and lose 1 HP every 12 s; being knocked out by hunger wakes you with a little food.
+- Before you have a village, the B menu offers only "Sua casa" (12 wood, 4 stone, on land nobody owns). Once it's built, it also offers "Reivindicar terras" (30 wood, 15 stone, within 12 tiles of your house, away from other villages). Claiming raises the Salão: your village is born and everything else unlocks (other buildings, V, diplomacy).
+- Your house is your larder before the village: its inventory is your stock, so you can store materials there across trips (claiming pays from your bag + the house). After claiming, that stock is the village's, at the Salão.
+- Your house: you wake up there after being knocked out, and at night its panel lets you sleep until morning (full HP, a bit hungrier).
+- Until you have a village, rival villages ignore you in diplomacy and don't raid. Wanderers appear around you.
+
 ## 1.13.0: Milestone 23, colonies
 
 - New in the B menu: "Fundar colônia" (100 wood, 80 stone, 10 iron, 10 meat). Place a new hall far from every village (at least 24 tiles from any village centre, with no claimed land within 10 tiles). It becomes a colony of yours, with its own territory, its own stock (it starts with 30 wood, 20 stone and 10 meat) and its own people. Colony names: Nova Esperança, Vale do Corvo, Monte Claro and so on.

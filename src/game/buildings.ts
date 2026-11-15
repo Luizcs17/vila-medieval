@@ -30,6 +30,8 @@ export type BuildingType =
   | 'barracks'
   | 'embassy'
   | 'colony'
+  | 'home'
+  | 'claim'
   | 'road'
   | 'market'
   | 'smithy';
@@ -233,6 +235,26 @@ export const BUILDING_DEFS: Record<BuildingType, BuildingDef> = {
     buildable: true,
     maxHp: 120,
     job: { skill: 'smithing', slots: 2, nodes: [], radius: 0, title: { f: 'Ferreira', m: 'Ferreiro' } },
+  },
+  home: {
+    claim: 3,
+    maxHp: 120,
+    name: 'Sua casa',
+    size: 2,
+    cost: { wood: 12, stone: 4 },
+    buildSeconds: 25,
+    description: 'Sua morada: guarda itens, você dorme e acorda aqui.',
+    buildable: true,
+  },
+  claim: {
+    claim: 0,
+    name: 'Reivindicar terras',
+    size: 1,
+    cost: { wood: 30, stone: 15 },
+    buildSeconds: 0,
+    description: 'Ergue o Salão perto da sua casa: nasce a sua vila.',
+    buildable: true,
+    maxHp: 1,
   },
   colony: {
     claim: 0,

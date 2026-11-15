@@ -600,6 +600,19 @@ export function createPlaceholderTextures(scene: Phaser.Scene): void {
     door: true,
     window: true,
   });
+  // The protagonist's house: stone walls, warm windows, a dark red roof.
+  isoBuilding(scene, 'bld_home', 2, {
+    timber: true,
+    roof: 'thatch',
+    wallL: '#9a8c78',
+    wallR: '#7c705f',
+    roofL: '#6a2e22',
+    roofR: '#52231a',
+    wallH: 18,
+    roofH: 24,
+    door: true,
+    window: true,
+  });
   isoBuilding(scene, 'bld_lumberjack', 2, {
     roof: 'plank',
     wallL: '#5e4126',

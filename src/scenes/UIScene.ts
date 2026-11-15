@@ -60,6 +60,7 @@ export class UIScene extends Phaser.Scene {
   private levelText!: Phaser.GameObjects.Text;
   private hpBar!: Phaser.GameObjects.Graphics;
   private hpText!: Phaser.GameObjects.Text;
+  private foodText!: Phaser.GameObjects.Text;
   private buildMenu!: BuildMenuUI;
   private placeHint!: Phaser.GameObjects.Text;
   private dialog!: RecruitDialogUI;
@@ -131,7 +132,9 @@ export class UIScene extends Phaser.Scene {
 
     this.buildMenu = new BuildMenuUI(
       this,
-      this.world.stockpile,
+      (r) => this.world.inventory.count(r) + this.world.currentVillage().stock.items[r],
+      () => this.world.buildMenu(),
+      () => this.world.buildMenuHint(),
       (type) => {
         this.buildMenu.setOpen(false);
         this.world.startPlacing(type);
@@ -153,6 +156,7 @@ export class UIScene extends Phaser.Scene {
       .setOrigin(1, 1);
     this.hpBar = this.add.graphics();
     this.hpText = this.add.text(0, 0, '', { ...TEXT, fontSize: '12px', stroke: '#000000', strokeThickness: 3 }).setOrigin(0, 1);
+    this.foodText = this.add.text(0, 0, '', { ...TEXT, fontSize: '11px', stroke: '#000000', strokeThickness: 3 }).setOrigin(0, 1);
 
     this.dialog = new RecruitDialogUI(this, this.world, () => this.world.stopTalking());
     this.world.events.on('talk', (npc: NpcData) => {
@@ -222,6 +226,10 @@ export class UIScene extends Phaser.Scene {
         return;
       }
       if (key === 'v') {
+        if (!this.world.settled) {
+          this.world.toast('Você ainda não tem uma vila. Construa sua casa e reivindique terras (B).', '#ffc060');
+          return;
+        }
         this.closeBuildMode();
         if (this.inventory.isOpen) this.toggleInventory();
         this.management.open();
@@ -320,7 +328,9 @@ export class UIScene extends Phaser.Scene {
       this.counts.meat.setColor(days < 1 ? '#ff8a7a' : days < 2 ? '#ffc060' : '#e8d8b0');
     }
     const where = v.parent !== undefined ? `${v.name} · ` : '';
-    this.popText.setText(`${where}População ${people.length}/${w.population.bedsOf(v.id)}   ⛁ ${w.factions[0].coins} moedas`);
+    if (w.settled)
+      this.popText.setText(`${where}População ${people.length}/${w.population.bedsOf(v.id)}   ⛁ ${w.factions[0].coins} moedas`);
+    else this.popText.setText(`Sem vila (B: sua casa, depois reivindicar terras)   ⛁ ${w.factions[0].coins} moedas`);
 
     const light = ambientAt(w.clock.hour);
     this.night.setFillStyle(light.color, light.alpha);
@@ -377,6 +387,15 @@ export class UIScene extends Phaser.Scene {
     this.hpBar.fillStyle(0x000000, 0.7).fillRect(x - 1, y + 6, w + 2, 4);
     this.hpBar.fillStyle(0xffd040, 1).fillRect(x, y + 7, Math.round(w * xpRatio), 2);
     this.levelText.setText(`Nv ${s.level}`).setPosition(x + w, y - 3);
+    // Hunger: a brown bar right of the HP bar (F eats meat).
+    const fx = x + w + 40;
+    const food = s.food / 100;
+    this.hpBar.fillStyle(0x000000, 0.7).fillRect(fx - 1, y - 1, 82, 7);
+    this.hpBar.fillStyle(s.starving ? 0xff3020 : s.hungry ? 0xd08a30 : 0xa8703a, 1).fillRect(fx, y, Math.round(80 * food), 5);
+    this.foodText
+      .setText(s.starving ? 'Faminto! (F come)' : s.hungry ? 'Com fome (F come)' : 'Fome')
+      .setColor(s.starving ? '#ff8a7a' : s.hungry ? '#ffc060' : '#cdb98e')
+      .setPosition(fx, y - 3);
   }
 
   private closeBuildMode(): void {

@@ -40,7 +40,7 @@ export interface SaveData {
   tradePolicy: TradePolicy;
   inventory: (Stack | null)[];
   selectedHotbar: number;
-  player: { gx: number; gy: number; hp: number; maxHp: number; level: number; xp: number };
+  player: { gx: number; gy: number; hp: number; maxHp: number; level: number; xp: number; food?: number };
   population: PopulationSnapshot;
   families: { affinity: Record<string, number>; chattedOn: Record<number, number> };
   diplomacy: { rel: Record<string, Relation>; pending: Proposal[] };

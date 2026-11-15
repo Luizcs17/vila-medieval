@@ -97,7 +97,7 @@ describe('player stats', () => {
     expect(p.hp).toBe(PLAYER_MAX_HP - 3); // still recovering from the hit
     p.update(0.1 + PLAYER_REGEN_EVERY);
     expect(p.hp).toBe(PLAYER_MAX_HP - 2);
-    p.update(1000);
+    p.update(100);
     expect(p.hp).toBe(PLAYER_MAX_HP);
     expect(p.hurt(999)).toBe(true);
     expect(p.hp).toBe(0);
