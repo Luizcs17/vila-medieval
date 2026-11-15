@@ -36,7 +36,17 @@ import {
   missionChance,
   type Proposal,
 } from '../game/diplomacy';
-import { createFactions, type Faction, PLAYER_FACTION, type TradePolicy } from '../game/factions';
+import {
+  COLONY_NAMES,
+  COLONY_START,
+  colonySiteOk,
+  createColony,
+  createFactions,
+  type Faction,
+  PLAYER_FACTION,
+  realmOf,
+  type TradePolicy,
+} from '../game/factions';
 import { ageOf, Families, fullName, isAdult, PLAYER_ID } from '../game/families';
 import { Gatherer, NODE_DEFS, nearestTile, ResourceNodes } from '../game/gathering';
 import {
@@ -125,6 +135,7 @@ const BUILDING_KEY: Record<BuildingType, string> = {
   road: 'road',
   market: 'bld_market',
   smithy: 'bld_smithy',
+  colony: 'stockpile',
 };
 
 /** Ground is drawn beneath everything; objects and characters are depth-sorted by their screen y. */
@@ -308,6 +319,11 @@ export class WorldScene extends Phaser.Scene {
     this.tradePolicy = { sellAbove: {}, buyUpTo: {} };
     this.diploTimer = 0;
     this.factions = createFactions(this.map.sites, this.stockpile);
+    // Colonies are extra factions after the rivals (saved with their name and founder).
+    for (const sf of save?.factions ?? [])
+      if (sf.parent !== undefined && sf.id === this.factions.length)
+        this.factions.push(createColony(sf.id, sf.center, sf.name ?? COLONY_NAMES[0], sf.parent));
+    this.diplomacy.realm = (id) => realmOf(this.factions, id);
     this.territory = new Territory(this.map);
     this.npcWorld = {
       map: this.map,
@@ -338,7 +354,7 @@ export class WorldScene extends Phaser.Scene {
       },
       useTool: (npc, tool) => {
         const b = this.buildings.list.find((x) => x.id === npc.data.jobId);
-        if (b && wearWorkplaceTool(b, tool) && b.faction === PLAYER_FACTION)
+        if (b && wearWorkplaceTool(b, tool) && this.isMine(b.faction))
           this.toast(`${ITEM_DEFS[tool].label} de ${BUILDING_DEFS[b.type].name} se gastou.`, '#ffb070');
       },
       smithyBusy: (b) => smithyCanWork(b, villageStorage(this.factions[b.faction])),
@@ -489,6 +505,7 @@ export class WorldScene extends Phaser.Scene {
         center: f.center,
         coins: f.coins,
         tools: { ...f.tools },
+        ...(f.parent !== undefined ? { name: f.name, parent: f.parent } : {}),
       })),
       inventory: this.inventory.slots.map((s) => (s ? { ...s } : null)),
       selectedHotbar: this.selectedHotbar,
@@ -542,7 +559,7 @@ export class WorldScene extends Phaser.Scene {
     for (const sf of save.factions) {
       const f = this.factions[sf.id];
       if (!f) continue;
-      if (!f.isPlayer) Object.assign(f.stock.items, sf.stock);
+      if (f.id !== PLAYER_FACTION) Object.assign(f.stock.items, sf.stock);
       f.alive = sf.alive;
       f.rulerId = sf.rulerId;
       f.coins = sf.coins;
@@ -695,7 +712,7 @@ export class WorldScene extends Phaser.Scene {
     this.time.delayedCall(150, () => npc.sprite.clearTint());
     this.popup(npc.sprite.x, npc.sprite.y - npc.sprite.height, `-${damage}`, '#ff6a5a');
     if (npc.data.hp <= 0) {
-      const mine = npc.data.faction === PLAYER_FACTION;
+      const mine = this.isMine(npc.data.faction);
       this.removeVillager(npc.data.id, mine ? `${npc.data.name} foi morto por ${source}.` : null);
     }
   }
@@ -1029,7 +1046,7 @@ export class WorldScene extends Phaser.Scene {
   }
 
   declareWarOn(target: number): void {
-    const ids = this.factions.filter((f) => f.alive).map((f) => f.id);
+    const ids = this.realms();
     for (const e of this.diplomacy.declareWar(PLAYER_FACTION, target, ids, 'declarada por você'))
       if (e.type === 'war') this.announceWar(e.a, e.b);
   }
@@ -1106,7 +1123,10 @@ export class WorldScene extends Phaser.Scene {
     lf.rulerId = null;
     this.diplomacy.forget(loser);
     this.territory.recompute(this.buildings.list);
-    if (winner === PLAYER_FACTION) {
+    if (lf.parent !== undefined && lf.isPlayer) {
+      lf.isPlayer = false; // the colony is gone (its land and people now belong to the winner)
+      this.toast(`Sua colônia ${lf.name} foi conquistada por ${wf.name}!`, '#ff6a5a');
+    } else if (winner === PLAYER_FACTION) {
       this.toast(`Você conquistou ${lf.name}! Os prédios e aldeões de lá agora são seus.`, '#ffe08a');
       if (this.factions.every((f) => f.isPlayer || !f.alive))
         this.toast('Todas as vilas são suas. Você unificou a região!', '#ffe08a');
@@ -1169,10 +1189,15 @@ export class WorldScene extends Phaser.Scene {
     this.diploTimer += worldDt;
     if (this.diploTimer >= DAY_SECONDS) {
       this.diploTimer = 0;
-      const ids = this.factions.filter((f) => f.alive).map((f) => f.id);
+      const ids = this.realms();
       const touching = this.touchingBorders();
+      const realmTouch = new Set<string>();
+      for (const k of touching) {
+        const [x, y] = k.split(':').map((v) => realmOf(this.factions, Number(v)));
+        realmTouch.add(`${Math.min(x, y)}:${Math.max(x, y)}`);
+      }
       for (const e of this.diplomacy.daily(ids, this.clock.seconds, Math.random, (a, b) =>
-        touching.has(`${Math.min(a, b)}:${Math.max(a, b)}`),
+        realmTouch.has(`${Math.min(a, b)}:${Math.max(a, b)}`),
       )) {
         if (e.type === 'war') this.announceWar(e.a, e.b);
         else if (e.type === 'proposal') {
@@ -1197,8 +1222,8 @@ export class WorldScene extends Phaser.Scene {
         const ready = this.soldiers(f.id).filter((s) => s.order === null && s.hp > 4 && isAdult(s, this.clock.seconds));
         const go = ready.length > 2 ? ready.slice(0, ready.length - 1) : ready;
         for (const s of go) s.order = { kind: 'raid', target: e.id };
-        if (go.length > 0 && e.id === PLAYER_FACTION)
-          this.toast(`Soldados de ${f.name} estão marchando contra sua vila!`, '#ff6a5a');
+        if (go.length > 0 && e.isPlayer)
+          this.toast(`Soldados de ${f.name} estão marchando contra ${e.id === PLAYER_FACTION ? 'sua vila' : e.name}!`, '#ff6a5a');
       }
     }
   }
@@ -1542,7 +1567,7 @@ export class WorldScene extends Phaser.Scene {
     if (b) {
       const def = BUILDING_DEFS[b.type];
       this.drawFootprint(b.tx, b.ty, def.size, 0xff6040);
-      if (b.faction !== PLAYER_FACTION) this.demolishHint = { text: 'Não é seu', ok: false };
+      if (!this.isMine(b.faction)) this.demolishHint = { text: 'Não é seu', ok: false };
       else if (b.type === 'stockpile') this.demolishHint = { text: 'O Salão não pode ser demolido', ok: false };
       else {
         this.demolishPick = { building: b };
@@ -1558,7 +1583,7 @@ export class WorldScene extends Phaser.Scene {
     if (
       this.map.objects[i] === Obj.Road &&
       this.territory.ownerAt(tx, ty) !== -1 &&
-      this.territory.ownerAt(tx, ty) !== PLAYER_FACTION
+      !this.isMine(this.territory.ownerAt(tx, ty))
     ) {
       this.demolishHint = { text: 'Estrada no território de outra vila', ok: false };
       return;
@@ -1595,12 +1620,85 @@ export class WorldScene extends Phaser.Scene {
     this.demolish(pick.building!);
   }
 
+  // ---------- colonies ----------
+
+  /** Is faction `f` the player's (home village or a colony)? */
+  isMine(f: number): boolean {
+    return this.factions[f]?.isPlayer === true;
+  }
+
+  /** Independent villages (colonies share their founder's relations). */
+  private realms(): number[] {
+    return this.factions.filter((f) => f.alive && f.parent === undefined).map((f) => f.id);
+  }
+
+  /** Is any tile within `r` of (tx, ty) owned by a village? */
+  private landNear(tx: number, ty: number, r: number): boolean {
+    for (let y = ty - r; y <= ty + r; y++)
+      for (let x = tx - r; x <= tx + r; x++) if (this.territory.ownerAt(x, y) !== -1) return true;
+    return false;
+  }
+
+  /** Which of your villages a building at (tx, ty) belongs to (and pays for it): the land's owner, else home. */
+  private buildFaction(type: BuildingType, tx: number, ty: number, size: number): number {
+    if (type === 'colony') return PLAYER_FACTION;
+    const o = this.territory.ownerAt(Math.floor(tx + size / 2 - 0.01), Math.floor(ty + size / 2 - 0.01));
+    return this.isMine(o) ? o : PLAYER_FACTION;
+  }
+
+  /** Costs are paid from what you carry first, then that village's stock. */
+  private canPay(cost: Partial<Record<Resource, number>>, f: Faction): boolean {
+    return RESOURCES.every((r) => this.inventory.count(r) + f.stock.items[r] >= (cost[r] ?? 0));
+  }
+
+  /** The village whose land you stand on (if it's yours), else your home village. */
+  currentVillage(): Faction {
+    const o = this.territory.ownerAt(Math.floor(this.player.gx), Math.floor(this.player.gy));
+    return this.factions[this.isMine(o) ? o : PLAYER_FACTION];
+  }
+
+  /** Your villages (home first), for selectors. */
+  myVillages(): Faction[] {
+    return this.factions.filter((f) => f.isPlayer && f.alive);
+  }
+
+  /** A new colony hall at (tx, ty): a new village of yours with a little starting stock. */
+  private foundColony(tx: number, ty: number): void {
+    const id = this.factions.length;
+    const n = this.factions.filter((f) => f.parent !== undefined).length;
+    const round = Math.floor(n / COLONY_NAMES.length);
+    const name = COLONY_NAMES[n % COLONY_NAMES.length] + (round > 0 ? ` ${round + 1}` : '');
+    const f = createColony(id, { x: tx, y: ty }, name);
+    for (const [r, k] of Object.entries(COLONY_START)) f.stock.add(r as Resource, k);
+    this.factions.push(f);
+    const hall = this.buildings.place('stockpile', tx, ty, true, id);
+    for (const i of this.buildings.footprint('stockpile', tx, ty)) this.replaceObjectImage(i);
+    this.addBuildingView(hall);
+    this.territory.recompute(this.buildings.list);
+    this.toast(`Colônia ${name} fundada! Construa casas lá e mude aldeões para elas (painel da casa).`, '#ffe08a');
+  }
+
+  /** Moves one of your villagers to a house in another of your villages: new home, no job. */
+  moveVillager(n: NpcData, house: Building): boolean {
+    if (!this.isMine(n.faction) || !this.isMine(house.faction) || n.faction === house.faction) return false;
+    if (this.population.residents(house.id).length >= BEDS_PER_HOUSE) return false;
+    if (this.talkingTo?.id === n.id) this.talkingTo = null;
+    if (n.jobId !== null) this.population.unassign(n);
+    this.missions.delete(n.id);
+    n.order = null;
+    n.faction = house.faction;
+    n.homeId = house.id;
+    this.npcs.get(n.id)?.moveTo(house);
+    this.toast(`${n.name} está se mudando para ${this.factions[house.faction].name}.`, '#a8c8ff');
+    return true;
+  }
+
   /** Tears down one of your buildings: refunds materials, frees its people, recomputes territory. */
   demolish(b: Building): void {
-    if (b.type === 'stockpile' || b.faction !== PLAYER_FACTION) return;
+    if (b.type === 'stockpile' || !this.isMine(b.faction)) return;
     const def = BUILDING_DEFS[b.type];
     const refund = this.refundFor(b);
-    for (const r of RESOURCES) this.stockpile.add(r, refund[r] ?? 0);
+    for (const r of RESOURCES) this.factions[b.faction].stock.add(r, refund[r] ?? 0);
     for (const n of this.population.npcs) {
       if (n.homeId === b.id) n.homeId = null;
       if (n.jobId === b.id) {
@@ -1638,14 +1736,20 @@ export class WorldScene extends Phaser.Scene {
     if (!this.placement?.check.ok) return false;
     const { type } = this.placement;
     const def = BUILDING_DEFS[type];
-    if (!this.stockpile.pay(def.cost)) return false;
+    const fid = this.buildFaction(type, this.placeTile.x, this.placeTile.y, def.size);
+    if (!payFrom(def.cost, this.inventory, this.factions[fid].stock)) return false;
+    if (type === 'colony') {
+      this.foundColony(this.placeTile.x, this.placeTile.y);
+      this.cancelPlacing();
+      return true;
+    }
     if (type === 'road') {
       const i = tileIndex(this.map, this.placeTile.x, this.placeTile.y);
       this.map.objects[i] = Obj.Road;
       this.replaceObjectImage(i);
       return true;
     }
-    const b = this.buildings.place(type, this.placeTile.x, this.placeTile.y);
+    const b = this.buildings.place(type, this.placeTile.x, this.placeTile.y, false, fid);
     this.territory.recompute(this.buildings.list);
     for (const i of this.buildings.footprint(type, b.tx, b.ty)) this.replaceObjectImage(i); // clears stumps/saplings
     const view = this.addBuildingView(b);
@@ -1674,10 +1778,15 @@ export class WorldScene extends Phaser.Scene {
       // Roads may leave your land (to reach other villages), just not cross into theirs.
       const owner = this.territory.ownerAt(tx, ty);
       if (check.ok && this.map.objects[tileIndex(this.map, tx, ty)] === Obj.Road) check = { ok: false, reason: 'Já tem estrada' };
-      if (check.ok && owner !== -1 && owner !== PLAYER_FACTION) check = { ok: false, reason: 'Território de outra vila' };
-    } else if (check.ok && !this.territory.canBuild(PLAYER_FACTION, tx, ty, def.size))
+      if (check.ok && owner !== -1 && !this.isMine(owner)) check = { ok: false, reason: 'Território de outra vila' };
+    } else if (p.type === 'colony') {
+      const why = check.ok ? colonySiteOk(this.factions, tx, ty, (r) => this.landNear(tx, ty, r)) : null;
+      if (why) check = { ok: false, reason: why };
+    } else if (check.ok && !this.territory.canBuild(this.buildFaction(p.type, tx, ty, def.size), tx, ty, def.size))
       check = { ok: false, reason: 'Fora do seu território' };
-    if (check.ok && !this.stockpile.canAfford(def.cost)) check = { ok: false, reason: 'Recursos insuficientes no estoque' };
+    const payer = this.factions[this.buildFaction(p.type, tx, ty, def.size)];
+    if (check.ok && !this.canPay(def.cost, payer))
+      check = { ok: false, reason: `Recursos insuficientes (mochila + estoque de ${payer.name})` };
     p.check = check;
 
     const bottom = gridToScreen(tx + def.size, ty + def.size);
@@ -1699,10 +1808,10 @@ export class WorldScene extends Phaser.Scene {
       this.gatherer.tick(dt, null, false, 1);
       const d = npc.data;
       let text = d.role === 'wanderer' ? `[E] Falar com ${d.name}` : `[E] ${d.name} · ${jobTitle(d, this.buildings)}`;
-      if (d.role === 'villager' && d.faction !== PLAYER_FACTION) text = `[E] ${d.name} · ${this.factions[d.faction].name}`;
+      if (d.role === 'villager' && !this.isMine(d.faction)) text = `[E] ${d.name} · ${this.factions[d.faction].name}`;
       this.interaction = { x: npc.sprite.x, y: npc.sprite.y - npc.sprite.height - 6, text, progress: null };
       if (Phaser.Input.Keyboard.JustDown(this.keys.E)) {
-        if (d.role === 'villager' && d.faction === PLAYER_FACTION) this.families.chat(d, this.clock.day);
+        if (d.role === 'villager' && this.isMine(d.faction)) this.families.chat(d, this.clock.day);
         this.talkingTo = d;
         this.player.face(npc.sprite.x);
         this.events.emit('talk', d);
@@ -1817,7 +1926,7 @@ export class WorldScene extends Phaser.Scene {
     const view = this.buildingViews.get(b.id)!;
     const x = view.img.x;
     const y = view.img.y - view.img.height - 2;
-    if (b.faction !== PLAYER_FACTION) {
+    if (!this.isMine(b.faction)) {
       this.drawFootprint(b.tx, b.ty, def.size, this.factions[b.faction].color);
       this.interaction = { x, y, text: `${this.factions[b.faction].name} · ${def.name}`, progress: null };
       return;
@@ -1920,18 +2029,18 @@ export class WorldScene extends Phaser.Scene {
     });
     for (const e of events) {
       if (e.type === 'married') {
-        if (e.a.faction === PLAYER_FACTION && e.b) this.toast(`${fullName(e.a)} e ${fullName(e.b)} se casaram!`, '#ffb0d0');
+        if (this.isMine(e.a.faction) && e.b) this.toast(`${fullName(e.a)} e ${fullName(e.b)} se casaram!`, '#ffb0d0');
       } else if (e.type === 'born') {
         const c = e.child;
         this.spawnVillagerEntity(c);
-        if (c.faction === PLAYER_FACTION) {
+        if (this.isMine(c.faction)) {
           const parents = c.parents
             .map((id) => (id === PLAYER_ID ? 'você' : (this.population.person(id)?.name ?? '?')))
             .join(' e ');
           this.toast(`Nasceu ${fullName(c)}, ${c.gender === 'f' ? 'filha' : 'filho'} de ${parents}!`, '#ffb0d0');
         }
       } else if (e.type === 'died') {
-        const mine = e.npc.faction === PLAYER_FACTION;
+        const mine = this.isMine(e.npc.faction);
         this.removeVillager(e.npc.id, mine ? `${fullName(e.npc)} morreu de velhice aos ${e.age} anos.` : null);
       }
     }

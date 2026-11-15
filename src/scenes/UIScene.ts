@@ -308,14 +308,19 @@ export class UIScene extends Phaser.Scene {
     const w = this.world;
     if (!w.player) return;
 
-    for (const r of RESOURCES) this.counts[r].setText(`${RESOURCE_LABEL[r]} ${w.stockpile.items[r]}`);
+    // The HUD shows the village you're in (home, or one of your colonies).
+    const v = w.currentVillage();
+    const stock = v.stock;
+    const people = w.population.villagersOf(v.id);
+    for (const r of RESOURCES) this.counts[r].setText(`${RESOURCE_LABEL[r]} ${stock.items[r]}`);
     // Meat is food: show how many days it lasts, and warn when it runs low.
-    const days = foodDays(w.population.villagers, w.stockpile);
+    const days = foodDays(people, stock);
     if (Number.isFinite(days)) {
-      this.counts.meat.setText(`Carne ${w.stockpile.items.meat} · ${days.toFixed(1).replace('.', ',')}d`);
+      this.counts.meat.setText(`Carne ${stock.items.meat} · ${days.toFixed(1).replace('.', ',')}d`);
       this.counts.meat.setColor(days < 1 ? '#ff8a7a' : days < 2 ? '#ffc060' : '#e8d8b0');
     }
-    this.popText.setText(`População ${w.population.villagers.length}/${w.population.beds}   ⛁ ${w.factions[0].coins} moedas`);
+    const where = v.parent !== undefined ? `${v.name} · ` : '';
+    this.popText.setText(`${where}População ${people.length}/${w.population.bedsOf(v.id)}   ⛁ ${w.factions[0].coins} moedas`);
 
     const light = ambientAt(w.clock.hour);
     this.night.setFillStyle(light.color, light.alpha);

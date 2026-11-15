@@ -30,6 +30,8 @@ export type TabRenderer = (ui: ManagementUI, x: number, y: number, w: number, h:
 export class ManagementUI {
   isOpen = false;
   tab: Tab = 'summary';
+  /** Which of your villages the summary and people tabs show. */
+  village = 0;
   page = 0;
   readonly renderers: Partial<Record<Tab, TabRenderer>> = {};
   private objects: Phaser.GameObjects.GameObject[] = [];
@@ -135,21 +137,49 @@ export class ManagementUI {
     this.objects = [];
   }
 
+  /** Buttons to pick one of your villages (only when you have colonies). Returns the y below them. */
+  private villagePicker(x: number, y: number): number {
+    const mine = this.world.myVillages();
+    if (!mine.some((f) => f.id === this.village)) this.village = 0;
+    if (mine.length < 2) return y;
+    let bx = x;
+    for (const f of mine) {
+      const label = f.name;
+      const w = Math.max(90, label.length * 8 + 20);
+      this.button(
+        bx,
+        y,
+        w,
+        f.id === this.village ? `● ${label}` : label,
+        () => {
+          this.village = f.id;
+          this.build();
+        },
+        f.id === this.village ? 0x4a3a1e : 0x2a2420,
+      );
+      bx += w + 6;
+    }
+    return y + 36;
+  }
+
   private summary(x: number, y: number, w: number): void {
     const world = this.world;
     const pop = world.population;
-    const villagers = pop.villagers;
-    const days = foodDays(villagers, world.stockpile);
+    y = this.villagePicker(x, y);
+    const v = this.village;
+    const stock = world.factions[v].stock;
+    const villagers = pop.villagersOf(v);
+    const days = foodDays(villagers, stock);
     const employed = villagers.filter((n) => n.jobId !== null).length;
     const lines: [string, string][] = [
-      ['População', `${villagers.length} aldeões · ${pop.beds} camas (${pop.freeBeds} livres)`],
+      ['População', `${villagers.length} aldeões · ${pop.bedsOf(v)} camas (${pop.freeBedsOf(v)} livres)`],
       ['Trabalho', `${employed} empregados · ${villagers.length - employed} sem trabalho`],
       ['Comida', Number.isFinite(days) ? `${days.toFixed(1).replace('.', ',')} dias de carne` : 'ninguém para alimentar'],
       ['Famintos', `${villagers.filter((n) => isStarving(n)).length}`],
-      ['Território', `${world.territory.area(0)} quadrados`],
+      ['Território', `${world.territory.area(v)} quadrados`],
       [
         'Prédios',
-        `${world.buildings.list.filter((b) => b.faction === 0 && b.built).length} prontos · ${world.buildings.list.filter((b) => b.faction === 0 && !b.built).length} em obra`,
+        `${world.buildings.list.filter((b) => b.faction === v && b.built).length} prontos · ${world.buildings.list.filter((b) => b.faction === v && !b.built).length} em obra`,
       ],
       ['Você', `nível ${world.stats.level} · vida ${world.stats.hp}/${world.stats.maxHp}`],
     ];
@@ -163,7 +193,7 @@ export class ManagementUI {
     this.text(x, yy, 'Estoque', 13, '#cdb98e');
     RESOURCES.forEach((r, k) => {
       this.add(this.scene.add.image(x + 120 + k * 130, yy + 7, `icon_${r}`).setScale(2));
-      this.text(x + 134 + k * 130, yy, `${RESOURCE_LABEL[r]} ${world.stockpile.items[r]}`, 13);
+      this.text(x + 134 + k * 130, yy, `${RESOURCE_LABEL[r]} ${stock.items[r]}`, 13);
     });
 
     // Other villages at a glance.
@@ -193,7 +223,8 @@ export class ManagementUI {
   }
 
   private people(x: number, y: number, w: number): void {
-    const list = this.world.population.villagers;
+    y = this.villagePicker(x, y);
+    const list = this.world.population.villagersOf(this.village);
     if (list.length === 0) {
       this.text(x, y, 'Nenhum aldeão ainda. Recrute andarilhos (o "!" sobre a cabeça).', 13, MUTED);
       return;

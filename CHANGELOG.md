@@ -2,6 +2,17 @@
 
 Each milestone from `docs/GDD.md` is a minor version.
 
+## 1.13.0: Milestone 23, colonies
+
+- New in the B menu: "Fundar colônia" (100 wood, 80 stone, 10 iron, 10 meat). Place a new hall far from every village (at least 24 tiles from any village centre, with no claimed land within 10 tiles). It becomes a colony of yours, with its own territory, its own stock (it starts with 30 wood, 20 stone and 10 meat) and its own people. Colony names: Nova Esperança, Vale do Corvo, Monte Claro and so on.
+- Colonies share your relations: your wars, peace and alliances are theirs too, and enemies raid them.
+- Buildings placed on a colony's land belong to that colony and are paid from what you carry first, then the colony's stock. The colony hall is its deposit point: E there opens its stock.
+- To settle a colony, build a house there and open its panel. "Mudar para cá" lists adults from your other villages; they leave their job and walk to their new home.
+- The HUD shows the stock and population of the village you're standing in. V → Resumo and V → Aldeões get a village selector.
+- If an enemy takes a colony's hall, only that colony is lost (its land, buildings and people). Your home village is still only plundered, never conquered.
+- Saves keep colonies (name and founder).
+- Not done yet: caravans between your own villages. Move goods by hand for now (the hall's stock panel).
+
 ## 1.12.0: Milestone 22, tools in hand and mouse combat
 
 - Tools and weapons show in people's hands: the player holds the selected hotbar tool or weapon, workers hold their job tool (axe, pick, spear) and swing it while working, and soldiers carry their weapon.

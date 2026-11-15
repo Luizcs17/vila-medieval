@@ -1,6 +1,7 @@
 import type Phaser from 'phaser';
 import { BEDS_PER_HOUSE } from '../config';
 import { BUILDING_DEFS, type Building } from '../game/buildings';
+import { isAdult } from '../game/families';
 import { ARMORS, recipeOf, WEAPONS, workplaceTools } from '../game/gear';
 import { ITEM_DEFS, RECIPES, type ToolId } from '../game/items';
 import { jobTitle, type NpcData, productivity, SKILL_LABEL, stars } from '../game/npcs';
@@ -67,7 +68,9 @@ export class BuildingPanelUI {
     const b = this.building!;
     const f = this.world.factions[b.faction];
     return [
-      this.world.population.villagers.map((n) => `${n.id}:${n.jobId}:${n.weapon}:${n.armor}`).join(','),
+      this.world.population.allVillagers
+        .map((n) => `${n.id}:${n.faction}:${n.homeId}:${n.jobId}:${n.weapon}:${n.armor}`)
+        .join(','),
       JSON.stringify(b.storage),
       (b.queue ?? []).join(','),
       b.paid,
@@ -256,7 +259,7 @@ export class BuildingPanelUI {
       y += 6;
       items.push(s.add.text(PAD, y, 'Aldeões sem trabalho (melhores primeiro)', { ...TEXT, fontSize: '13px', color: '#cdb98e' }));
       y += 22;
-      const free = pop.unemployed(skill);
+      const free = pop.unemployed(skill, b.faction);
       if (free.length === 0) {
         items.push(
           s.add.text(PAD + 8, y, 'Nenhum. Recrute andarilhos para ter mais gente.', {
@@ -288,6 +291,37 @@ export class BuildingPanelUI {
         y += 22;
       }
       for (const n of residents) row(n, `${n.name} · ${jobTitle(n, this.world.buildings)}`, '');
+      // Settling other villages of yours: move people here from your other villages.
+      const others = this.world.myVillages().filter((f) => f.id !== b.faction);
+      if (b.type === 'house' && b.built && others.length > 0 && residents.length < BEDS_PER_HOUSE) {
+        y += 4;
+        items.push(
+          s.add.text(PAD, y, `Mudar para cá (de ${others.map((f) => f.name).join(', ')})`, {
+            ...TEXT,
+            fontSize: '13px',
+            color: '#cdb98e',
+          }),
+        );
+        y += 22;
+        const movers = others
+          .flatMap((f) => pop.villagersOf(f.id))
+          .filter((n) => isAdult(n, this.world.clock.seconds) && this.world.factions[n.faction].rulerId !== n.id)
+          .sort((a, c) => Number(a.jobId !== null) - Number(c.jobId !== null))
+          .slice(0, 4);
+        if (movers.length === 0) {
+          items.push(s.add.text(PAD + 8, y, 'Ninguém disponível.', { ...TEXT, fontSize: '12px', color: '#a8977a' }));
+          y += 22;
+        }
+        for (const n of movers)
+          row(n, n.name, `${this.world.factions[n.faction].name} · ${jobTitle(n, this.world.buildings)}`, {
+            text: 'Mudar',
+            color: 0x2e3a4a,
+            onClick: () => {
+              this.world.moveVillager(n, b);
+              this.rebuild();
+            },
+          });
+      }
     }
 
     y += 8;

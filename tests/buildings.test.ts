@@ -70,11 +70,11 @@ describe('buildings', () => {
     expect(b.work(site, 1)).toBe(false);
   });
 
-  it('every buildable building has a cost the stockpile can pay', () => {
+  it('every buildable building (but founding a colony) has a cost a modest stockpile can pay', () => {
     const stock = new Inventory();
     stock.add('wood', 100);
     stock.add('stone', 100);
-    for (const type of BUILD_MENU) {
+    for (const type of BUILD_MENU.filter((t) => t !== 'colony')) {
       expect(Object.keys(BUILDING_DEFS[type].cost).length).toBeGreaterThan(0);
       expect(stock.canAfford(BUILDING_DEFS[type].cost)).toBe(true);
     }
