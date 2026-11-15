@@ -14,6 +14,7 @@ const OBJ_COLOR: Partial<Record<Obj, [number, number, number]>> = {
   [Obj.Pine]: [23, 48, 31],
   [Obj.Rock]: [106, 101, 94],
   [Obj.Iron]: [168, 98, 46],
+  [Obj.Road]: [122, 106, 88],
 };
 const TEXT = { fontFamily: '"Alegreya", Georgia, serif', color: '#e8d8b0' } satisfies Phaser.Types.GameObjects.Text.TextStyle;
 

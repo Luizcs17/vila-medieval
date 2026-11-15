@@ -21,6 +21,8 @@ export enum Obj {
   Sapling,
   /** A palisade gate: people walk through, animals and raiders don't. */
   Gate,
+  /** Cobbled road: walkable, faster to travel, preferred by pathfinding. */
+  Road,
 }
 
 /** Objects that block movement. Anything not listed here can be walked over. */
@@ -143,6 +145,11 @@ export function isWalkable(map: WorldMap, tx: number, ty: number): boolean {
   if (!inBounds(map, tx, ty)) return false;
   const i = ty * map.w + tx;
   return map.ground[i] !== Ground.Water && !BLOCKING.has(map.objects[i]);
+}
+
+/** Is there a road on tile (tx, ty)? */
+export function isRoad(map: WorldMap, tx: number, ty: number): boolean {
+  return inBounds(map, tx, ty) && map.objects[ty * map.w + tx] === Obj.Road;
 }
 
 export function tileIndex(map: WorldMap, tx: number, ty: number): number {

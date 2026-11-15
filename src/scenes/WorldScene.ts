@@ -58,7 +58,7 @@ import { clearSave, readSave, SAVE_VERSION, type SaveData, writeSave } from '../
 import { SlotInventory } from '../game/slots';
 import { Territory } from '../game/territory';
 import { GameClock } from '../game/time';
-import { findSpot, foundTown, populateTown } from '../game/towns';
+import { buildRoadNetwork, findSpot, foundTown, populateTown } from '../game/towns';
 import { createPlaceholderTextures } from '../gfx/textures';
 import { gridToScreen, screenToGrid } from '../iso';
 import { Wildlife } from '../systems/Wildlife';
@@ -78,6 +78,7 @@ const OBJECT_KEY: Partial<Record<Obj, string>> = {
   [Obj.Iron]: 'iron',
   [Obj.Stump]: 'stump',
   [Obj.Sapling]: 'sapling',
+  [Obj.Road]: 'road',
 };
 
 const BUILDING_KEY: Record<BuildingType, string> = {
@@ -93,6 +94,7 @@ const BUILDING_KEY: Record<BuildingType, string> = {
   tower: 'bld_tower',
   barracks: 'bld_barracks',
   embassy: 'bld_embassy',
+  road: 'road',
 };
 
 /** Ground is drawn beneath everything; objects and characters are depth-sorted by their screen y. */
@@ -315,6 +317,11 @@ export class WorldScene extends Phaser.Scene {
       this.factions[0].center = { x: sx + 2, y: sy - 1 };
       for (const f of this.factions)
         if (!f.isPlayer) for (const b of foundTown(this.buildings, f, Math.random)) this.addBuildingView(b);
+      for (const i of buildRoadNetwork(
+        this.map,
+        this.factions.map((f) => f.center),
+      ))
+        this.replaceObjectImage(i);
     }
     this.territory.recompute(this.buildings.list);
 
@@ -1129,6 +1136,12 @@ export class WorldScene extends Phaser.Scene {
     const { type } = this.placement;
     const def = BUILDING_DEFS[type];
     if (!this.stockpile.pay(def.cost)) return false;
+    if (type === 'road') {
+      const i = tileIndex(this.map, this.placeTile.x, this.placeTile.y);
+      this.map.objects[i] = Obj.Road;
+      this.replaceObjectImage(i);
+      return true;
+    }
     const b = this.buildings.place(type, this.placeTile.x, this.placeTile.y);
     this.territory.recompute(this.buildings.list);
     for (const i of this.buildings.footprint(type, b.tx, b.ty)) this.replaceObjectImage(i); // clears stumps/saplings
@@ -1154,7 +1167,12 @@ export class WorldScene extends Phaser.Scene {
     this.placeTile = { x: tx, y: ty };
 
     let check = this.buildings.check(p.type, tx, ty, (i) => this.playerOverlapsTile(i));
-    if (check.ok && !this.territory.canBuild(PLAYER_FACTION, tx, ty, def.size))
+    if (p.type === 'road') {
+      // Roads may leave your land (to reach other villages), just not cross into theirs.
+      const owner = this.territory.ownerAt(tx, ty);
+      if (check.ok && this.map.objects[tileIndex(this.map, tx, ty)] === Obj.Road) check = { ok: false, reason: 'Já tem estrada' };
+      if (check.ok && owner !== -1 && owner !== PLAYER_FACTION) check = { ok: false, reason: 'Território de outra vila' };
+    } else if (check.ok && !this.territory.canBuild(PLAYER_FACTION, tx, ty, def.size))
       check = { ok: false, reason: 'Fora do seu território' };
     if (check.ok && !this.stockpile.canAfford(def.cost)) check = { ok: false, reason: 'Recursos insuficientes no estoque' };
     p.check = check;
@@ -1527,6 +1545,11 @@ export class WorldScene extends Phaser.Scene {
     if (!key) return;
     const g = tileCenter(this.map, i);
     const c = gridToScreen(g.x, g.y);
+    if (this.map.objects[i] === Obj.Road) {
+      // Roads lie flat on the ground, under everything that stands.
+      this.objectImages.set(i, this.add.image(c.x, c.y, key).setDepth(GROUND_DEPTH + 0.5));
+      return;
+    }
     // Anchor the sprite's base slightly below the tile center so it sits on the diamond.
     const img = this.add
       .image(c.x, c.y + TILE_H / 4, key)

@@ -25,7 +25,8 @@ export type BuildingType =
   | 'gate'
   | 'tower'
   | 'barracks'
-  | 'embassy';
+  | 'embassy'
+  | 'road';
 
 export interface BuildingDef {
   name: string;
@@ -183,6 +184,17 @@ export const BUILDING_DEFS: Record<BuildingType, BuildingDef> = {
     maxHp: 150,
     job: { skill: 'combat', slots: 4, nodes: [], radius: 10, title: { f: 'Soldada', m: 'Soldado' } },
   },
+  road: {
+    claim: 0,
+    name: 'Estrada',
+    size: 1,
+    cost: { stone: 1 },
+    buildSeconds: 0,
+    description: 'Calçada de pedra: anda-se mais rápido.',
+    buildable: true,
+    repeatPlace: true,
+    maxHp: 1,
+  },
   embassy: {
     claim: 4,
     name: 'Embaixada',
@@ -218,7 +230,7 @@ export interface Building {
 export type PlaceCheck = { ok: true } | { ok: false; reason: string };
 
 /** Objects a building can be placed over (they get cleared). */
-const CLEARABLE = new Set<Obj>([Obj.None, Obj.Stump, Obj.Sapling]);
+const CLEARABLE = new Set<Obj>([Obj.None, Obj.Stump, Obj.Sapling, Obj.Road]);
 
 /** All buildings and construction sites, and which tiles they cover. */
 export class Buildings {

@@ -21,6 +21,7 @@ const OBJ_COLOR: Partial<Record<Obj, string>> = {
   [Obj.Rock]: '#6a655e',
   [Obj.Iron]: '#a8622e',
   [Obj.Building]: '#7a5530',
+  [Obj.Road]: '#7a6a58',
 };
 
 /**

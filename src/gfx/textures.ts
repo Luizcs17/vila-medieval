@@ -669,6 +669,20 @@ export function createPlaceholderTextures(scene: Phaser.Scene): void {
   constructionSite(scene, 'site_2', 2);
 
   stump(scene, 'stump');
+  {
+    const cobble = ['#4a4038', '#564b41', '#5e554a', '#433a33'].map(hex);
+    const gap = hex('#2a241f');
+    const r = rng(77);
+    paint(scene, 'road', TILE_W, TILE_H, (x, y) => {
+      const d = inDiamond(x, y);
+      if (d > 1.06) return null;
+      // Rows of stones offset like brickwork, with dark joints.
+      const row = Math.floor(y / 3);
+      const col = Math.floor((x + (row % 2) * 2) / 4);
+      if (y % 3 === 0 || (x + (row % 2) * 2) % 4 === 0) return gap;
+      return cobble[(row * 7 + col * 3 + Math.floor(r() * 2)) % cobble.length];
+    });
+  }
   fromRows(scene, 'sapling', ['...kk...', '..kllk..', '.kllgk..', '.kglggk.', '..kgggk.', '...kbk..', '..kbbk..', '.kkkkkk.'], {
     k: '#1c2b14',
     l: '#7cc25a',

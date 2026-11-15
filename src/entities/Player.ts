@@ -1,7 +1,7 @@
 import type Phaser from 'phaser';
-import { PLAYER_RADIUS, PLAYER_RUN_MULTIPLIER, PLAYER_SPEED } from '../config';
+import { PLAYER_RADIUS, PLAYER_RUN_MULTIPLIER, PLAYER_SPEED, ROAD_SPEED } from '../config';
 import { gridToScreen, screenDirToGrid } from '../iso';
-import { isWalkable, type WorldMap } from '../world/map';
+import { isRoad, isWalkable, type WorldMap } from '../world/map';
 
 export interface MoveInput {
   /** Screen-space direction: x right, y down. Each in {-1, 0, 1}. */
@@ -44,7 +44,8 @@ export class Player {
     const moving = dir.x !== 0 || dir.y !== 0;
 
     if (moving) {
-      const speed = PLAYER_SPEED * (input.run ? PLAYER_RUN_MULTIPLIER : 1) * dtSeconds;
+      const road = isRoad(this.map, Math.floor(this.gx), Math.floor(this.gy)) ? ROAD_SPEED : 1;
+      const speed = PLAYER_SPEED * road * (input.run ? PLAYER_RUN_MULTIPLIER : 1) * dtSeconds;
       // Move each axis separately so the player slides along obstacles instead of sticking.
       const nx = this.gx + dir.x * speed;
       if (!this.blocked(nx, this.gy)) this.gx = nx;

@@ -1,4 +1,5 @@
-import { inBounds, isWalkable, tileIndex, type WorldMap } from './map';
+import { ROAD_COST } from '../config';
+import { inBounds, isWalkable, Obj, tileIndex, type WorldMap } from './map';
 
 export interface Tile {
   x: number;
@@ -76,7 +77,7 @@ export function findPath(
   const g = new Map<number, number>([[start, 0]]);
   const parent = new Map<number, number>();
   const open = new Heap();
-  const h = (x: number, y: number) => Math.hypot(x - toward.x, y - toward.y);
+  const h = (x: number, y: number) => Math.hypot(x - toward.x, y - toward.y) * ROAD_COST;
   open.push(start, h(from.x, from.y));
   let expanded = 0;
 
@@ -96,7 +97,7 @@ export function findPath(
       if (!inBounds(map, nx, ny) || !isWalkable(map, nx, ny)) continue;
       if (dx !== 0 && dy !== 0 && (!isWalkable(map, cx + dx, cy) || !isWalkable(map, cx, cy + dy))) continue;
       const ni = tileIndex(map, nx, ny);
-      const ng = gc + cost;
+      const ng = gc + cost * (map.objects[ni] === Obj.Road ? ROAD_COST : 1);
       if (ng < (g.get(ni) ?? Infinity)) {
         g.set(ni, ng);
         parent.set(ni, cur);
