@@ -119,6 +119,22 @@ export function planAiCaravan(home: Market): { cargo: Goods; shopping: Goods; co
   return { cargo, shopping, coins: Math.min(Math.floor(home.coins / 2), 120) };
 }
 
+/** Buying one unit from a village's market with `purse` coins: the price, or why not. */
+export function quoteBuy(m: Market, g: Good, purse: number): { price: number } | { why: string } {
+  if (m.forSale(g) <= 0) return { why: `Não vendem ${goodLabel(g)} agora.` };
+  const price = buyPrice(g, m.have(g));
+  if (purse < price) return { why: 'Moedas insuficientes.' };
+  return { price };
+}
+
+/** Selling one unit (a worn tool is worth its remaining use, `condition` 0–1): the price, or why not. */
+export function quoteSell(m: Market, g: Good, condition = 1): { price: number } | { why: string } {
+  if (m.wants(g) <= 0) return { why: `Não querem mais ${goodLabel(g)}.` };
+  const price = Math.max(1, Math.round(sellPrice(g, m.have(g)) * Math.max(0, Math.min(1, condition))));
+  if (m.coins < price) return { why: 'A vila não tem moedas para pagar.' };
+  return { price };
+}
+
 export const summarize = (goods: Goods) =>
   GOODS.filter((g) => (goods[g] ?? 0) > 0)
     .map((g) => `${goods[g]} ${goodLabel(g)}`)

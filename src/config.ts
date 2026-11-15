@@ -63,6 +63,11 @@ export const WANDERER_FIRST_SPAWN = 15;
 export const WANDERER_INTERVAL = 150;
 /** How long a wanderer stays on the map before leaving, if not recruited. */
 export const WANDERER_STAY = 720;
+/** Before you have a village, up to this many wanderers can travel with you as companions. */
+export const COMPANION_MAX = 4;
+/** Companions fight hostiles this close to them, as long as the fight stays this close to you. */
+export const COMPANION_RANGE = 6;
+export const COMPANION_LEASH = 10;
 
 /** Combat and animals. Damage/HP are in hit points. */
 export const PLAYER_MAX_HP = 10;

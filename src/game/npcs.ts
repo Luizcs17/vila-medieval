@@ -1,6 +1,7 @@
 import {
   ADULT_AGE,
   BEDS_PER_HOUSE,
+  COMPANION_MAX,
   DAY_SECONDS,
   MAX_WANDERERS,
   SOLDIER_BONUS_HP,
@@ -28,7 +29,17 @@ export function tierLabel(tier: Tier, g: Gender): string {
 }
 
 export const roleLabel = (role: NpcData['role'], g: Gender) =>
-  role === 'wanderer' ? (g === 'f' ? 'Andarilha' : 'Andarilho') : g === 'f' ? 'Aldeã' : 'Aldeão';
+  role === 'wanderer'
+    ? g === 'f'
+      ? 'Andarilha'
+      : 'Andarilho'
+    : role === 'companion'
+      ? g === 'f'
+        ? 'Companheira'
+        : 'Companheiro'
+      : g === 'f'
+        ? 'Aldeã'
+        : 'Aldeão';
 
 export type TraitId = 'axe' | 'stone' | 'iron' | 'aim' | 'tireless' | 'frugal' | 'appetite' | 'slow';
 
@@ -176,7 +187,8 @@ export interface NpcData {
   /** Resources asked for on recruitment (in addition to a free bed). */
   request: Partial<Amounts>;
   variant: number;
-  role: 'wanderer' | 'villager';
+  /** Companions travel with the player before there's a village (they become villagers when it's founded). */
+  role: 'wanderer' | 'villager' | 'companion';
   homeId: number | null;
   /** Workplace building id, or null when unemployed. */
   jobId: number | null;
@@ -346,6 +358,36 @@ export class Population {
     return this.npcs.filter((n) => n.role === 'wanderer');
   }
 
+  /** People travelling with the player (before the village exists). */
+  get companions(): NpcData[] {
+    return this.npcs.filter((n) => n.role === 'companion');
+  }
+
+  /** Can this wanderer join you as a companion (room in the group + their request)? */
+  checkCompanion(npc: NpcData, inv: SlotInventory, stock: Inventory): { room: boolean; items: boolean; ok: boolean } {
+    const room = this.companions.length < COMPANION_MAX;
+    const items = canPayFrom(npc.request, inv, stock);
+    return { room, items, ok: npc.role === 'wanderer' && room && items };
+  }
+
+  /** Pays the request and the wanderer starts following you. */
+  recruitCompanion(npc: NpcData, inv: SlotInventory, stock: Inventory): boolean {
+    if (!this.checkCompanion(npc, inv, stock).ok) return false;
+    payFrom(npc.request, inv, stock);
+    npc.role = 'companion';
+    npc.faction = 0;
+    npc.homeId = null;
+    npc.jobId = null;
+    return true;
+  }
+
+  /** The village is founded: companions settle down as (homeless, for now) villagers. Returns them. */
+  settleCompanions(): NpcData[] {
+    const list = this.companions;
+    for (const n of list) n.role = 'villager';
+    return list;
+  }
+
   private houses(faction = 0): Building[] {
     return this.buildings.list.filter((b) => b.type === 'house' && b.built && b.faction === faction);
   }
@@ -396,7 +438,7 @@ export class Population {
     const i = this.npcs.findIndex((n) => n.id === id);
     if (i < 0) return;
     const [n] = this.npcs.splice(i, 1);
-    if (n.role !== 'villager') return;
+    if (n.role === 'wanderer') return;
     const { name, surname, gender, parents, partnerId, born, faction, variant } = n;
     this.deceased.push({ id, name, surname, gender, parents, partnerId, born, faction, variant, diedAt: this.now() });
     for (const o of this.npcs) if (o.partnerId === id) o.partnerId = null;

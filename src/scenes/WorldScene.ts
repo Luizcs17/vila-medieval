@@ -62,6 +62,7 @@ import {
 import { ageOf, Families, fullName, isAdult, PLAYER_ID } from '../game/families';
 import { Gatherer, NODE_DEFS, nearestTile, ResourceNodes } from '../game/gathering';
 import {
+  ARMORS,
   absorb,
   basicTool,
   grantStarterTools,
@@ -70,12 +71,13 @@ import {
   tickSmithy,
   toolForWorker,
   unqueue,
+  WEAPONS,
   wearWorkplaceTool,
   workplaceTools,
 } from '../game/gear';
 import { Inventory, RESOURCE_LABEL, RESOURCES, type Resource } from '../game/inventory';
-import { ITEM_DEFS, type ItemId, RECIPES, type Recipe, type ToolId, type ToolType } from '../game/items';
-import { isStarving, updateNeeds } from '../game/needs';
+import { ITEM_DEFS, type ItemId, maxDurability, RECIPES, type Recipe, type ToolId, type ToolType } from '../game/items';
+import { isStarving, updateNeeds, updateNeedsFrom } from '../game/needs';
 import {
   compass,
   generateWanderer,
@@ -86,6 +88,7 @@ import {
   payFrom,
   pickSpawnTile,
   productivity,
+  roleLabel,
   describeCost as summarizeCost,
   WandererSpawner,
 } from '../game/npcs';
@@ -105,6 +108,8 @@ import {
   isToolGood,
   type Market,
   planAiCaravan,
+  quoteBuy,
+  quoteSell,
   summarize,
   TOOL_GOODS,
   targetStock,
@@ -391,6 +396,7 @@ export class WorldScene extends Phaser.Scene {
         this.toast(`${n?.name ?? 'O diplomata'} não encontrou caminho até a outra vila.`, '#ffb070');
       },
       factionCenter: (f) => this.factions[f].center,
+      playerAt: () => ({ x: this.player.gx, y: this.player.gy }),
       strike: (from, target, dmg) =>
         this.strikeTarget(target, dmg, `um soldado de ${this.factions[from.data.faction].name}`, {
           kind: 'npc',
@@ -639,7 +645,7 @@ export class WorldScene extends Phaser.Scene {
   private humans(): Human[] {
     const list: Human[] = [{ kind: 'player', id: 0, gx: this.player.gx, gy: this.player.gy }];
     for (const n of this.npcs.values())
-      if (n.data.role === 'villager' && !n.indoors) list.push({ kind: 'npc', id: n.data.id, gx: n.gx, gy: n.gy });
+      if (n.data.role !== 'wanderer' && !n.indoors) list.push({ kind: 'npc', id: n.data.id, gx: n.gx, gy: n.gy });
     return list;
   }
 
@@ -1309,7 +1315,7 @@ export class WorldScene extends Phaser.Scene {
       bestD = Math.hypot(a.data.gx - gx, a.data.gy - gy);
     }
     for (const n of this.npcs.values()) {
-      if (n.data.role !== 'villager' || n.indoors || !this.atWar(faction, n.data.faction) || this.missions.has(n.data.id))
+      if (n.data.role === 'wanderer' || n.indoors || !this.atWar(faction, n.data.faction) || this.missions.has(n.data.id))
         continue;
       const d = Math.hypot(n.gx - gx, n.gy - gy);
       if (d < bestD) {
@@ -1504,6 +1510,12 @@ export class WorldScene extends Phaser.Scene {
         else this.removeVillager(e.npc.id, `${e.npc.name} morreu de fome.`);
       }
     }
+    const bag = { take: () => this.inventory.remove('meat', 1) === 1 || this.stockpile.pay({ meat: 1 }) };
+    for (const e of updateNeedsFrom(this.population.companions, bag, worldDt)) {
+      if (e.type === 'starving') this.toast(`${e.npc.name} está com fome! Leve carne na mochila.`, '#ffb070');
+      else this.removeVillager(e.npc.id, `${e.npc.name} morreu de fome.`);
+    }
+    this.houseHomeless(worldDt);
     this.updateTowns(worldDt);
     this.updateSmithies(worldDt);
     this.updateFamilies(worldDt);
@@ -1569,6 +1581,13 @@ export class WorldScene extends Phaser.Scene {
   recruit(id: number): boolean {
     const npc = this.npcs.get(id);
     if (!npc) return false;
+    if (!this.settled) {
+      if (!this.population.recruitCompanion(npc.data, this.inventory, this.stockpile)) return false;
+      this.gainXp(XP.recruit);
+      npc.becomeCompanion();
+      this.toast(`${npc.data.name} agora viaja com você. Leve carne: companheiros comem da sua mochila.`, '#a8ffa8');
+      return true;
+    }
     const home = this.population.recruit(npc.data, this.inventory, this.stockpile);
     if (!home) return false;
     this.gainXp(XP.recruit);
@@ -1740,8 +1759,94 @@ export class WorldScene extends Phaser.Scene {
     this.toast('O que estava guardado na sua casa agora é o estoque da vila (no Salão).', '#cdb98e');
   }
 
-  /** Hook for what changes when the village is founded. */
-  private onSettled(): void {}
+  /** The village is founded: your companions settle down as villagers. */
+  private onSettled(): void {
+    const c = this.villageCenter;
+    const settled = this.population.settleCompanions();
+    for (const n of settled) this.npcs.get(n.id)?.settleNear(c.x, c.y + 2);
+    if (settled.length > 0)
+      this.toast(
+        `${settled.map((n) => n.name).join(', ')} ${settled.length > 1 ? 'agora são aldeões' : 'agora é da vila'}. Construa casas para eles.`,
+        '#a8ffa8',
+      );
+  }
+
+  /** Every few seconds, villagers without a home move into a free bed of their village. */
+  private homelessTimer = 0;
+  private houseHomeless(worldDt: number): void {
+    this.homelessTimer += worldDt;
+    if (this.homelessTimer < 5) return;
+    this.homelessTimer = 0;
+    for (const n of this.population.allVillagers) {
+      if (n.homeId !== null) continue;
+      const home = this.population.houseWithBed(n.faction);
+      if (!home) continue;
+      n.homeId = home.id;
+      this.npcs.get(n.id)?.moveTo(home);
+      if (this.isMine(n.faction)) this.toast(`${n.name} se mudou para uma casa.`, '#a8c8ff');
+    }
+  }
+
+  /** Gives a companion (or soldier) the next weapon or armour you carry, putting theirs back in your bag. */
+  equipFromBag(n: NpcData, slot: 'weapon' | 'armor'): void {
+    const list = slot === 'weapon' ? WEAPONS : ARMORS;
+    const current = n[slot] ?? null;
+    const options: (ToolId | null)[] = [null, ...list.filter((t) => this.inventory.count(t) > 0 || t === current)];
+    const next = options[(options.indexOf(current) + 1) % options.length];
+    if (next === current) return;
+    if (current && this.inventory.add(current, 1) === 0) {
+      this.toast('Sua mochila está cheia.', '#ffb070');
+      return;
+    }
+    if (next) this.inventory.remove(next, 1);
+    n[slot] = next;
+  }
+
+  /** Buy (from them) or sell (to them) one unit at another village's market, with what you carry and your coins. */
+  peddle(faction: number, g: Good, side: 'buy' | 'sell'): string | null {
+    const f = this.factions[faction];
+    if (!f?.alive || this.isMine(faction)) return 'Ninguém para negociar.';
+    if (this.atWar(PLAYER_FACTION, faction)) return 'Estão em guerra com você.';
+    const market = this.marketOf(f);
+    const me = this.factions[PLAYER_FACTION];
+    if (side === 'buy') {
+      const q = quoteBuy(market, g, me.coins);
+      if ('why' in q) return q.why;
+      if (this.inventory.space(g) < 1) return 'Não cabe na mochila.';
+      this.inventory.add(g, 1);
+      market.remove(g, 1);
+      market.coins += q.price;
+      me.coins -= q.price;
+      return null;
+    }
+    const slot = this.sellSlot(g);
+    if (slot < 0) return `Você não carrega ${goodLabel(g)}.`;
+    const s = this.inventory.slots[slot]!;
+    const max = maxDurability(g);
+    const q = quoteSell(market, g, max && s.durability !== undefined ? s.durability / max : 1);
+    if ('why' in q) return q.why;
+    if (--s.count <= 0) this.inventory.slots[slot] = null;
+    market.add(g, 1);
+    market.coins -= q.price;
+    me.coins += q.price;
+    return null;
+  }
+
+  /** The slot a sale takes from: the most worn tool of that kind, or any stack of the resource. */
+  sellSlot(g: Good): number {
+    let best = -1;
+    this.inventory.slots.forEach((s, i) => {
+      if (s?.item !== g) return;
+      const b = best >= 0 ? this.inventory.slots[best] : null;
+      if (best < 0 || (s.durability ?? 0) < (b?.durability ?? 0)) best = i;
+    });
+    return best;
+  }
+
+  /** Opens the trade window with another village (from one of its people). */
+  openPeddle(faction: number): void {
+    this.events.emit('peddle', faction);
+  }
 
   /** Independent villages (colonies share their founder's relations). */
   private realms(): number[] {
@@ -1940,6 +2045,7 @@ export class WorldScene extends Phaser.Scene {
       this.gatherer.tick(dt, null, false, 1);
       const d = npc.data;
       let text = d.role === 'wanderer' ? `[E] Falar com ${d.name}` : `[E] ${d.name} · ${jobTitle(d, this.buildings)}`;
+      if (d.role === 'companion') text = `[E] ${d.name} · ${roleLabel(d.role, d.gender)}`;
       if (d.role === 'villager' && !this.isMine(d.faction)) text = `[E] ${d.name} · ${this.factions[d.faction].name}`;
       this.interaction = { x: npc.sprite.x, y: npc.sprite.y - npc.sprite.height - 6, text, progress: null };
       if (Phaser.Input.Keyboard.JustDown(this.keys.E)) {
