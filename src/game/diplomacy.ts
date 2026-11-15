@@ -56,6 +56,8 @@ export const giftValue = (rating: number) => 8 + rating * 3;
 export class Diplomacy {
   rel: Record<string, Relation> = {};
   pending: Proposal[] = [];
+  /** Maps a village to the one whose relations it shares (colonies → their founder). */
+  realm: (id: number) => number = (id) => id;
 
   /** Random starting relations (-15..15, at peace) between all villages. */
   init(ids: number[], rng: Rng): void {
@@ -65,17 +67,17 @@ export class Diplomacy {
   }
 
   get(a: number, b: number): Relation {
-    const k = key(a, b);
+    const k = key(this.realm(a), this.realm(b));
     this.rel[k] ??= { score: 0, status: 'peace' };
     return this.rel[k];
   }
 
   atWar(a: number, b: number): boolean {
-    return a !== b && this.get(a, b).status === 'war';
+    return this.realm(a) !== this.realm(b) && this.get(a, b).status === 'war';
   }
 
   allied(a: number, b: number): boolean {
-    return a !== b && this.get(a, b).status === 'alliance';
+    return this.realm(a) !== this.realm(b) && this.get(a, b).status === 'alliance';
   }
 
   adjust(a: number, b: number, delta: number): number {

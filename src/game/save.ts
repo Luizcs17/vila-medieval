@@ -33,6 +33,9 @@ export interface SaveData {
     center: { x: number; y: number };
     coins: number;
     tools: Partial<Record<ToolId, number>>;
+    /** Colonies only. */
+    name?: string;
+    parent?: number;
   }[];
   tradePolicy: TradePolicy;
   inventory: (Stack | null)[];

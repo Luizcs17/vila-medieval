@@ -208,6 +208,21 @@ export class Npc {
     this.idle = 0.5;
   }
 
+  /** Moved to another of the player's villages: walk to the new home (or go there directly if no path). */
+  moveTo(home: Building): void {
+    this.setIndoors(false);
+    if (!this.goNextTo(home, 60000)) {
+      const f = footprintOf(home);
+      this.gx = f.x + f.s / 2;
+      this.gy = f.y + f.s + 0.5;
+      this.path = [];
+    }
+    this.anchor = this.path.at(-1) ?? this.tile;
+    this.roam = 3;
+    this.idle = 0.5;
+    this.sync();
+  }
+
   /** Loaded villager: live around `home` without walking there first. */
   settleAt(home: Building): void {
     this.scene.tweens.killTweensOf(this.bob);

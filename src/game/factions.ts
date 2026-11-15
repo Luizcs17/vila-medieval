@@ -25,6 +25,8 @@ export interface Faction {
   coins: number;
   /** Market warehouse of finished tools and weapons, for trade. */
   tools: Partial<Record<ToolId, number>>;
+  /** Colonies: the village that founded them (same realm: shared relations and wars). */
+  parent?: number;
 }
 
 /** Player's standing orders for visiting merchants: sell what's above `sellAbove`, buy up to `buyUpTo`. */
@@ -64,4 +66,44 @@ export function createFactions(sites: { x: number; y: number }[], playerStock: I
     tools: {},
   }));
   return [player, ...rivals];
+}
+
+/** Names for the player's colonies, in founding order. */
+export const COLONY_NAMES = ['Nova Esperança', 'Vale do Corvo', 'Monte Claro', 'Ribeira Funda', 'Campo Verde', 'Porto Velho'];
+
+/** Resources a new colony starts with (part of its founding cost). */
+export const COLONY_START = { wood: 30, stone: 20, meat: 10 } as const;
+
+/** Tiles a new colony's hall must keep from every other village centre. */
+export const COLONY_MIN_DISTANCE = 24;
+
+/** A new colony of `parent`: its own stock, centre and territory, ruled by the same player. */
+export function createColony(id: number, center: { x: number; y: number }, name: string, parent = PLAYER_FACTION): Faction {
+  const color = [0x7ad070, 0x48a890, 0xa0c050, 0x50b8a0, 0x8cc890, 0x60a040][(id - 1) % 6];
+  return {
+    id,
+    name,
+    color,
+    css: css(color),
+    isPlayer: true,
+    stock: new Inventory(),
+    center,
+    alive: true,
+    rulerId: null,
+    coins: 0,
+    tools: {},
+    parent,
+  };
+}
+
+/** The faction whose relations and wars `id` shares (colonies follow their founder). */
+export const realmOf = (factions: Faction[], id: number): number => factions[id]?.parent ?? id;
+
+/** Can a colony hall stand at (x, y)? Far from every living village and on nobody's land. */
+export function colonySiteOk(factions: Faction[], x: number, y: number, ownerNear: (r: number) => boolean): string | null {
+  for (const f of factions)
+    if (f.alive && Math.hypot(f.center.x - x, f.center.y - y) < COLONY_MIN_DISTANCE)
+      return `Muito perto de ${f.name} (mín. ${COLONY_MIN_DISTANCE} passos)`;
+  if (ownerNear(10)) return 'Precisa de terra sem dono ao redor';
+  return null;
 }
