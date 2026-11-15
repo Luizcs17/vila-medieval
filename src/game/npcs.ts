@@ -386,13 +386,6 @@ export class Population {
     return true;
   }
 
-  /** The village is founded: companions settle down as (homeless, for now) villagers. Returns them. */
-  settleCompanions(): NpcData[] {
-    const list = this.companions;
-    for (const n of list) n.role = 'villager';
-    return list;
-  }
-
   private houses(faction = 0): Building[] {
     return this.buildings.list.filter((b) => b.type === 'house' && b.built && b.faction === faction);
   }

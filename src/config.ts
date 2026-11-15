@@ -70,6 +70,10 @@ export const COMPANION_RANGE = 6;
 export const COMPANION_LEASH = 10;
 /** F1/F2 quick orders reach your companions and soldiers this close to you. */
 export const QUICK_ORDER_RADIUS = 15;
+/** Idle villagers help build: each adds this fraction of the player's building speed (game time). */
+export const BUILDER_RATE = 0.4;
+/** …at construction sites of their village up to this far away. */
+export const BUILDER_RANGE = 40;
 
 /** Combat and animals. Damage/HP are in hit points. */
 export const PLAYER_MAX_HP = 10;

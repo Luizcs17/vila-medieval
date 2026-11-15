@@ -54,6 +54,10 @@ export interface NpcWorld {
   factionCenter(faction: number): { x: number; y: number };
   /** Where the player is (companions follow them). */
   playerAt(): { x: number; y: number };
+  /** An unfinished building an idle villager should help build, or null. */
+  buildSite(npc: Npc): Building | null;
+  /** One step of an idle villager's building work. */
+  buildWork(npc: Npc, b: Building, dt: number): void;
 }
 
 /** Something a soldier or tower can attack. */
@@ -195,7 +199,7 @@ export class Npc {
     // Soldiers stand guard day and night, diplomats travel on; everyone else works by day.
     const busyAtNight = soldier || world.mission(this.data.id) !== null;
     if (workplace && (busyAtNight || !world.isNight())) this.work(dt, world, workplace);
-    else this.live(dt, world);
+    else if (workplace || world.isNight() || !this.helpBuild(dt, world)) this.live(dt, world);
     this.sync();
   }
 
@@ -205,14 +209,6 @@ export class Npc {
     this.marker?.destroy();
     this.marker = undefined;
     this.path = [];
-  }
-
-  /** Stopped travelling (the village was founded): live around (x, y) until they get a house. */
-  settleNear(x: number, y: number): void {
-    this.anchor = { x: Math.floor(x), y: Math.floor(y) };
-    this.roam = 4;
-    this.path = [];
-    this.idle = 0.5;
   }
 
   /** Recruited: drop the marker and walk home; from now on live around the house. */
@@ -646,6 +642,42 @@ export class Npc {
       this.status = 'Fila vazia ou faltam materiais';
       this.stopWalking();
     }
+  }
+
+  /** Construction site this idle villager is helping with, and sites they couldn't reach (id → retry time). */
+  private siteId: number | null = null;
+  private unreachable = new Map<number, number>();
+  private clock = 0;
+
+  /** Unemployed by day: walk to a construction site of the village and help build. False when there's none. */
+  private helpBuild(dt: number, world: NpcWorld): boolean {
+    this.clock += dt;
+    const site = world.buildSite(this);
+    if (!site || (this.unreachable.get(site.id) ?? 0) > this.clock) {
+      this.siteId = null;
+      return false;
+    }
+    if (this.siteId !== site.id) {
+      this.siteId = site.id;
+      this.path = [];
+      this.state = 'idle';
+    }
+    if (this.isNextTo(site) && this.path.length === 0) {
+      this.status = 'Construindo';
+      const f = footprintOf(site);
+      this.sprite.setFlipX(f.x - f.y < this.gx - this.gy);
+      this.animateWork(dt);
+      world.buildWork(this, site, dt);
+      return true;
+    }
+    if (this.path.length === 0 && !this.goNextTo(site, 6000)) {
+      this.unreachable.set(site.id, this.clock + 20); // try again later
+      this.siteId = null;
+      return false;
+    }
+    this.status = 'Indo ajudar na obra';
+    this.walk(dt);
+    return true;
   }
 
   /** True when standing at building `b` (used for smiths' presence). */

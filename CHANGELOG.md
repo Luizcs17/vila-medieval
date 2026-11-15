@@ -2,6 +2,14 @@
 
 Each milestone from `docs/GDD.md` is a minor version.
 
+## 1.18.0: Milestone 28, switching companions and villagers, idle builders
+
+- Companions no longer become villagers when you claim land. Their card has "Morar na vila": they move into a free bed in the village you're standing in (build a house first).
+- Your adult villagers' card has "Chamar para o grupo": they leave their job and house and travel with you (up to 4 companions; the village's ruler stays home). Soldiers are still hired at the Quartel.
+- After you have a village, a wanderer's card offers both "Recrutar" (to live in the village) and "Chamar para o grupo".
+- Companions eat meat from your bag first, then from the stock of the village you're standing in.
+- Unemployed adult villagers help build: by day they walk to the nearest unfinished building of their village (within 40 tiles) and work on it (each at 40% of your speed). A toast says when they finish it.
+
 ## 1.17.0: Milestone 27, quick orders (F1) and dropping items (G)
 
 - F1 opens a table on the right listing your companions and soldiers within 15 tiles (stance and current order). With it open, F1 again makes all of them follow you and F2 makes each one stay where they stand. Esc closes it. You can keep walking while it's open. The individual orders on each person's card are unchanged. The browser no longer grabs F1/F2.

@@ -4,7 +4,10 @@ import {
   ATTACK_COOLDOWN,
   AUTOSAVE_SECONDS,
   BEDS_PER_HOUSE,
+  BUILDER_RANGE,
+  BUILDER_RATE,
   CLAIM_NEAR_HOME,
+  COMPANION_MAX,
   DAY_SECONDS,
   DEFAULT_ZOOM_INDEX,
   FAST_FORWARD,
@@ -402,6 +405,13 @@ export class WorldScene extends Phaser.Scene {
       },
       factionCenter: (f) => this.factions[f].center,
       playerAt: () => ({ x: this.player.gx, y: this.player.gy }),
+      buildSite: (npc) => this.buildSiteFor(npc),
+      buildWork: (npc, b, dt) => {
+        if (!this.buildings.work(b, dt * BUILDER_RATE)) return;
+        this.refreshBuildingView(b);
+        if (this.isMine(b.faction))
+          this.toast(`${BUILDING_DEFS[b.type].name} pronta (${npc.data.name} terminou a obra).`, '#ffe08a');
+      },
       strike: (from, target, dmg) =>
         this.strikeTarget(target, dmg, `um soldado de ${this.factions[from.data.faction].name}`, {
           kind: 'npc',
@@ -1521,7 +1531,7 @@ export class WorldScene extends Phaser.Scene {
         else this.removeVillager(e.npc.id, `${e.npc.name} morreu de fome.`);
       }
     }
-    const bag = { take: () => this.inventory.remove('meat', 1) === 1 || this.stockpile.pay({ meat: 1 }) };
+    const bag = { take: () => this.inventory.remove('meat', 1) === 1 || this.currentVillage().stock.pay({ meat: 1 }) };
     for (const e of updateNeedsFrom(this.population.companions, bag, worldDt)) {
       if (e.type === 'starving') this.toast(`${e.npc.name} está com fome! Leve carne na mochila.`, '#ffb070');
       else this.removeVillager(e.npc.id, `${e.npc.name} morreu de fome.`);
@@ -1592,13 +1602,7 @@ export class WorldScene extends Phaser.Scene {
   recruit(id: number): boolean {
     const npc = this.npcs.get(id);
     if (!npc) return false;
-    if (!this.settled) {
-      if (!this.population.recruitCompanion(npc.data, this.inventory, this.stockpile)) return false;
-      this.gainXp(XP.recruit);
-      npc.becomeCompanion();
-      this.toast(`${npc.data.name} agora viaja com você. Leve carne: companheiros comem da sua mochila.`, '#a8ffa8');
-      return true;
-    }
+    if (!this.settled) return this.recruitCompanion(id);
     const home = this.population.recruit(npc.data, this.inventory, this.stockpile);
     if (!home) return false;
     this.gainXp(XP.recruit);
@@ -1770,16 +1774,74 @@ export class WorldScene extends Phaser.Scene {
     this.toast('O que estava guardado na sua casa agora é o estoque da vila (no Salão).', '#cdb98e');
   }
 
-  /** The village is founded: your companions settle down as villagers. */
+  /** The village is founded. Companions stay companions until you settle them (their card: "Morar na vila"). */
   private onSettled(): void {
-    const c = this.villageCenter;
-    const settled = this.population.settleCompanions();
-    for (const n of settled) this.npcs.get(n.id)?.settleNear(c.x, c.y + 2);
-    if (settled.length > 0)
+    if (this.population.companions.length > 0)
       this.toast(
-        `${settled.map((n) => n.name).join(', ')} ${settled.length > 1 ? 'agora são aldeões' : 'agora é da vila'}. Construa casas para eles.`,
-        '#a8ffa8',
+        'Seus companheiros continuam com você. Para que morem na vila: casa com cama livre e "Morar na vila" no cartão.',
+        '#a8c8ff',
       );
+  }
+
+  /** The nearest unfinished building of this villager's village, if they're an idle adult. */
+  private buildSiteFor(npc: Npc): Building | null {
+    const n = npc.data;
+    if (n.role !== 'villager' || n.jobId !== null || this.missions.has(n.id) || !isAdult(n, this.clock.seconds)) return null;
+    let best: Building | null = null;
+    let bestD = BUILDER_RANGE;
+    for (const b of this.buildings.list) {
+      if (b.built || b.faction !== n.faction) continue;
+      const d = Math.hypot(b.tx - npc.gx, b.ty - npc.gy);
+      if (d < bestD) {
+        bestD = d;
+        best = b;
+      }
+    }
+    return best;
+  }
+
+  /** One of your villagers joins your group: leaves their job and house. */
+  makeCompanion(n: NpcData): string | null {
+    if (n.role !== 'villager' || !this.isMine(n.faction)) return 'Só aldeões seus.';
+    if (!isAdult(n, this.clock.seconds)) return 'Crianças não viajam no grupo.';
+    if (this.factions[n.faction].rulerId === n.id) return 'O governante fica na vila.';
+    if (this.population.companions.length >= COMPANION_MAX) return `O grupo está cheio (${COMPANION_MAX}).`;
+    if (this.talkingTo?.id === n.id) this.talkingTo = null;
+    this.population.unassign(n);
+    this.missions.delete(n.id);
+    n.order = null;
+    n.homeId = null;
+    n.faction = PLAYER_FACTION;
+    n.role = 'companion';
+    this.toast(`${n.name} agora viaja com você.`, '#a8ffa8');
+    return null;
+  }
+
+  /** A companion settles in the village you're standing in (needs a free bed there). */
+  settleCompanion(n: NpcData): string | null {
+    if (n.role !== 'companion') return null;
+    if (!this.settled) return 'Você ainda não tem vila.';
+    const v = this.currentVillage();
+    const home = this.population.houseWithBed(v.id);
+    if (!home) return `Sem cama livre em ${v.name}: construa uma Casa.`;
+    if (this.talkingTo?.id === n.id) this.talkingTo = null;
+    n.role = 'villager';
+    n.faction = v.id;
+    n.homeId = home.id;
+    n.command = null;
+    this.npcs.get(n.id)?.moveTo(home);
+    this.toast(`${n.name} vai morar em ${v.name}.`, '#a8c8ff');
+    return null;
+  }
+
+  /** A wanderer joins your group instead of the village (any time). */
+  recruitCompanion(id: number): boolean {
+    const npc = this.npcs.get(id);
+    if (!npc || !this.population.recruitCompanion(npc.data, this.inventory, this.currentVillage().stock)) return false;
+    this.gainXp(XP.recruit);
+    npc.becomeCompanion();
+    this.toast(`${npc.data.name} agora viaja com você. Leve carne: companheiros comem da sua mochila.`, '#a8ffa8');
+    return true;
   }
 
   /** Every few seconds, villagers without a home move into a free bed of their village. */

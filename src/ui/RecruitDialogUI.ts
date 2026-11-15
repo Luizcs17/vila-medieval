@@ -182,11 +182,16 @@ export class RecruitDialogUI {
     } else if (npc.role === 'companion') {
       const hungry = isStarving(npc);
       items.push(
-        s.add.text(PAD, y, 'Viaja com você. Come carne da sua mochila (ou da sua casa).', {
-          ...TEXT,
-          fontSize: '12px',
-          color: '#cdb98e',
-        }),
+        s.add.text(
+          PAD,
+          y,
+          `Viaja com você. Come carne da sua mochila (ou ${settled ? 'do estoque da vila onde você está' : 'da sua casa'}).`,
+          {
+            ...TEXT,
+            fontSize: '12px',
+            color: '#cdb98e',
+          },
+        ),
         s.add.text(PAD, y + 18, `Vida ${npc.hp}   Fome ${Math.round(100 - npc.food)}%${hungry ? ' (FAMINTO)' : ''}`, {
           ...TEXT,
           fontSize: '12px',
@@ -271,6 +276,20 @@ export class RecruitDialogUI {
       return { bg, label: text };
     };
     const foreign = npc.role === 'villager' && !this.world.isMine(npc.faction);
+    // A second row for switching between your village and your group.
+    const swap = (label: string, act: () => string | null) => {
+      btn(PAD, label, () => {
+        const why = act();
+        if (why) this.world.toast(why, '#ffb070');
+        else this.close();
+      });
+      y += 36;
+    };
+    if (npc.role === 'wanderer' && settled)
+      swap('Chamar para o grupo', () => (this.world.recruitCompanion(npc.id) ? null : 'Grupo cheio ou falta o pedido.'));
+    else if (npc.role === 'companion' && settled) swap('Morar na vila', () => this.world.settleCompanion(npc));
+    else if (npc.role === 'villager' && this.world.isMine(npc.faction) && age >= ADULT_AGE)
+      swap('Chamar para o grupo', () => this.world.makeCompanion(npc));
     if (npc.role === 'wanderer')
       this.recruitBtn = btn(PAD, settled ? 'Recrutar  [Enter]' : 'Chamar para o grupo  [Enter]', () => this.confirm());
     else if (foreign) {
