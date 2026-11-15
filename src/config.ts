@@ -91,7 +91,10 @@ export const ANIMAL_SPAWN_DISTANCE = 14;
 /** Carcasses rot away after this many game seconds. */
 export const CARCASS_LIFETIME = 480;
 /** Hunters shoot from this far (tiles). */
-export const HUNTER_RANGE = 3.5;
+/** Bow range: longer than the distance at which deer (4.5) and rabbits (3.5) bolt. */
+export const HUNTER_RANGE = 6;
+/** Damage of a hunter's arrow (deer have 3 HP, rabbits 1). */
+export const HUNTER_DAMAGE = 2;
 
 /** Real seconds between autosaves (also saves at each new day and when the page closes). */
 export const AUTOSAVE_SECONDS = 120;

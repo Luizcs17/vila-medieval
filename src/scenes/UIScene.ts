@@ -126,10 +126,18 @@ export class UIScene extends Phaser.Scene {
       set: (i) => (this.world.selectedHotbar = i),
     });
 
-    this.buildMenu = new BuildMenuUI(this, this.world.stockpile, (type) => {
-      this.buildMenu.setOpen(false);
-      this.world.startPlacing(type);
-    });
+    this.buildMenu = new BuildMenuUI(
+      this,
+      this.world.stockpile,
+      (type) => {
+        this.buildMenu.setOpen(false);
+        this.world.startPlacing(type);
+      },
+      () => {
+        this.buildMenu.setOpen(false);
+        this.world.startDemolish();
+      },
+    );
     this.placeHint = this.add
       .text(0, 0, '', { ...TEXT, fontSize: '12px', backgroundColor: '#000000bb', padding: { x: 6, y: 3 } })
       .setDepth(95)
@@ -208,6 +216,11 @@ export class UIScene extends Phaser.Scene {
       if (key === 'i' || key === 'tab') {
         this.closeBuildMode();
         this.toggleInventory();
+      } else if (key === 'x') {
+        if (this.inventory.isOpen) this.toggleInventory();
+        const was = this.world.demolishing;
+        this.closeBuildMode();
+        if (!was) this.world.startDemolish();
       } else if (key === 'c') {
         this.closeBuildMode();
         this.crafting.setOpen(!this.crafting.isOpen);
@@ -219,7 +232,12 @@ export class UIScene extends Phaser.Scene {
         if (!wasOpen) this.buildMenu.setOpen(true);
       } else if (key === 'escape') {
         // Esc closes whatever is open; with nothing open it pauses the game.
-        const anyOpen = this.inventory.isOpen || this.buildMenu.isOpen || this.crafting.isOpen || this.world.placement !== null;
+        const anyOpen =
+          this.inventory.isOpen ||
+          this.buildMenu.isOpen ||
+          this.crafting.isOpen ||
+          this.world.placement !== null ||
+          this.world.demolishing;
         if (!anyOpen) this.pause.open();
         if (this.inventory.isOpen) this.toggleInventory();
         this.crafting.setOpen(false);
@@ -230,7 +248,13 @@ export class UIScene extends Phaser.Scene {
 
     // Placement clicks land on empty screen space (not on any UI element of this scene).
     this.input.on('pointerdown', (p: Phaser.Input.Pointer, over: Phaser.GameObjects.GameObject[]) => {
-      if (!this.world.placement || over.length > 0) return;
+      if (over.length > 0) return;
+      if (this.world.demolishing) {
+        if (p.rightButtonDown()) this.world.cancelDemolish();
+        else this.world.tryDemolish();
+        return;
+      }
+      if (!this.world.placement) return;
       if (p.rightButtonDown()) this.world.cancelPlacing();
       else this.world.tryPlace();
     });
@@ -338,6 +362,16 @@ export class UIScene extends Phaser.Scene {
   }
 
   private updatePlaceHint(): void {
+    const ptr0 = this.input.activePointer;
+    const dh = this.world.demolishHint;
+    if (this.world.demolishing && dh) {
+      this.placeHint
+        .setText(`${dh.text}   ·   Direito/Esc: sair`)
+        .setColor(dh.ok ? '#ffb090' : '#a8977a')
+        .setPosition(Math.round(ptr0.x + 16), Math.round(ptr0.y + 16))
+        .setVisible(true);
+      return;
+    }
     const pl = this.world.placement;
     if (!pl) {
       this.placeHint.setVisible(false);

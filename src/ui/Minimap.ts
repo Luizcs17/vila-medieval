@@ -105,6 +105,7 @@ export class Minimap {
       dot(a.data.gx, a.data.gy, SPECIES[a.data.species].temper === 'aggressive' ? 0xff4030 : 0xe8d8b0);
     }
     for (const n of w.npcList()) {
+      if (n.indoors) continue;
       if (n.data.role === 'wanderer') dot(n.gx, n.gy, 0xffe060, 2);
       else if (n.data.faction === 0) dot(n.gx, n.gy, 0x6ab0ff, 2);
     }

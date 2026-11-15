@@ -1,5 +1,14 @@
 import Phaser from 'phaser';
-import { GUARD_LEASH, GUARD_RANGE, HUNTER_RANGE, NPC_SPEED, ROAD_SPEED, WORKER_LOAD, WORKER_TIME_FACTOR } from '../config';
+import {
+  GUARD_LEASH,
+  GUARD_RANGE,
+  HUNTER_DAMAGE,
+  HUNTER_RANGE,
+  NPC_SPEED,
+  ROAD_SPEED,
+  WORKER_LOAD,
+  WORKER_TIME_FACTOR,
+} from '../config';
 import { BUILDING_DEFS, type Building, type Buildings } from '../game/buildings';
 import { NODE_DEFS } from '../game/gathering';
 import type { Resource } from '../game/inventory';
@@ -149,6 +158,15 @@ export class Npc {
       return;
     }
 
+    // Indoors for the night: hidden and safe until morning (or until their house is gone).
+    if (this.indoors) {
+      if ((world.isNight() || world.threat(this.gx, this.gy)) && this.home(world)) {
+        this.sync();
+        return;
+      }
+      this.setIndoors(false);
+    }
+
     const workplace = this.workplace(world);
     const soldier = workplace !== undefined && BUILDING_DEFS[workplace.type].job?.skill === 'combat';
     if (this.data.role === 'villager' && !soldier && this.flee(dt, world)) {
@@ -220,6 +238,12 @@ export class Npc {
       return false;
     }
     const home = this.home(world);
+    if (home && this.isNextTo(home) && this.path.length === 0) {
+      // Made it home: take shelter inside until the danger passes.
+      this.fleeing = false;
+      this.setIndoors(true);
+      return true;
+    }
     if (!this.fleeing || this.path.length === 0) {
       this.fleeing = true;
       this.state = 'idle';
@@ -307,7 +331,7 @@ export class Npc {
       this.shotTimer += dt * this.workRate('hunting');
       if (this.shotTimer >= 2) {
         this.shotTimer = 0;
-        if (world.shoot(this, prey.id, 1)) this.state = 'idle';
+        if (world.shoot(this, prey.id, HUNTER_DAMAGE)) this.state = 'idle';
       }
       return;
     }
@@ -504,6 +528,10 @@ export class Npc {
     }
     const home = this.home(world);
     const night = world.isNight();
+    if (home && night && this.path.length === 0 && this.isNextTo(home)) {
+      this.setIndoors(true); // home for the night
+      return;
+    }
     if (home && night && this.path.length === 0 && !this.isNextTo(home)) {
       this.goNextTo(home, 4000);
       this.idle = 2;
@@ -729,6 +757,16 @@ export class Npc {
     }
     if (!this.carryIcon) this.carryIcon = this.scene.add.image(0, 0, `icon_${this.carrying.resource}`).setOrigin(0.5, 1);
     else this.carryIcon.setTexture(`icon_${this.carrying.resource}`);
+  }
+
+  /** True while inside their house at night (hidden; animals and raiders can't reach them). */
+  indoors = false;
+
+  private setIndoors(on: boolean): void {
+    this.indoors = on;
+    this.path = [];
+    this.stopWalking();
+    for (const o of [this.sprite, this.shadow, this.marker, this.carryIcon, this.hungerIcon, this.cart]) o?.setVisible(!on);
   }
 
   /** Children are drawn smaller (set by the world from their age). */

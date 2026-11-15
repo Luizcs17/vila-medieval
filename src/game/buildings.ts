@@ -128,7 +128,7 @@ export const BUILDING_DEFS: Record<BuildingType, BuildingDef> = {
     description: 'Um aldeão aqui caça animais.',
     buildable: true,
     sign: 'meat',
-    job: { skill: 'hunting', slots: 2, nodes: [], radius: 14, title: { f: 'Caçadora', m: 'Caçador' } },
+    job: { skill: 'hunting', slots: 2, nodes: [], radius: 24, title: { f: 'Caçadora', m: 'Caçador' } },
   },
   depot: {
     claim: 5,
@@ -220,6 +220,17 @@ export const BUILDING_DEFS: Record<BuildingType, BuildingDef> = {
     job: { skill: 'diplomacy', slots: 2, nodes: [], radius: 0, title: { f: 'Diplomata', m: 'Diplomata' } },
   },
 };
+
+/** Demolition gives back everything for an unfinished site, half (rounded down) for a finished building. */
+export function demolitionRefund(b: Pick<Building, 'type' | 'built'>): Partial<Amounts> {
+  const cost = BUILDING_DEFS[b.type].cost;
+  const out: Partial<Amounts> = {};
+  for (const [r, n] of Object.entries(cost) as [keyof Amounts, number][]) {
+    const back = b.built ? Math.floor(n / 2) : n;
+    if (back > 0) out[r] = back;
+  }
+  return out;
+}
 
 export const BUILD_MENU: BuildingType[] = (Object.keys(BUILDING_DEFS) as BuildingType[]).filter(
   (t) => BUILDING_DEFS[t].buildable,
