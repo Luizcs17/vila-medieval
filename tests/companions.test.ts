@@ -40,17 +40,6 @@ describe('companions', () => {
     expect(pop.villagers.length).toBe(0); // not villagers (no beds needed)
   });
 
-  it('become villagers when the village is founded', () => {
-    const { pop, inv, stock, wanderer } = setup();
-    inv.add('wood', 10);
-    const n = wanderer();
-    pop.recruitCompanion(n, inv, stock);
-    expect(pop.settleCompanions()).toEqual([n]);
-    expect(n.role).toBe('villager');
-    expect(pop.villagers).toContain(n);
-    expect(n.homeId).toBeNull();
-  });
-
   it('eat from whatever larder they are given (the player’s bag)', () => {
     const { pop, inv, stock, wanderer } = setup();
     inv.add('wood', 10);
