@@ -21,9 +21,9 @@ import type { PopupEvent, ToastEvent, WorldScene } from './WorldScene';
 const TOAST_SECONDS = 5;
 
 const TEXT = {
-  fontFamily: 'monospace',
+  fontFamily: '"Alegreya", Georgia, serif',
   fontSize: '14px',
-  color: '#f3e9d2',
+  color: '#e8d8b0',
 } satisfies Phaser.Types.GameObjects.Text.TextStyle;
 
 const POPUP_SECONDS = 1.1;
@@ -42,6 +42,7 @@ interface Popup {
 export class UIScene extends Phaser.Scene {
   private world!: WorldScene;
   private night!: Phaser.GameObjects.Rectangle;
+  private vignette!: Phaser.GameObjects.Image;
   private counts = {} as Record<Resource, Phaser.GameObjects.Text>;
   private clockText!: Phaser.GameObjects.Text;
   private debug!: Phaser.GameObjects.Text;
@@ -78,6 +79,18 @@ export class UIScene extends Phaser.Scene {
 
     // Full-screen tint for the day/night cycle. Created first so it sits under all HUD elements.
     this.night = this.add.rectangle(0, 0, 10, 10, 0x000000, 0).setOrigin(0);
+    // Dark vignette around the screen edges, for a candle-lit, medieval mood.
+    if (!this.textures.exists('vignette')) {
+      const tex = this.textures.createCanvas('vignette', 256, 256)!;
+      const ctx = tex.getContext();
+      const g = ctx.createRadialGradient(128, 128, 60, 128, 128, 182);
+      g.addColorStop(0, 'rgba(0,0,0,0)');
+      g.addColorStop(1, 'rgba(8,5,2,0.78)');
+      ctx.fillStyle = g;
+      ctx.fillRect(0, 0, 256, 256);
+      tex.refresh();
+    }
+    this.vignette = this.add.image(0, 0, 'vignette').setOrigin(0);
 
     this.prompt = this.add
       .text(0, 0, '', { ...TEXT, fontSize: '13px', backgroundColor: '#000000aa', padding: { x: 6, y: 3 } })
@@ -105,7 +118,7 @@ export class UIScene extends Phaser.Scene {
       'WASD andar · E usar · Espaço atacar · F comer · B construir · C criar · I inventário · V vila · M mapa · T acelerar',
       { ...TEXT, fontSize: '12px', backgroundColor: '#00000088', padding: { x: 8, y: 5 } },
     );
-    this.debug = this.add.text(12, 80, '', { ...TEXT, fontSize: '11px', color: '#cfc3a8' });
+    this.debug = this.add.text(12, 80, '', { ...TEXT, fontSize: '11px', color: '#cdb98e' });
 
     this.inventory = new InventoryUI(this, this.world.inventory, {
       get: () => this.world.selectedHotbar,
@@ -232,7 +245,7 @@ export class UIScene extends Phaser.Scene {
         .text(this.scale.width / 2, 0, e.text, {
           ...TEXT,
           fontSize: '14px',
-          color: e.color ?? '#f3e9d2',
+          color: e.color ?? '#e8d8b0',
           backgroundColor: '#000000aa',
           padding: { x: 10, y: 5 },
         })
@@ -257,7 +270,7 @@ export class UIScene extends Phaser.Scene {
     const days = foodDays(w.population.villagers, w.stockpile);
     if (Number.isFinite(days)) {
       this.counts.meat.setText(`Carne ${w.stockpile.items.meat} · ${days.toFixed(1).replace('.', ',')}d`);
-      this.counts.meat.setColor(days < 1 ? '#ff8a7a' : days < 2 ? '#ffc060' : '#f3e9d2');
+      this.counts.meat.setColor(days < 1 ? '#ff8a7a' : days < 2 ? '#ffc060' : '#e8d8b0');
     }
     this.popText.setText(`População ${w.population.villagers.length}/${w.population.beds}`);
 
@@ -384,6 +397,7 @@ export class UIScene extends Phaser.Scene {
   private layout(): void {
     const { width, height } = this.scale;
     this.night.setSize(width, height);
+    this.vignette.setDisplaySize(width, height);
     this.clockText.setX(width - 8);
     this.inventory.layout(width, height);
     this.dialog.layout(width, height);

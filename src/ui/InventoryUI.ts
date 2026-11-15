@@ -5,11 +5,11 @@ import { ITEM_LABEL, ITEM_WEIGHT, type SlotInventory, type Stack } from '../game
 const SLOT = 44;
 const GAP = 4;
 const PAD = 16;
-const BORDER = 0x5a4630;
+const BORDER = 0x8a6a3a;
 const BORDER_SELECTED = 0xffe08a;
 
 const COUNT_STYLE = {
-  fontFamily: 'monospace',
+  fontFamily: '"Alegreya", Georgia, serif',
   fontSize: '13px',
   color: '#ffffff',
   stroke: '#000000',
@@ -27,7 +27,7 @@ class SlotView {
     scene: Phaser.Scene,
     readonly index: number,
   ) {
-    this.bg = scene.add.rectangle(0, 0, SLOT, SLOT, 0x2a2118, 0.9).setOrigin(0).setStrokeStyle(2, BORDER);
+    this.bg = scene.add.rectangle(0, 0, SLOT, SLOT, 0x241a12, 0.9).setOrigin(0).setStrokeStyle(2, BORDER);
     this.icon = scene.add.image(0, 0, 'icon_wood').setScale(3).setVisible(false);
     this.count = scene.add.text(0, 0, '', COUNT_STYLE).setOrigin(1, 1);
     this.dur = scene.add.rectangle(0, 0, 0, 3, 0x8ae070).setOrigin(0).setVisible(false);
@@ -98,16 +98,16 @@ export class InventoryUI {
       this.hotbar.push(v);
     }
 
-    this.panelBg = scene.add.rectangle(0, 0, 0, 0, 0x1a140e, 0.94).setOrigin(0).setStrokeStyle(2, BORDER).setDepth(100);
+    this.panelBg = scene.add.rectangle(0, 0, 0, 0, 0x140f0a, 0.94).setOrigin(0).setStrokeStyle(2, BORDER).setDepth(100);
     this.panelBg.setInteractive(); // swallow clicks between slots
     this.title = scene.add
-      .text(0, 0, 'Inventário', { fontFamily: 'monospace', fontSize: '15px', color: '#f3e9d2' })
+      .text(0, 0, 'Inventário', { fontFamily: '"MedievalSharp", "Alegreya", Georgia, serif', fontSize: '17px', color: '#e0b860' })
       .setDepth(101);
     this.hint = scene.add
       .text(0, 0, 'Clique: pegar/soltar · Direito: metade/um · Shift: mover', {
-        fontFamily: 'monospace',
+        fontFamily: '"Alegreya", Georgia, serif',
         fontSize: '11px',
-        color: '#a89a80',
+        color: '#a8977a',
       })
       .setDepth(101);
 
@@ -133,9 +133,9 @@ export class InventoryUI {
     this.heldCount = scene.add.text(0, 0, '', COUNT_STYLE).setOrigin(1, 1).setDepth(201);
     this.tooltip = scene.add
       .text(0, 0, '', {
-        fontFamily: 'monospace',
+        fontFamily: '"Alegreya", Georgia, serif',
         fontSize: '12px',
-        color: '#f3e9d2',
+        color: '#e8d8b0',
         backgroundColor: '#000000cc',
         padding: { x: 5, y: 3 },
       })

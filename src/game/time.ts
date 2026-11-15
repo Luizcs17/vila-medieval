@@ -40,10 +40,10 @@ interface Tint {
   a: number;
 }
 
-const NIGHT: Tint = { r: 10, g: 16, b: 48, a: 0.55 };
+const NIGHT: Tint = { r: 6, g: 10, b: 28, a: 0.66 };
 const DAWN: Tint = { r: 255, g: 150, b: 90, a: 0.18 };
 const DUSK: Tint = { r: 255, g: 120, b: 60, a: 0.25 };
-const CLEAR: Tint = { r: 255, g: 190, b: 140, a: 0 };
+const CLEAR: Tint = { r: 40, g: 26, b: 12, a: 0.12 };
 
 /** Lighting keyframes over a day: [hour, tint]. Must start at 0 and end at 24. */
 const KEYFRAMES: [number, Tint][] = [

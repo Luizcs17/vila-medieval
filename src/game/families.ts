@@ -1,4 +1,5 @@
 import { BEDS_PER_HOUSE, DAY_SECONDS } from '../config';
+import { childLook } from './looks';
 import {
   ageOf,
   generateWanderer,
@@ -203,6 +204,7 @@ export class Families {
     else child.traits = [(Object.keys(TRAITS) as TraitId[])[Math.floor(rng() * Object.keys(TRAITS).length)]];
     child.request = {};
     child.variant = (rng() < 0.5 ? a.variant : (b?.variant ?? a.variant)) % 8;
+    child.look = childLook(rng, child.gender, a.look, b?.look);
     this.pop.npcs.push(child);
     return child;
   }

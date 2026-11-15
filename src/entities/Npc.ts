@@ -5,7 +5,7 @@ import { NODE_DEFS } from '../game/gathering';
 import type { Resource } from '../game/inventory';
 import { isStarving } from '../game/needs';
 import { type NpcData, productivity, soldierDamage, TIER_COLOR } from '../game/npcs';
-import { npcSpriteKey } from '../gfx/textures';
+import { ensurePersonTextures } from '../gfx/people';
 import { gridToScreen } from '../iso';
 import { inBounds, isWalkable, tileIndex, type WorldMap } from '../world/map';
 import { findPath, type Tile } from '../world/path';
@@ -107,7 +107,7 @@ export class Npc {
     this.gx = tile.x + 0.5;
     this.gy = tile.y + 0.5;
     this.anchor = { ...tile };
-    this.key = npcSpriteKey(data.variant, data.gender);
+    this.key = ensurePersonTextures(scene, data.look);
     this.shadow = scene.add.image(0, 0, 'shadow').setAlpha(0.3);
     this.sprite = scene.add.sprite(0, 0, `${this.key}_idle`).setOrigin(0.5, 1);
     if (!scene.anims.exists(`${this.key}_walk`)) {

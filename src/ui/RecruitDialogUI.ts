@@ -4,12 +4,12 @@ import { ageOf, fullName, PLAYER_ID } from '../game/families';
 import { RESOURCE_LABEL, RESOURCES } from '../game/inventory';
 import { isStarving } from '../game/needs';
 import { jobTitle, type NpcData, roleLabel, SKILL_LABEL, SKILLS, stars, TIER_COLOR, TRAITS, tierLabel } from '../game/npcs';
-import { npcSpriteKey } from '../gfx/textures';
+import { ensurePersonTextures } from '../gfx/people';
 import type { WorldScene } from '../scenes/WorldScene';
 
 const W = 440;
 const PAD = 16;
-const TEXT = { fontFamily: 'monospace', color: '#f3e9d2' } satisfies Phaser.Types.GameObjects.Text.TextStyle;
+const TEXT = { fontFamily: '"Alegreya", Georgia, serif', color: '#e8d8b0' } satisfies Phaser.Types.GameObjects.Text.TextStyle;
 const OK = '#a8e890';
 const MISSING = '#ff8a7a';
 
@@ -90,8 +90,13 @@ export class RecruitDialogUI {
     const items: Phaser.GameObjects.GameObject[] = [];
     let y = PAD;
 
-    const portrait = s.add.image(PAD + 22, y + 36, `${npcSpriteKey(npc.variant, npc.gender)}_idle`).setScale(4);
-    const name = s.add.text(PAD + 64, y, fullName(npc), { ...TEXT, fontSize: '18px' });
+    const portrait = s.add.image(PAD + 22, y + 36, `${ensurePersonTextures(s, npc.look)}_idle`).setScale(4);
+    const name = s.add.text(PAD + 64, y, fullName(npc), {
+      ...TEXT,
+      fontFamily: '"MedievalSharp", "Alegreya", Georgia, serif',
+      fontSize: '20px',
+      color: '#e0b860',
+    });
     const age = ageOf(npc, this.world.clock.seconds);
     const sub = s.add.text(
       PAD + 64,
@@ -106,33 +111,33 @@ export class RecruitDialogUI {
     items.push(portrait, name, sub);
     y += 78;
 
-    items.push(s.add.text(PAD, y, 'Habilidades', { ...TEXT, fontSize: '13px', color: '#cfc3a8' }));
+    items.push(s.add.text(PAD, y, 'Habilidades', { ...TEXT, fontSize: '13px', color: '#cdb98e' }));
     y += 20;
     SKILLS.forEach((sk, k) => {
       const col = k % 2;
       const r = npc.skills[sk];
       items.push(
         s.add.text(PAD + 8 + col * 205, y, `${SKILL_LABEL[sk]}`, { ...TEXT, fontSize: '12px' }),
-        s.add.text(PAD + 8 + col * 205 + 118, y, stars(r), { ...TEXT, fontSize: '12px', color: r >= 4 ? '#ffcf5a' : '#cfc3a8' }),
+        s.add.text(PAD + 8 + col * 205 + 118, y, stars(r), { ...TEXT, fontSize: '12px', color: r >= 4 ? '#ffcf5a' : '#cdb98e' }),
       );
       if (col === 1) y += 18;
     });
     y += 8;
 
-    items.push(s.add.text(PAD, y, 'Traços', { ...TEXT, fontSize: '13px', color: '#cfc3a8' }));
+    items.push(s.add.text(PAD, y, 'Traços', { ...TEXT, fontSize: '13px', color: '#cdb98e' }));
     y += 20;
     for (const t of npc.traits) {
       const trait = TRAITS[t];
       items.push(
-        s.add.text(PAD + 8, y, `${trait.name}`, { ...TEXT, fontSize: '13px', color: trait.positive ? '#f3e9d2' : '#e8a890' }),
-        s.add.text(PAD + 8, y + 16, trait.description, { ...TEXT, fontSize: '11px', color: '#a89a80' }),
+        s.add.text(PAD + 8, y, `${trait.name}`, { ...TEXT, fontSize: '13px', color: trait.positive ? '#e8d8b0' : '#e8a890' }),
+        s.add.text(PAD + 8, y + 16, trait.description, { ...TEXT, fontSize: '11px', color: '#a8977a' }),
       );
       y += 36;
     }
     y += 6;
 
     if (npc.role === 'wanderer') {
-      items.push(s.add.text(PAD, y, 'Para morar na vila, pede:', { ...TEXT, fontSize: '13px', color: '#cfc3a8' }));
+      items.push(s.add.text(PAD, y, 'Para morar na vila, pede:', { ...TEXT, fontSize: '13px', color: '#cdb98e' }));
       y += 20;
       const pop = this.world.population;
       this.addLine(items, y, () => {
@@ -162,7 +167,7 @@ export class RecruitDialogUI {
         s.add.text(PAD, y + 6, `Vai embora em ${when} se não for recrutad${npc.gender === 'f' ? 'a' : 'o'}.`, {
           ...TEXT,
           fontSize: '11px',
-          color: '#a89a80',
+          color: '#a8977a',
         }),
       );
       y += 30;
@@ -217,7 +222,7 @@ export class RecruitDialogUI {
           {
             ...TEXT,
             fontSize: '12px',
-            color: '#a89a80',
+            color: '#a8977a',
           },
         ),
       );
@@ -226,7 +231,7 @@ export class RecruitDialogUI {
 
     // Buttons.
     const btn = (x: number, label: string, onClick: () => void) => {
-      const bg = s.add.rectangle(x, y, 190, 30, 0x3a3228, 1).setOrigin(0).setStrokeStyle(1, 0x5a4630);
+      const bg = s.add.rectangle(x, y, 190, 30, 0x3a3228, 1).setOrigin(0).setStrokeStyle(1, 0x8a6a3a);
       const text = s.add.text(x + 95, y + 15, label, { ...TEXT, fontSize: '13px' }).setOrigin(0.5);
       bg.setInteractive({ useHandCursor: true }).on('pointerdown', onClick);
       items.push(bg, text);
@@ -241,7 +246,7 @@ export class RecruitDialogUI {
     btn(W - PAD - 190, 'Fechar  [Esc]', () => this.close());
     y += 30 + PAD;
 
-    const bg = s.add.rectangle(0, 0, W, y, 0x1a140e, 0.96).setOrigin(0).setStrokeStyle(2, 0x5a4630).setInteractive();
+    const bg = s.add.rectangle(0, 0, W, y, 0x140f0a, 0.96).setOrigin(0).setStrokeStyle(2, 0x8a6a3a).setInteractive();
     c.add([bg, ...items]);
     c.setData('height', y);
     this.container = c;

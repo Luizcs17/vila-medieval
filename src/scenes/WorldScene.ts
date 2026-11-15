@@ -584,7 +584,7 @@ export class WorldScene extends Phaser.Scene {
     const p = this.player.sprite;
     if (this.stats.hp >= this.stats.maxHp) return;
     if (this.inventory.remove('meat', 1) === 0) {
-      this.popup(p.x, p.y - p.height, 'Sem carne na mochila', '#cfc3a8');
+      this.popup(p.x, p.y - p.height, 'Sem carne na mochila', '#cdb98e');
       return;
     }
     this.stats.heal(MEAT_HEAL);
@@ -663,13 +663,13 @@ export class WorldScene extends Phaser.Scene {
 
   recallSoldiers(): void {
     for (const s of this.soldiers()) s.order = null;
-    this.toast('Seus soldados estão voltando ao quartel.', '#cfc3a8');
+    this.toast('Seus soldados estão voltando ao quartel.', '#cdb98e');
   }
 
   answerProposal(p: Proposal, accept: boolean): void {
     this.diplomacy.answer(p, accept);
     const name = this.factions[p.from].name;
-    if (!accept) this.toast(`Você recusou a proposta de ${name}.`, '#cfc3a8');
+    if (!accept) this.toast(`Você recusou a proposta de ${name}.`, '#cdb98e');
     else this.toast(p.kind === 'alliance' ? `Aliança com ${name}!` : `Paz com ${name}.`, '#a8ffa8');
   }
 
@@ -1049,12 +1049,12 @@ export class WorldScene extends Phaser.Scene {
           npc.data.faction = rival.id;
           npc.data.homeId = home.id;
           npc.becomeVillager(home);
-          this.toast(`${npc.data.name} cansou de esperar e foi morar em ${rival.name}.`, '#cfc3a8');
+          this.toast(`${npc.data.name} cansou de esperar e foi morar em ${rival.name}.`, '#cdb98e');
         } else {
           this.npcs.delete(npc.data.id);
           this.population.remove(npc.data.id);
           npc.leave(() => {});
-          this.toast(`${npc.data.name} desistiu de esperar e foi embora.`, '#cfc3a8');
+          this.toast(`${npc.data.name} desistiu de esperar e foi embora.`, '#cdb98e');
         }
       }
     }

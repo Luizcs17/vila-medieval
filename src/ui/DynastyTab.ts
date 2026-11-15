@@ -13,7 +13,7 @@ interface Person {
   diedAt?: number;
 }
 
-const MUTED = '#a89a80';
+const MUTED = '#a8977a';
 const BOX_H = 38;
 const ROW_H = 64;
 const MAX_DEPTH = 5;
@@ -96,7 +96,7 @@ export function renderDynasty(ui: ManagementUI, x: number, y: number, w: number,
         rootId = id;
         ui.build();
       },
-      id === rootId ? 0x5a4630 : 0x2a2118,
+      id === rootId ? 0x8a6a3a : 0x241a12,
     );
   });
 
@@ -150,13 +150,13 @@ export function renderDynasty(ui: ManagementUI, x: number, y: number, w: number,
     const isRuler = n.id === PLAYER_ID || world.factions.some((f) => f.rulerId === n.id);
     ui.add(
       scene.add
-        .rectangle(n.cx - boxW / 2, by, boxW, BOX_H, p.alive ? 0x2a2118 : 0x1e1a16, 1)
+        .rectangle(n.cx - boxW / 2, by, boxW, BOX_H, p.alive ? 0x241a12 : 0x1e1a16, 1)
         .setOrigin(0)
-        .setStrokeStyle(isRuler ? 2 : 1, isRuler ? 0xffd040 : 0x5a4630),
+        .setStrokeStyle(isRuler ? 2 : 1, isRuler ? 0xffd040 : 0x8a6a3a),
     );
     const life = (q: Person) =>
       q.id === PLAYER_ID ? '' : q.alive ? ` (${ageOf(q, now)})` : ` † ${Math.floor(((q.diedAt ?? now) - q.born) / DAY_SECONDS)}`;
-    const color = p.alive ? '#f3e9d2' : MUTED;
+    const color = p.alive ? '#e8d8b0' : MUTED;
     ui.text(n.cx - boxW / 2 + 6, by + 4, `${p.name} ${p.surname}${life(p)}`.slice(0, 30), 11, color);
     const partner = p.partnerId !== null ? person(p.partnerId) : undefined;
     if (partner)

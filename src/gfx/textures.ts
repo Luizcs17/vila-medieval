@@ -141,8 +141,8 @@ export const npcSpriteKey = (variant: number, gender: 'f' | 'm') => `npc_${varia
 
 function tree(scene: Phaser.Scene, key: string, seed: number): void {
   const r = rng(seed);
-  const leaf = ['#2f5d2a', '#3b7332', '#4c8a3b', '#5fa046'].map(hex);
-  const trunk = ['#5a3a1a', '#6e4824'].map(hex);
+  const leaf = ['#1c3518', '#24421f', '#2d5126', '#365d2c'].map(hex);
+  const trunk = ['#3a2614', '#4a311b'].map(hex);
   const outline = hex('#1c2b14');
   const blobs = [
     { x: 12, y: 13, r: 9 },
@@ -174,8 +174,8 @@ function tree(scene: Phaser.Scene, key: string, seed: number): void {
 
 function pine(scene: Phaser.Scene, key: string, seed: number): void {
   const r = rng(seed);
-  const leaf = ['#1f4a2c', '#2a5e36', '#357042'].map(hex);
-  const trunk = hex('#5a3a1a');
+  const leaf = ['#142a1a', '#1b3622', '#22422a'].map(hex);
+  const trunk = hex('#3a2614');
   const outline = hex('#14261a');
   paint(scene, key, 20, 36, (x, y) => {
     const cx = x + 0.5;
@@ -199,8 +199,8 @@ function pine(scene: Phaser.Scene, key: string, seed: number): void {
 
 function rock(scene: Phaser.Scene, key: string, seed: number, ore: boolean): void {
   const r = rng(seed);
-  const stone = ['#5d5a57', '#76726d', '#8f8a83', '#a8a29a'].map(hex);
-  const rust = ['#b0602a', '#d0843f'].map(hex);
+  const stone = ['#3e3b38', '#504c48', '#625d57', '#77716a'].map(hex);
+  const rust = ['#8a4a20', '#a8622e'].map(hex);
   const outline = hex('#2a2724');
   paint(scene, key, 16, 12, (x, y) => {
     const dx = (x + 0.5 - 8) / 7.5;
@@ -311,7 +311,13 @@ interface HouseStyle {
   roofH: number;
   door?: boolean;
   window?: boolean;
+  /** Dark timber beams over plaster walls (half-timbered). */
+  timber?: boolean;
+  /** Roof texture: thatch stripes or slate rows. */
+  roof?: 'thatch' | 'slate' | 'plank';
 }
+
+const shade = (c: RGB, k: number): RGB => [Math.round(c[0] * k), Math.round(c[1] * k), Math.round(c[2] * k)];
 
 /**
  * Isometric box with a pyramid roof on a `size`×`size` footprint. The texture's bottom-centre
@@ -328,11 +334,13 @@ function isoBuilding(scene: Phaser.Scene, key: string, size: number, st: HouseSt
     wallR: hex(st.wallR),
     roofL: hex(st.roofL),
     roofR: hex(st.roofR),
-    outline: hex('#2b1d14'),
-    door: hex('#4a2f15'),
-    window: hex('#2b3a4a'),
-    windowLight: hex('#e8c86a'),
+    outline: hex('#140d08'),
+    door: hex('#2e1c0e'),
+    window: hex('#1a1f26'),
+    windowLight: hex('#d8a548'),
+    beam: hex('#2e1f12'),
   };
+  const grain = rng(W * 31 + H);
   const L = [-1, leftY - st.wallH];
   const B = [W / 2, baseY - st.wallH + 1];
   const R = [W + 1, leftY - st.wallH];
@@ -371,7 +379,26 @@ function isoBuilding(scene: Phaser.Scene, key: string, size: number, st: HouseSt
       if (Math.abs(dx) <= 3 && wy >= 5 && wy <= 10) return Math.abs(dx) <= 1 && wy >= 6 && wy <= 9 ? c.windowLight : c.window;
     }
     if ((part === 'roofL' || part === 'roofR') && Math.abs(x + 0.5 - W / 2) < 1) return c.outline; // ridge
-    return c[part];
+    const noise = 0.92 + grain() * 0.12; // weathering
+    if (part === 'roofL' || part === 'roofR') {
+      let k = noise;
+      if (st.roof === 'thatch' && y % 3 === 0) k *= 0.78;
+      if (st.roof === 'slate' && (y % 3 === 0 || (x + Math.floor(y / 3) * 2) % 5 === 0)) k *= 0.75;
+      if (st.roof === 'plank' && x % 4 === 0) k *= 0.8;
+      return shade(c[part], k);
+    }
+    if (st.timber) {
+      // Beams: corner posts, a mid rail and a diagonal brace on each wall face.
+      const left = part === 'wallL';
+      const fx = left ? x + 0.5 : x + 0.5 - W / 2; // 0..W/2 along the face
+      const yb = left ? leftY + (x + 0.5) * 0.5 : baseY - (x + 0.5 - W / 2) * 0.5;
+      const up = yb - (y + 0.5); // 0 (bottom) .. wallH (top)
+      const post = fx < 2 || fx > W / 2 - 2 || Math.abs(fx - W / 4) < 1;
+      const rail = Math.abs(up - st.wallH * 0.55) < 0.8 || up > st.wallH - 1.5;
+      const brace = Math.abs(up - (fx / (W / 4)) * st.wallH * 0.55) < 0.9 && fx < W / 4;
+      if (post || rail || brace) return c.beam;
+    }
+    return shade(c[part], noise);
   });
 }
 
@@ -379,7 +406,7 @@ function isoBuilding(scene: Phaser.Scene, key: string, size: number, st: HouseSt
 function palisade(scene: Phaser.Scene, key: string, gate: boolean): void {
   const W = TILE_W;
   const H = 30;
-  const log = ['#8a5a2b', '#a0703a', '#6e4824'].map(hex);
+  const log = ['#5a3d22', '#6b4a2a', '#4a321c'].map(hex);
   const outline = hex('#2b1d14');
   const door = hex('#5a3a1a');
   const band = hex('#3a2a1a');
@@ -550,76 +577,87 @@ export function createPlaceholderTextures(scene: Phaser.Scene): void {
   fromRows(scene, 'slash', ['..wwww..', '.w....w.', 'w......w', '........'], { w: '#ffffff' });
 
   isoBuilding(scene, 'bld_house', 2, {
-    wallL: '#e0d0a8',
-    wallR: '#bfae86',
-    roofL: '#b0503a',
-    roofR: '#8a3a28',
+    timber: true,
+    roof: 'thatch',
+    wallL: '#b8a888',
+    wallR: '#958667',
+    roofL: '#7a6034',
+    roofR: '#5e4826',
     wallH: 18,
     roofH: 22,
     door: true,
     window: true,
   });
   isoBuilding(scene, 'bld_lumberjack', 2, {
-    wallL: '#9a6a3a',
-    wallR: '#7a5028',
-    roofL: '#5a7a44',
-    roofR: '#455f34',
+    roof: 'plank',
+    wallL: '#5e4126',
+    wallR: '#4a331d',
+    roofL: '#3a4a2a',
+    roofR: '#2c3920',
     wallH: 16,
     roofH: 20,
     door: true,
   });
   isoBuilding(scene, 'bld_quarry', 2, {
-    wallL: '#a8a39b',
-    wallR: '#86817a',
-    roofL: '#8a6a44',
-    roofR: '#6e5234',
+    roof: 'plank',
+    wallL: '#6e6a64',
+    wallR: '#58544f',
+    roofL: '#5a4026',
+    roofR: '#46321e',
     wallH: 14,
     roofH: 20,
     door: true,
   });
   isoBuilding(scene, 'bld_mine', 2, {
-    wallL: '#6e6a66',
-    wallR: '#55524f',
-    roofL: '#5a4a3a',
-    roofR: '#463a2d',
+    roof: 'plank',
+    wallL: '#4a4744',
+    wallR: '#3b3936',
+    roofL: '#3a2e22',
+    roofR: '#2c2319',
     wallH: 12,
     roofH: 18,
     door: true,
   });
   isoBuilding(scene, 'bld_hunter', 2, {
-    wallL: '#8a5a2b',
-    wallR: '#6e4824',
-    roofL: '#d4b05a',
-    roofR: '#b08e40',
+    roof: 'thatch',
+    wallL: '#5a3d22',
+    wallR: '#46301b',
+    roofL: '#7a6034',
+    roofR: '#5e4826',
     wallH: 16,
     roofH: 22,
     door: true,
     window: true,
   });
   isoBuilding(scene, 'bld_tower', 1, {
-    wallL: '#b0aaa0',
-    wallR: '#8a857d',
-    roofL: '#8a5a2b',
-    roofR: '#6e4824',
+    roof: 'slate',
+    wallL: '#77726a',
+    wallR: '#5e5a54',
+    roofL: '#4a4e56',
+    roofR: '#383b42',
     wallH: 30,
     roofH: 14,
     window: true,
   });
   isoBuilding(scene, 'bld_barracks', 2, {
-    wallL: '#a8a39b',
-    wallR: '#86817a',
-    roofL: '#8a3a2a',
-    roofR: '#6a2a1e',
+    timber: true,
+    roof: 'slate',
+    wallL: '#6a665f',
+    wallR: '#54514b',
+    roofL: '#5e2a20',
+    roofR: '#481f18',
     wallH: 18,
     roofH: 20,
     door: true,
     window: true,
   });
   isoBuilding(scene, 'bld_embassy', 2, {
-    wallL: '#e0dcea',
-    wallR: '#bcb6cc',
-    roofL: '#4a5aa0',
-    roofR: '#38457e',
+    timber: true,
+    roof: 'slate',
+    wallL: '#b8b0a0',
+    wallR: '#968e80',
+    roofL: '#36405e',
+    roofR: '#2a3249',
     wallH: 18,
     roofH: 22,
     door: true,
@@ -641,10 +679,10 @@ export function createPlaceholderTextures(scene: Phaser.Scene): void {
   for (const key in ICON_ROWS) fromRows(scene, key, ICON_ROWS[key].rows, ICON_ROWS[key].palette);
 
   for (let v = 0; v < 4; v++) {
-    groundTile(scene, `grass_${v}`, ['#4f8a3c', '#5a9643', '#64a24a', '#477e36'], 10 + v, v === 3 ? '#e8d86a' : undefined);
-    groundTile(scene, `water_${v}`, ['#2f6fa3', '#3478ad', '#3c84b8', '#2a6596'], 20 + v, '#8fc3e6');
-    groundTile(scene, `sand_${v}`, ['#d8c48a', '#cfb97c', '#e0cd95', '#c4ad70'], 30 + v);
-    groundTile(scene, `dirt_${v}`, ['#7a6a55', '#857560', '#6f604c', '#8f806a'], 40 + v, '#5d5a57');
+    groundTile(scene, `grass_${v}`, ['#2f4a26', '#365329', '#3d5c2e', '#2a4222'], 10 + v, v === 3 ? '#8a7a3a' : undefined);
+    groundTile(scene, `water_${v}`, ['#1c3448', '#203a50', '#244259', '#18303f'], 20 + v, '#4f7590');
+    groundTile(scene, `sand_${v}`, ['#8a7a58', '#827252', '#93835f', '#78694b'], 30 + v);
+    groundTile(scene, `dirt_${v}`, ['#4a3f33', '#52463a', '#43392e', '#5a4d40'], 40 + v, '#3a3633');
   }
 
   tree(scene, 'tree', 7);

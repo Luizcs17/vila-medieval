@@ -11,6 +11,7 @@ import {
 import { isWalkable, type WorldMap } from '../world/map';
 import { BUILDING_DEFS, type Building, type Buildings } from './buildings';
 import { type Amounts, type Inventory, RESOURCE_LABEL, RESOURCES } from './inventory';
+import { type Look, randomLook } from './looks';
 import type { SlotInventory } from './slots';
 
 export type Rng = () => number;
@@ -191,6 +192,8 @@ export interface NpcData {
   partnerId: number | null;
   /** Parent ids (0 = the player), empty for people who arrived as wanderers. */
   parents: number[];
+  /** Randomized appearance (sprite is built from it). */
+  look: Look;
   /** Soldiers on campaign: attack village `target`. */
   order: { kind: 'raid'; target: number } | null;
   /** Game seconds spent at zero satiety. */
@@ -236,6 +239,7 @@ export function generateWanderer(rng: Rng, id: number, leavesAt: number, now = 0
     partnerId: null,
     parents: [],
     order: null,
+    look: randomLook(rng, gender),
     leavesAt,
   };
 }

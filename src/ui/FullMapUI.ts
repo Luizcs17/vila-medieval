@@ -4,18 +4,18 @@ import type { WorldScene } from '../scenes/WorldScene';
 import { Ground, Obj } from '../world/map';
 
 const GROUND_COLOR: Record<Ground, [number, number, number]> = {
-  [Ground.Grass]: [79, 138, 60],
-  [Ground.Water]: [47, 111, 163],
-  [Ground.Sand]: [216, 196, 138],
-  [Ground.Dirt]: [122, 106, 85],
+  [Ground.Grass]: [52, 80, 42],
+  [Ground.Water]: [30, 58, 80],
+  [Ground.Sand]: [138, 122, 88],
+  [Ground.Dirt]: [78, 66, 54],
 };
 const OBJ_COLOR: Partial<Record<Obj, [number, number, number]>> = {
-  [Obj.Tree]: [42, 90, 34],
-  [Obj.Pine]: [31, 74, 44],
-  [Obj.Rock]: [154, 149, 142],
-  [Obj.Iron]: [208, 132, 63],
+  [Obj.Tree]: [31, 58, 26],
+  [Obj.Pine]: [23, 48, 31],
+  [Obj.Rock]: [106, 101, 94],
+  [Obj.Iron]: [168, 98, 46],
 };
-const TEXT = { fontFamily: 'monospace', color: '#f3e9d2' } satisfies Phaser.Types.GameObjects.Text.TextStyle;
+const TEXT = { fontFamily: '"Alegreya", Georgia, serif', color: '#e8d8b0' } satisfies Phaser.Types.GameObjects.Text.TextStyle;
 
 /**
  * Full-screen map (M): terrain, every village's territory tinted in its colour with a solid border,
@@ -101,7 +101,14 @@ export class FullMapUI {
     s.textures.createCanvas('fullmap', mapW, mapH);
     const img = s.add.image(this.origin.x, this.origin.y, 'fullmap').setOrigin(0).setDepth(251);
     this.dots = s.add.graphics().setDepth(253);
-    const title = s.add.text(20, 16, 'Mapa  (M ou Esc fecha)', { ...TEXT, fontSize: '16px' }).setDepth(252);
+    const title = s.add
+      .text(20, 16, 'Mapa  (M ou Esc fecha)', {
+        ...TEXT,
+        fontFamily: '"MedievalSharp", "Alegreya", Georgia, serif',
+        fontSize: '20px',
+        color: '#e0b860',
+      })
+      .setDepth(252);
     this.objects.push(bg, img, this.dots, title);
     this.paint();
     this.legend(width - legendW - 10);
@@ -167,7 +174,7 @@ export class FullMapUI {
     const w = this.world;
     let y = 60;
     const add = (o: Phaser.GameObjects.GameObject) => this.objects.push(o);
-    add(s.add.text(x, y, 'Vilas', { ...TEXT, fontSize: '14px', color: '#cfc3a8' }).setDepth(252));
+    add(s.add.text(x, y, 'Vilas', { ...TEXT, fontSize: '14px', color: '#cdb98e' }).setDepth(252));
     y += 24;
     for (const f of w.factions) {
       add(
@@ -180,7 +187,7 @@ export class FullMapUI {
       const pop = w.population.villagersOf(f.id).length;
       const status = f.alive ? `${pop} aldeões · ${w.territory.area(f.id)} de terra` : 'conquistada';
       add(s.add.text(x + 22, y, f.name, { ...TEXT, fontSize: '13px' }).setDepth(252));
-      add(s.add.text(x + 22, y + 16, status, { ...TEXT, fontSize: '11px', color: '#a89a80' }).setDepth(252));
+      add(s.add.text(x + 22, y + 16, status, { ...TEXT, fontSize: '11px', color: '#a8977a' }).setDepth(252));
       // Name over the village on the map.
       const c = this.project(f.center.x + 0.5, f.center.y + 0.5);
       add(
@@ -199,7 +206,7 @@ export class FullMapUI {
     ];
     for (const [a, b] of key) {
       add(
-        s.add.text(x, y, `${a}: ${b}`, { ...TEXT, fontSize: '10px', color: '#a89a80', wordWrap: { width: 220 } }).setDepth(252),
+        s.add.text(x, y, `${a}: ${b}`, { ...TEXT, fontSize: '10px', color: '#a8977a', wordWrap: { width: 220 } }).setDepth(252),
       );
       y += 28;
     }

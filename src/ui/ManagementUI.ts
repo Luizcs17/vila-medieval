@@ -15,8 +15,8 @@ const TABS: [Tab, string][] = [
   ['diplomacy', 'Diplomacia'],
   ['dynasty', 'Dinastia'],
 ];
-const TEXT = { fontFamily: 'monospace', color: '#f3e9d2' } satisfies Phaser.Types.GameObjects.Text.TextStyle;
-const MUTED = '#a89a80';
+const TEXT = { fontFamily: '"Alegreya", Georgia, serif', color: '#e8d8b0' } satisfies Phaser.Types.GameObjects.Text.TextStyle;
+const MUTED = '#a8977a';
 const PAGE = 12;
 
 /** Extra tabs (diplomacy, dynasty) plug in content builders here. */
@@ -77,12 +77,12 @@ export class ManagementUI {
     return o;
   }
 
-  text(x: number, y: number, s: string, size = 12, color = '#f3e9d2'): Phaser.GameObjects.Text {
+  text(x: number, y: number, s: string, size = 12, color = '#e8d8b0'): Phaser.GameObjects.Text {
     return this.add(this.scene.add.text(x, y, s, { ...TEXT, fontSize: `${size}px`, color }));
   }
 
   button(x: number, y: number, w: number, label: string, onClick: () => void, color = 0x3a3228): void {
-    const bg = this.add(this.scene.add.rectangle(x, y, w, 24, color, 1).setOrigin(0).setStrokeStyle(1, 0x5a4630));
+    const bg = this.add(this.scene.add.rectangle(x, y, w, 24, color, 1).setOrigin(0).setStrokeStyle(1, 0x8a6a3a));
     bg.setInteractive({ useHandCursor: true }).on('pointerdown', onClick);
     this.add(this.scene.add.text(x + w / 2, y + 12, label, { ...TEXT, fontSize: '12px' }).setOrigin(0.5));
   }
@@ -98,8 +98,10 @@ export class ManagementUI {
     const x0 = Math.round((width - W) / 2);
     const y0 = Math.round((height - H) / 2);
     this.add(s.add.rectangle(0, 0, width, height, 0x000000, 0.5).setOrigin(0).setInteractive());
-    this.add(s.add.rectangle(x0, y0, W, H, 0x1a140e, 0.97).setOrigin(0).setStrokeStyle(2, 0x5a4630).setInteractive());
-    this.text(x0 + 16, y0 + 12, `${this.world.factions[0].name} · Dia ${this.world.clock.day}`, 16);
+    this.add(s.add.rectangle(x0, y0, W, H, 0x140f0a, 0.97).setOrigin(0).setStrokeStyle(2, 0x8a6a3a).setInteractive());
+    this.text(x0 + 16, y0 + 10, `${this.world.factions[0].name} · Dia ${this.world.clock.day}`, 20, '#e0b860').setFontFamily(
+      '"MedievalSharp", "Alegreya", Georgia, serif',
+    );
     this.text(x0 + W - 190, y0 + 14, 'V ou Esc fecha', 11, MUTED);
     TABS.forEach(([id, label], k) => {
       const active = id === this.tab;
@@ -113,7 +115,7 @@ export class ManagementUI {
           this.page = 0;
           this.build();
         },
-        active ? 0x5a4630 : 0x2a2118,
+        active ? 0x8a6a3a : 0x241a12,
       );
     });
     const cx = x0 + 16;
@@ -152,12 +154,12 @@ export class ManagementUI {
     ];
     let yy = y;
     for (const [k, v] of lines) {
-      this.text(x, yy, k, 13, '#cfc3a8');
+      this.text(x, yy, k, 13, '#cdb98e');
       this.text(x + 120, yy, v, 13);
       yy += 22;
     }
     yy += 8;
-    this.text(x, yy, 'Estoque', 13, '#cfc3a8');
+    this.text(x, yy, 'Estoque', 13, '#cdb98e');
     RESOURCES.forEach((r, k) => {
       this.add(this.scene.add.image(x + 120 + k * 130, yy + 7, `icon_${r}`).setScale(2));
       this.text(x + 134 + k * 130, yy, `${RESOURCE_LABEL[r]} ${world.stockpile.items[r]}`, 13);
@@ -165,7 +167,7 @@ export class ManagementUI {
 
     // Other villages at a glance.
     let ty = yy + 44;
-    this.text(x, ty, 'Vilas da região', 13, '#cfc3a8');
+    this.text(x, ty, 'Vilas da região', 13, '#cdb98e');
     ty += 22;
     this.text(x, ty, 'Vila', 11, MUTED);
     this.text(x + 200, ty, 'Aldeões', 11, MUTED);
@@ -204,11 +206,11 @@ export class ManagementUI {
     this.page = Math.min(this.page, pages - 1);
     let yy = y + 20;
     for (const n of list.slice(this.page * PAGE, (this.page + 1) * PAGE)) {
-      const row = this.add(this.scene.add.rectangle(x - 4, yy - 2, w, 22, 0x2a2118, 0.001).setOrigin(0));
+      const row = this.add(this.scene.add.rectangle(x - 4, yy - 2, w, 22, 0x241a12, 0.001).setOrigin(0));
       row
         .setInteractive({ useHandCursor: true })
         .on('pointerover', () => row.setFillStyle(0x3a2e20, 1))
-        .on('pointerout', () => row.setFillStyle(0x2a2118, 0.001))
+        .on('pointerout', () => row.setFillStyle(0x241a12, 0.001))
         .on('pointerdown', () => this.openNpc(n));
       const cells = [
         n.name,
@@ -219,7 +221,7 @@ export class ManagementUI {
         `${n.hp}`,
       ];
       cells.forEach((c, k) => {
-        this.text(x + cols[k], yy, c, 11, k === cells.length - 2 && isStarving(n) ? '#ff8a7a' : '#f3e9d2');
+        this.text(x + cols[k], yy, c, 11, k === cells.length - 2 && isStarving(n) ? '#ff8a7a' : '#e8d8b0');
       });
       yy += 24;
     }
@@ -248,13 +250,13 @@ export class ManagementUI {
     let yy = y + 20;
     for (const b of mine.slice(this.page * PAGE, (this.page + 1) * PAGE)) {
       const def = BUILDING_DEFS[b.type];
-      const row = this.add(this.scene.add.rectangle(x - 4, yy - 2, w, 22, 0x2a2118, 0.001).setOrigin(0));
+      const row = this.add(this.scene.add.rectangle(x - 4, yy - 2, w, 22, 0x241a12, 0.001).setOrigin(0));
       const opens = b.built && (def.job || b.type === 'house');
       if (opens) {
         row
           .setInteractive({ useHandCursor: true })
           .on('pointerover', () => row.setFillStyle(0x3a2e20, 1))
-          .on('pointerout', () => row.setFillStyle(0x2a2118, 0.001))
+          .on('pointerout', () => row.setFillStyle(0x241a12, 0.001))
           .on('pointerdown', () => this.openBuilding(b));
       }
       const state = b.built ? this.world.buildingHealthLabel(b) : `obra ${Math.floor((b.progress / def.buildSeconds) * 100)}%`;
@@ -262,7 +264,7 @@ export class ManagementUI {
       if (def.job) people = `${pop.workers(b.id).length}/${def.job.slots} trabalhando`;
       if (b.type === 'house') people = `${pop.residents(b.id).length}/${BEDS_PER_HOUSE} moradores`;
       this.text(x, yy, def.name, 12);
-      this.text(x + 240, yy, state, 12, b.built ? '#f3e9d2' : '#ffc060');
+      this.text(x + 240, yy, state, 12, b.built ? '#e8d8b0' : '#ffc060');
       this.text(x + 380, yy, people, 12);
       yy += 24;
     }
