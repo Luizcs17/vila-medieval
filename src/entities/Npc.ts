@@ -1,5 +1,7 @@
 import Phaser from 'phaser';
 import {
+  COMPANION_LEASH,
+  COMPANION_RANGE,
   GUARD_LEASH,
   GUARD_RANGE,
   HUNTER_DAMAGE,
@@ -60,6 +62,8 @@ export interface NpcWorld {
   missionDone(id: number): void;
   missionFailed(id: number): void;
   factionCenter(faction: number): { x: number; y: number };
+  /** Where the player is (companions follow them). */
+  playerAt(): { x: number; y: number };
 }
 
 /** Something a soldier or tower can attack. */
@@ -174,6 +178,14 @@ export class Npc {
       return;
     }
 
+    // Companions travel with the player: no house, no job, no night indoors.
+    if (this.data.role === 'companion') {
+      if (this.indoors) this.setIndoors(false);
+      this.companion(dt, world);
+      this.sync();
+      return;
+    }
+
     // Indoors for the night: hidden and safe until morning (or until their house is gone).
     if (this.indoors) {
       if ((world.isNight() || world.threat(this.gx, this.gy)) && this.home(world)) {
@@ -195,6 +207,22 @@ export class Npc {
     if (workplace && (busyAtNight || !world.isNight())) this.work(dt, world, workplace);
     else this.live(dt, world);
     this.sync();
+  }
+
+  /** Joined the player's group: drop the marker; from now on follow the player. */
+  becomeCompanion(): void {
+    this.scene.tweens.killTweensOf(this.bob);
+    this.marker?.destroy();
+    this.marker = undefined;
+    this.path = [];
+  }
+
+  /** Stopped travelling (the village was founded): live around (x, y) until they get a house. */
+  settleNear(x: number, y: number): void {
+    this.anchor = { x: Math.floor(x), y: Math.floor(y) };
+    this.roam = 4;
+    this.path = [];
+    this.idle = 0.5;
   }
 
   /** Recruited: drop the marker and walk home; from now on live around the house. */
@@ -410,11 +438,55 @@ export class Npc {
     }
   }
 
+  /** Companion: stay close to the player, and fight hostiles that come near (not too far from them). */
+  private companion(dt: number, world: NpcWorld): void {
+    this.attackCd -= dt;
+    this.holding = this.data.weapon ?? null;
+    const p = world.playerAt();
+    const target = world.findHostile(this.data.faction, this.gx, this.gy, COMPANION_RANGE);
+    if (target && Math.hypot(target.gx - p.x, target.gy - p.y) < COMPANION_LEASH) {
+      this.fight(dt, world, target);
+      return;
+    }
+    this.follow(dt, p.x, p.y);
+  }
+
+  /** Walks after a point (the player), keeping a step or two away; catches up faster from afar. */
+  private follow(dt: number, x: number, y: number): void {
+    const d = Math.hypot(x - this.gx, y - this.gy);
+    this.status = 'Seguindo você';
+    if (d > 40) {
+      // Lost far behind (e.g. you were knocked out across the map): catch up out of sight.
+      this.gx = x + (Math.random() - 0.5) * 2;
+      this.gy = y + 1.5;
+      if (!isWalkable(this.map, Math.floor(this.gx), Math.floor(this.gy))) {
+        this.gx = x;
+        this.gy = y;
+      }
+      this.path = [];
+      return;
+    }
+    if (d <= 2.2) {
+      this.path = [];
+      this.stopWalking();
+      return;
+    }
+    this.repath -= dt;
+    const last = this.path.at(-1);
+    const stale = !last || Math.hypot(last.x + 0.5 - x, last.y + 0.5 - y) > 2;
+    if (this.path.length === 0 || (this.repath <= 0 && stale)) {
+      this.repath = 0.7;
+      this.goNear(x, y, 1, 4000);
+    }
+    this.walk(dt * (d > 5 ? 2.3 : 1.6));
+  }
+
   /** Close in on `target` and hit it on cooldown. */
   private fight(dt: number, world: NpcWorld, target: Target): void {
     this.status = 'Combatendo!';
     const d = Math.hypot(target.gx - this.gx, target.gy - this.gy);
-    if (d <= 0.95) {
+    // Close enough to strike (a little further when there's no way to get closer).
+    if (d <= 0.95 || (d <= 1.6 && this.path.length === 0)) {
       this.path = [];
       this.stopWalking();
       this.sprite.setFlipX(target.gx - target.gy < this.gx - this.gy);
@@ -428,7 +500,8 @@ export class Npc {
     this.repath -= dt;
     if (this.path.length === 0 || this.repath <= 0) {
       this.repath = 0.6;
-      this.goNear(target.gx, target.gy, 0);
+      // Straight at it, or next to it when its own tile can't be reached (it stands in a thicket).
+      if (!this.goNear(target.gx, target.gy, 0)) this.goNear(target.gx, target.gy, 1);
     }
     this.walk(dt * 1.3);
   }
@@ -876,7 +949,7 @@ export class Npc {
     this.carryIcon?.setPosition(s.x, s.y - 17).setDepth(s.y + 0.1);
     this.syncHand(s.x, s.y);
     // Starving villagers show a red meat icon over their head.
-    const starving = this.data.role === 'villager' && isStarving(this.data);
+    const starving = this.data.role !== 'wanderer' && isStarving(this.data);
     if (starving && !this.hungerIcon)
       this.hungerIcon = this.scene.add.image(0, 0, 'icon_meat').setOrigin(0.5, 1).setTint(0xff6050);
     if (!starving && this.hungerIcon) {

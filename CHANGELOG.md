@@ -2,6 +2,14 @@
 
 Each milestone from `docs/GDD.md` is a minor version.
 
+## 1.15.0: Milestone 25, trading in person and companions
+
+- Talk (E) to someone from another village: their card has "Comerciar". The trade window lists what their village sells and what you carry that it would buy, at its market prices (supply moves them), paid with your coins. Worn tools sell for less. Not with villages at war with you.
+- Before you have a village, wanderers can join you as companions (up to 4): "Chamar para o grupo" pays their request, no bed needed. Companions follow you (catching up if left far behind), fight hostiles near them as long as the fight stays near you, and don't go indoors at night.
+- Companions eat meat from your bag (then from what's stored in your house) and can starve. Their card shows HP and hunger. You give them a weapon and armour from your bag by clicking (their old one comes back to you).
+- When you claim land, your companions become villagers of the new village. Villagers without a home now move into any free bed of their village by themselves (also after a house is demolished).
+- Fighters whose target stands on a tile they can't step on now reach it from an adjacent tile.
+
 ## 1.14.0: Milestone 24, survival start
 
 - New games start with nothing: no hall, no land, no stock and no coins. Existing saves keep their village.

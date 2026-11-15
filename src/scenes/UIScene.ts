@@ -16,6 +16,7 @@ import { InventoryUI } from '../ui/InventoryUI';
 import { ManagementUI } from '../ui/ManagementUI';
 import { Minimap } from '../ui/Minimap';
 import { PauseMenuUI } from '../ui/PauseMenuUI';
+import { PeddleUI } from '../ui/PeddleUI';
 import { RecruitDialogUI } from '../ui/RecruitDialogUI';
 import { StoragePanelUI } from '../ui/StoragePanelUI';
 import { renderTrade } from '../ui/TradeTab';
@@ -66,6 +67,7 @@ export class UIScene extends Phaser.Scene {
   private dialog!: RecruitDialogUI;
   private panel!: BuildingPanelUI;
   private storagePanel!: StoragePanelUI;
+  private peddle!: PeddleUI;
   private popText!: Phaser.GameObjects.Text;
   private popups: Popup[] = [];
   private toasts: { text: Phaser.GameObjects.Text; age: number }[] = [];
@@ -78,7 +80,7 @@ export class UIScene extends Phaser.Scene {
     this.world = this.scene.get('World') as WorldScene;
     // This scene restarts whenever the world does (loading a save). The world's event emitter
     // survives restarts, so drop listeners from the previous run before adding new ones.
-    for (const e of ['popup', 'toast', 'talk', 'building', 'storage']) this.world.events.off(e);
+    for (const e of ['popup', 'toast', 'talk', 'building', 'storage', 'peddle']) this.world.events.off(e);
     this.popups = [];
     this.toasts = [];
 
@@ -166,6 +168,12 @@ export class UIScene extends Phaser.Scene {
     });
 
     this.storagePanel = new StoragePanelUI(this, this.world);
+    this.peddle = new PeddleUI(this, this.world);
+    this.world.events.on('peddle', (faction: number) => {
+      if (this.inventory.isOpen) this.toggleInventory();
+      this.closeBuildMode();
+      this.peddle.open(faction);
+    });
     this.world.events.on('storage', (e: { title: string; storage: Storage }) => {
       if (this.inventory.isOpen) this.toggleInventory();
       this.closeBuildMode();
@@ -195,6 +203,10 @@ export class UIScene extends Phaser.Scene {
       const key = e.key.toLowerCase();
       if (this.pause.isOpen) {
         if (key === 'escape') this.pause.close();
+        return;
+      }
+      if (this.peddle.isOpen) {
+        if (key === 'escape' || key === 'e') this.peddle.close();
         return;
       }
       if (this.storagePanel.isOpen) {
@@ -481,6 +493,7 @@ export class UIScene extends Phaser.Scene {
     this.dialog.layout(width, height);
     this.panel.layout(width, height);
     this.storagePanel?.layout();
+    this.peddle?.layout();
     this.minimap.layout(width, height);
     this.pause?.layout(width, height);
     this.fullMap?.layout();

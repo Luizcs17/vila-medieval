@@ -43,14 +43,33 @@ export function updateNeeds(
   dt: number,
   factor: (n: NpcData) => number = () => 1,
 ): NeedsEvent[] {
+  const larder: Larder = {
+    take: () => {
+      if (stock.items.meat <= 0) return false;
+      stock.items.meat -= 1;
+      return true;
+    },
+  };
+  return updateNeedsFrom(villagers, larder, dt, factor);
+}
+
+/** Where people get their meat: `take` eats one unit if there is any. */
+export interface Larder {
+  take(): boolean;
+}
+
+/** Same as `updateNeeds`, eating from any larder (companions eat from the player's bag). */
+export function updateNeedsFrom(
+  people: NpcData[],
+  larder: Larder,
+  dt: number,
+  factor: (n: NpcData) => number = () => 1,
+): NeedsEvent[] {
   const events: NeedsEvent[] = [];
-  for (const v of villagers) {
+  for (const v of people) {
     const wasStarving = isStarving(v);
     v.food = Math.max(0, v.food - (HUNGER_PER_DAY / DAY_SECONDS) * appetite(v) * factor(v) * dt);
-    while (v.food < EAT_BELOW && stock.items.meat > 0) {
-      stock.items.meat -= 1;
-      v.food = Math.min(MAX_FOOD, v.food + MEAL_SATIETY);
-    }
+    while (v.food < EAT_BELOW && larder.take()) v.food = Math.min(MAX_FOOD, v.food + MEAL_SATIETY);
     if (isStarving(v)) {
       v.starving += dt;
       if (!wasStarving) events.push({ type: 'starving', npc: v });

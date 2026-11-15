@@ -1,7 +1,8 @@
 import type Phaser from 'phaser';
-import { ADULT_AGE, DAY_SECONDS } from '../config';
+import { ADULT_AGE, COMPANION_MAX, DAY_SECONDS } from '../config';
 import { ageOf, fullName, PLAYER_ID } from '../game/families';
 import { RESOURCE_LABEL, RESOURCES } from '../game/inventory';
+import { ITEM_DEFS } from '../game/items';
 import { isStarving } from '../game/needs';
 import { jobTitle, type NpcData, roleLabel, SKILL_LABEL, SKILLS, stars, TIER_COLOR, TRAITS, tierLabel } from '../game/npcs';
 import { ensurePersonTextures } from '../gfx/people';
@@ -136,11 +137,17 @@ export class RecruitDialogUI {
     }
     y += 6;
 
+    const settled = this.world.settled;
     if (npc.role === 'wanderer') {
-      items.push(s.add.text(PAD, y, 'Para morar na vila, pede:', { ...TEXT, fontSize: '13px', color: '#cdb98e' }));
+      const ask = settled ? 'Para morar na vila, pede:' : 'Para viajar com você (como companheiro), pede:';
+      items.push(s.add.text(PAD, y, ask, { ...TEXT, fontSize: '13px', color: '#cdb98e' }));
       y += 20;
       const pop = this.world.population;
       this.addLine(items, y, () => {
+        if (!settled) {
+          const n = pop.companions.length;
+          return { label: `Lugar no grupo (${n}/${COMPANION_MAX} companheiros)`, met: n < COMPANION_MAX };
+        }
         const free = pop.freeBeds;
         return {
           label: free > 0 ? `Uma cama livre (${free} livre${free > 1 ? 's' : ''})` : 'Uma cama livre (construa uma Casa: B)',
@@ -171,6 +178,29 @@ export class RecruitDialogUI {
         }),
       );
       y += 30;
+    } else if (npc.role === 'companion') {
+      const hungry = isStarving(npc);
+      items.push(
+        s.add.text(PAD, y, 'Viaja com você. Come carne da sua mochila (ou da sua casa).', {
+          ...TEXT,
+          fontSize: '12px',
+          color: '#cdb98e',
+        }),
+        s.add.text(PAD, y + 18, `Vida ${npc.hp}   Fome ${Math.round(100 - npc.food)}%${hungry ? ' (FAMINTO)' : ''}`, {
+          ...TEXT,
+          fontSize: '12px',
+          color: hungry ? '#ff8a7a' : npc.food < 50 ? '#ffc060' : '#a8e890',
+        }),
+        s.add.text(PAD, y + 36, 'Clique para dar arma/armadura da sua mochila (a antiga volta para ela):', {
+          ...TEXT,
+          fontSize: '11px',
+          color: '#a8977a',
+        }),
+      );
+      y += 56;
+      this.gearButton(items, PAD, y, npc, 'weapon');
+      this.gearButton(items, PAD + 205, y, npc, 'armor');
+      y += 36;
     } else {
       // Family: spouse, and (for your villagers) affinity with you and a proposal.
       const f = npc.gender === 'f';
@@ -237,8 +267,19 @@ export class RecruitDialogUI {
       items.push(bg, text);
       return { bg, label: text };
     };
-    if (npc.role === 'wanderer') this.recruitBtn = btn(PAD, 'Recrutar  [Enter]', () => this.confirm());
-    else if (this.world.families.canPropose(npc, this.world.clock.seconds)) {
+    const foreign = npc.role === 'villager' && !this.world.isMine(npc.faction);
+    if (npc.role === 'wanderer')
+      this.recruitBtn = btn(PAD, settled ? 'Recrutar  [Enter]' : 'Chamar para o grupo  [Enter]', () => this.confirm());
+    else if (foreign) {
+      const war = this.world.atWar(0, npc.faction);
+      const b = btn(PAD, war ? 'Em guerra: sem comércio' : 'Comerciar', () => {
+        if (war) return;
+        const f = npc.faction;
+        this.close();
+        this.world.openPeddle(f);
+      });
+      if (war) b.label.setColor('#8a7e68');
+    } else if (this.world.families.canPropose(npc, this.world.clock.seconds)) {
       btn(PAD, 'Pedir em casamento ♥', () => {
         if (this.world.propose(npc)) this.close();
       });
@@ -252,6 +293,23 @@ export class RecruitDialogUI {
     this.container = c;
     this.layout(s.scale.width, s.scale.height);
     this.update();
+  }
+
+  /** A button showing a companion's weapon or armour; clicking cycles through what you carry. */
+  private gearButton(items: Phaser.GameObjects.GameObject[], x: number, y: number, npc: NpcData, slot: 'weapon' | 'armor'): void {
+    const s = this.scene;
+    const label = () => {
+      const item = npc[slot];
+      const what = item ? ITEM_DEFS[item].label : slot === 'weapon' ? 'sem arma' : 'sem armadura';
+      return `${slot === 'weapon' ? 'Arma' : 'Armadura'}: ${what}`;
+    };
+    const bg = s.add.rectangle(x, y, 195, 28, 0x2e3a4a, 1).setOrigin(0).setStrokeStyle(1, 0x8a6a3a);
+    const text = s.add.text(x + 97, y + 14, label(), { ...TEXT, fontSize: '12px' }).setOrigin(0.5);
+    bg.setInteractive({ useHandCursor: true }).on('pointerdown', () => {
+      this.world.equipFromBag(npc, slot);
+      text.setText(label());
+    });
+    items.push(bg, text);
   }
 
   private addLine(items: Phaser.GameObjects.GameObject[], y: number, evalFn: Line['eval']): void {
