@@ -2,6 +2,11 @@
 
 Each milestone from `docs/GDD.md` is a minor version.
 
+## 1.8.1: Dev and prod servers
+
+- `npm run prod` serves a stable build on http://localhost:4173 from a separate copy of the project (git worktree at `main`), so the game can be played while development continues on http://localhost:5173. `npm run prod:update` moves it to the latest `main` and rebuilds it. Prod and dev keep separate save games.
+- `docs/BACKLOG.md` lists the requests waiting for approval.
+
 ## 1.8.0: Milestone 18, coins, markets and caravans
 
 - Currency: every village has a treasury in coins (moedas), shown in the HUD. You start with 60; rivals with 120.

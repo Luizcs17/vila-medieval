@@ -8,7 +8,9 @@ Isometric medieval village builder with a dark, medieval look. The player contro
 
 ## Commands
 
-- `npm run dev`: Vite dev server on http://localhost:5173 (also `.claude/launch.json` → "game")
+- `npm run dev`: **dev** server on http://localhost:5173 (also `.claude/launch.json` → "game"). Changes with every edit.
+- `npm run prod`: **prod** server on http://localhost:4173 (`.claude/launch.json` → "prod"), where the user plays a stable build while development continues. It serves `<repo folder>-prod/dist`, a git worktree detached at `main`.
+- `npm run prod:update`: moves the prod worktree to the latest `main`, runs `npm ci` and builds it. Run it only after a milestone is merged and checked, never mid-feature; then restart the prod server. Prod and dev keep separate save games (browser storage is per port).
 - `npm run check`: typecheck + Biome lint + all tests. Run this before every commit; CI runs it too.
 - `npm test` / `npx vitest run tests/npcs.test.ts -t "best-first"`: all tests, or one file / test
 - `npm run format`: Biome auto-fix (formatting, import order, safe lint fixes)
@@ -25,6 +27,8 @@ Tooling notes:
 
 - One branch per milestone or feature (`feat/m7-animals`, `chore/…`), then a `--no-ff` merge into `main`.
 - With each change, bump `package.json` (each milestone is a minor version) and add a `CHANGELOG.md` entry.
+- After merging a finished milestone into `main`, run `npm run prod:update` so the user's playable build moves forward.
+- Pending requests live in `docs/BACKLOG.md`. Don't start backlog items until the user explicitly allows it.
 - There is no git remote yet. `.github/workflows/ci.yml` runs `npm run check` and the build once one exists.
 
 ## Architecture
