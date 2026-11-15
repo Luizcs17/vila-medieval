@@ -32,6 +32,10 @@ export const PLAYER_SPEED = 3.5;
 export const PLAYER_RUN_MULTIPLIER = 1.7;
 /** Half-size of the player's collision box, in tiles. */
 export const PLAYER_RADIUS = 0.22;
+/** Walking on a road is this much faster (player and villagers). */
+export const ROAD_SPEED = 1.4;
+/** Pathfinding cost of a road tile relative to open ground (lower = roads preferred). */
+export const ROAD_COST = 0.6;
 
 /** How far (tile units, player to the tile's nearest edge) the player can reach to gather or use things. */
 export const INTERACT_REACH = 0.9;

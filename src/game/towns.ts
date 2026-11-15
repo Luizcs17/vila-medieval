@@ -1,3 +1,5 @@
+import { Obj, tileIndex, type WorldMap } from '../world/map';
+import { findPath } from '../world/path';
 import { BUILDING_DEFS, type Building, type Buildings, type BuildingType } from './buildings';
 import type { Faction } from './factions';
 import { generateWanderer, type NpcData, type Population, type Rng } from './npcs';
@@ -33,6 +35,45 @@ export function findSpot(
     }
   }
   return null;
+}
+
+/**
+ * Lays the old roads between villages: each village to its nearest neighbours, along walkable
+ * ground (around trees, rocks and water). Returns the tiles that became road.
+ */
+export function buildRoadNetwork(map: WorldMap, centers: { x: number; y: number }[]): number[] {
+  const laid: number[] = [];
+  const pairs = new Set<string>();
+  for (let a = 0; a < centers.length; a++) {
+    const near = centers
+      .map((c, b) => ({ b, d: Math.hypot(c.x - centers[a].x, c.y - centers[a].y) }))
+      .filter((x) => x.b !== a)
+      .sort((x, y) => x.d - y.d)
+      .slice(0, 2);
+    for (const { b } of near) pairs.add(a < b ? `${a}:${b}` : `${b}:${a}`);
+  }
+  for (const key of pairs) {
+    const [a, b] = key.split(':').map(Number);
+    const from = { x: centers[a].x, y: centers[a].y + 1 };
+    const to = { x: centers[b].x, y: centers[b].y + 1 };
+    const path = findPath(map, from, (x, y) => Math.abs(x - to.x) <= 1 && Math.abs(y - to.y) <= 1, to, 40000);
+    const lay = (x: number, y: number) => {
+      const i = tileIndex(map, x, y);
+      const o = map.objects[i];
+      if (o === Obj.None || o === Obj.Stump || o === Obj.Sapling) {
+        map.objects[i] = Obj.Road;
+        laid.push(i);
+      }
+    };
+    let prev = from;
+    for (const t of path ?? []) {
+      lay(t.x, t.y);
+      // Diagonal steps would leave stones touching only at the corners: fill the elbow.
+      if (t.x !== prev.x && t.y !== prev.y) lay(t.x, prev.y);
+      prev = t;
+    }
+  }
+  return laid;
 }
 
 /** Lays out a rival village: hall (stockpile), houses and a few workplaces, all finished. */

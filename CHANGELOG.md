@@ -2,6 +2,13 @@
 
 Each milestone from `docs/GDD.md` is a minor version.
 
+## 1.7.0: Milestone 17, roads
+
+- Cobbled roads (Estrada, 1 stone per tile, placed instantly; B menu keeps placing so you can lay a line). They can leave your territory to reach other villages, but not cross into theirs.
+- Walking on a road is 40% faster for you and villagers, and pathfinding prefers roads (they cost 0.6 of open ground), so traffic follows them.
+- New games start with old roads connecting each village to its nearest neighbours.
+- Roads show on the minimap and the full map; trees don't regrow on them; buildings can be placed over them.
+
 ## 1.6.0: Milestone 16, dark medieval look
 
 - Darker, earthier palette for ground, water, trees and rocks; dim warm days, deeper nights and a vignette around the screen.

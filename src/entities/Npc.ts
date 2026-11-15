@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { GUARD_LEASH, GUARD_RANGE, HUNTER_RANGE, NPC_SPEED, WORKER_LOAD, WORKER_TIME_FACTOR } from '../config';
+import { GUARD_LEASH, GUARD_RANGE, HUNTER_RANGE, NPC_SPEED, ROAD_SPEED, WORKER_LOAD, WORKER_TIME_FACTOR } from '../config';
 import { BUILDING_DEFS, type Building, type Buildings } from '../game/buildings';
 import { NODE_DEFS } from '../game/gathering';
 import type { Resource } from '../game/inventory';
@@ -7,7 +7,7 @@ import { isStarving } from '../game/needs';
 import { type NpcData, productivity, soldierDamage, TIER_COLOR } from '../game/npcs';
 import { ensurePersonTextures } from '../gfx/people';
 import { gridToScreen } from '../iso';
-import { inBounds, isWalkable, tileIndex, type WorldMap } from '../world/map';
+import { inBounds, isRoad, isWalkable, tileIndex, type WorldMap } from '../world/map';
 import { findPath, type Tile } from '../world/path';
 
 /** What an NPC needs from the world to live and work. Implemented by WorldScene. */
@@ -659,7 +659,7 @@ export class Npc {
   }
 
   private walk(dt: number): void {
-    let budget = NPC_SPEED * dt;
+    let budget = NPC_SPEED * dt * (isRoad(this.map, Math.floor(this.gx), Math.floor(this.gy)) ? ROAD_SPEED : 1);
     while (budget > 0 && this.path.length > 0) {
       const next = this.path[0];
       if (!isWalkable(this.map, next.x, next.y)) {
