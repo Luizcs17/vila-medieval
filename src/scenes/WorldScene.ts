@@ -36,11 +36,11 @@ import {
   missionChance,
   type Proposal,
 } from '../game/diplomacy';
-import { createFactions, type Faction, PLAYER_FACTION } from '../game/factions';
+import { createFactions, type Faction, PLAYER_FACTION, type TradePolicy } from '../game/factions';
 import { ageOf, Families, fullName, isAdult, PLAYER_ID } from '../game/families';
 import { Gatherer, NODE_DEFS, nearestTile, ResourceNodes } from '../game/gathering';
 import { Inventory, RESOURCE_LABEL, RESOURCES, type Resource } from '../game/inventory';
-import { ITEM_DEFS, type ItemId, type Recipe, type ToolType } from '../game/items';
+import { ITEM_DEFS, type ItemId, RECIPES, type Recipe, type ToolId, type ToolType } from '../game/items';
 import { isStarving, updateNeeds } from '../game/needs';
 import {
   compass,
@@ -59,6 +59,19 @@ import { SlotInventory } from '../game/slots';
 import { Territory } from '../game/territory';
 import { GameClock } from '../game/time';
 import { buildRoadNetwork, findSpot, foundTown, populateTown } from '../game/towns';
+import {
+  executeTrade,
+  GOODS,
+  type Good,
+  type Goods,
+  goodLabel,
+  isToolGood,
+  type Market,
+  planAiCaravan,
+  summarize,
+  TOOL_GOODS,
+  targetStock,
+} from '../game/trade';
 import { createPlaceholderTextures } from '../gfx/textures';
 import { gridToScreen, screenToGrid } from '../iso';
 import { Wildlife } from '../systems/Wildlife';
@@ -95,6 +108,7 @@ const BUILDING_KEY: Record<BuildingType, string> = {
   barracks: 'bld_barracks',
   embassy: 'bld_embassy',
   road: 'road',
+  market: 'bld_market',
 };
 
 /** Ground is drawn beneath everything; objects and characters are depth-sorted by their screen y. */
@@ -132,10 +146,18 @@ export interface WorldInit {
 /** A diplomat's trip: going → talking → returning. */
 export interface Mission {
   diplomatId: number;
-  kind: MissionKind;
+  /** Diplomacy errand, or a trade caravan led by a merchant. */
+  kind: MissionKind | 'trade';
   target: number;
   phase: 'going' | 'talking' | 'returning';
   timer: number;
+  /** Owner village (the player for diplomacy; any village for caravans). */
+  faction?: number;
+  /** Caravans: goods carried, shopping list, purse, and what was bought. */
+  cargo?: Goods;
+  shopping?: Goods;
+  coins?: number;
+  bought?: Goods;
 }
 
 /** Emitted on `scene.events` as 'toast' for screen-level notifications. */
@@ -179,6 +201,9 @@ export class WorldScene extends Phaser.Scene {
   missions = new Map<number, Mission>();
   private diploTimer = 0;
   private raidTimers = new Map<string, number>();
+  private tradeTimer = 0;
+  /** Standing orders for merchants who visit your market. */
+  tradePolicy: TradePolicy = { sellAbove: {}, buyUpTo: {} };
   private towerCd = new Map<number, number>();
   private buildingFx!: Phaser.GameObjects.Graphics;
   private repairAcc = 0;
@@ -259,6 +284,8 @@ export class WorldScene extends Phaser.Scene {
     this.diplomacy = new Diplomacy();
     this.missions = new Map();
     this.raidTimers = new Map();
+    this.tradeTimer = 0;
+    this.tradePolicy = { sellAbove: {}, buyUpTo: {} };
     this.diploTimer = 0;
     this.factions = createFactions(this.map.sites, this.stockpile);
     this.territory = new Territory(this.map);
@@ -286,7 +313,7 @@ export class WorldScene extends Phaser.Scene {
           m.timer = 6;
         }
       },
-      missionDone: (id) => this.missions.delete(id),
+      missionDone: (id) => this.finishMission(id),
       missionFailed: (id) => {
         const n = this.population.person(id);
         this.missions.delete(id);
@@ -358,7 +385,7 @@ export class WorldScene extends Phaser.Scene {
         f.stock.add('wood', 40);
         f.stock.add('stone', 25);
         f.stock.add('meat', 20);
-        for (const n of populateTown(this.population, this.buildings, f, Math.random, 8, this.clock.seconds))
+        for (const n of populateTown(this.population, this.buildings, f, Math.random, 10, this.clock.seconds))
           this.spawnVillagerEntity(n);
       }
     }
@@ -412,6 +439,8 @@ export class WorldScene extends Phaser.Scene {
         alive: f.alive,
         rulerId: f.rulerId,
         center: f.center,
+        coins: f.coins,
+        tools: { ...f.tools },
       })),
       inventory: this.inventory.slots.map((s) => (s ? { ...s } : null)),
       selectedHotbar: this.selectedHotbar,
@@ -419,7 +448,8 @@ export class WorldScene extends Phaser.Scene {
       population: this.population.snapshot(),
       families: { affinity: { ...this.families.affinity }, chattedOn: { ...this.families.chattedOn } },
       diplomacy: this.diplomacy.snapshot(),
-      missions: [...this.missions.values()].map((m) => ({ ...m })),
+      missions: [...this.missions.values()].map((m) => structuredClone(m)),
+      tradePolicy: structuredClone(this.tradePolicy),
       npcPositions: [...this.npcs.values()].map((n) => [n.data.id, n.gx, n.gy]),
       animals: this.wildlife.snapshot(),
     };
@@ -456,7 +486,8 @@ export class WorldScene extends Phaser.Scene {
     this.families.affinity = { ...save.families.affinity };
     this.families.chattedOn = { ...save.families.chattedOn };
     this.diplomacy.restore(save.diplomacy);
-    for (const m of save.missions) this.missions.set(m.diplomatId, { ...m });
+    for (const m of save.missions) this.missions.set(m.diplomatId, structuredClone(m));
+    this.tradePolicy = structuredClone(save.tradePolicy);
     const pos = new Map(save.npcPositions.map(([id, x, y]) => [id, { x, y }]));
     for (const data of this.population.npcs) this.spawnVillagerEntity(data, pos.get(data.id) ?? this.villageCenter);
     this.wildlife.restore(save.animals);
@@ -466,6 +497,8 @@ export class WorldScene extends Phaser.Scene {
       if (!f.isPlayer) Object.assign(f.stock.items, sf.stock);
       f.alive = sf.alive;
       f.rulerId = sf.rulerId;
+      f.coins = sf.coins;
+      f.tools = { ...sf.tools };
       f.center = sf.center;
     }
     this.territory.recompute(this.buildings.list);
@@ -627,6 +660,179 @@ export class WorldScene extends Phaser.Scene {
       .sort((a, b) => b.skills.diplomacy - a.skills.diplomacy);
   }
 
+  // ---------- trade ----------
+
+  /** A village's market, as seen by a visiting caravan (the player's follows the trade policy). */
+  marketOf(f: Faction): Market {
+    const player = f.isPlayer;
+    const policy = this.tradePolicy;
+    const have = (g: Good) => (isToolGood(g) ? (f.tools[g] ?? 0) : f.stock.items[g]);
+    return {
+      get coins() {
+        return f.coins;
+      },
+      set coins(v: number) {
+        f.coins = v;
+      },
+      have,
+      forSale: (g) => Math.max(0, have(g) - (player ? (policy.sellAbove[g] ?? Infinity) : Math.floor(targetStock(g) * 0.3))),
+      wants: (g) => Math.max(0, player ? (policy.buyUpTo[g] ?? 0) - have(g) : targetStock(g) * 2 - have(g)),
+      add: (g, n) => {
+        if (isToolGood(g)) f.tools[g] = (f.tools[g] ?? 0) + n;
+        else f.stock.add(g, n);
+      },
+      remove: (g, n) => {
+        if (isToolGood(g)) f.tools[g] = Math.max(0, (f.tools[g] ?? 0) - n);
+        else f.stock.items[g] = Math.max(0, f.stock.items[g] - n);
+      },
+    };
+  }
+
+  /** Free merchants of a village (market workers not travelling), best haggler first. */
+  freeMerchants(faction = PLAYER_FACTION): NpcData[] {
+    return this.buildings.list
+      .filter((b) => b.faction === faction && b.type === 'market' && b.built)
+      .flatMap((m) => this.population.workers(m.id))
+      .filter((n) => !this.missions.has(n.id) && this.npcs.has(n.id) && isAdult(n, this.clock.seconds))
+      .sort((a, b) => b.skills.diplomacy - a.skills.diplomacy);
+  }
+
+  hasMarket(faction: number): boolean {
+    return this.buildings.list.some((b) => b.faction === faction && b.type === 'market' && b.built);
+  }
+
+  /** Sends one of your merchants with `cargo` to sell and money for `shopping`. Returns a message. */
+  sendCaravan(target: number, cargo: Goods, shopping: Goods, coins: number): string {
+    const m = this.freeMerchants()[0];
+    const dest = this.factions[target];
+    if (!m) return 'Nenhum mercador livre. Construa um Mercado e designe aldeões.';
+    if (!dest?.alive || !this.hasMarket(target)) return 'Essa vila não tem mercado.';
+    if (this.atWar(PLAYER_FACTION, target)) return 'Não dá para comerciar com quem está em guerra com você.';
+    const home = this.marketOf(this.factions[PLAYER_FACTION]);
+    for (const g of GOODS) if ((cargo[g] ?? 0) > home.have(g)) return `Falta ${goodLabel(g)} para a carga.`;
+    if (coins > this.factions[PLAYER_FACTION].coins) return 'Moedas insuficientes.';
+    if (GOODS.every((g) => !cargo[g]) && GOODS.every((g) => !shopping[g]))
+      return 'A caravana vai vazia: escolha o que vender ou comprar.';
+    for (const g of GOODS) if (cargo[g]) home.remove(g, cargo[g]!);
+    this.factions[PLAYER_FACTION].coins -= coins;
+    this.missions.set(m.id, {
+      diplomatId: m.id,
+      kind: 'trade',
+      target,
+      phase: 'going',
+      timer: 0,
+      faction: PLAYER_FACTION,
+      cargo: { ...cargo },
+      shopping: { ...shopping },
+      coins,
+    });
+    const msg = `A caravana de ${m.name} partiu para ${dest.name}.`;
+    this.toast(msg, '#e0b860');
+    return msg;
+  }
+
+  /** A caravan reached its destination market and trades. */
+  private tradeAt(m: Mission, merchant: NpcData): void {
+    const dest = this.factions[m.target];
+    const owner = m.faction ?? PLAYER_FACTION;
+    if (!dest.alive || this.atWar(owner, m.target)) return;
+    const r = executeTrade(m.cargo ?? {}, m.shopping ?? {}, m.coins ?? 0, this.marketOf(dest), merchant.skills.diplomacy);
+    m.coins = (m.coins ?? 0) + r.earned - r.spent;
+    m.bought = r.bought;
+    if (m.target === PLAYER_FACTION && (r.earned > 0 || r.spent > 0)) {
+      const parts = [];
+      if (r.spent > 0) parts.push(`comprou ${summarize(r.bought)} por ${r.spent} moedas`);
+      if (r.earned > 0) parts.push(`vendeu ${summarize(r.sold)} por ${r.earned} moedas`);
+      this.toast(`Mercadores de ${this.factions[owner].name} ${parts.join(' e ')} no seu mercado.`, '#e0b860');
+    }
+  }
+
+  /** A diplomat or merchant got home; caravans unload goods and coins. */
+  private finishMission(id: number): void {
+    const m = this.missions.get(id);
+    this.missions.delete(id);
+    if (!m || m.kind !== 'trade') return;
+    const home = this.factions[m.faction ?? PLAYER_FACTION];
+    if (!home.alive) return;
+    const market = this.marketOf(home);
+    for (const g of GOODS) {
+      market.add(g, (m.bought?.[g] ?? 0) + (m.cargo?.[g] ?? 0));
+    }
+    home.coins += m.coins ?? 0;
+    if (home.isPlayer) {
+      const got = summarize(m.bought ?? {});
+      const back = summarize(m.cargo ?? {});
+      this.toast(
+        `Caravana de volta de ${this.factions[m.target].name}: ${m.coins ?? 0} moedas${got ? `, trouxe ${got}` : ''}${back ? `, não vendeu ${back}` : ''}.`,
+        '#e0b860',
+      );
+    }
+  }
+
+  /** Puts the tools you carry (in good condition) into the market warehouse for trade. */
+  private stockTools(x: number, y: number): void {
+    const f = this.factions[PLAYER_FACTION];
+    let n = 0;
+    this.inventory.slots.forEach((s, i) => {
+      const tool = s ? ITEM_DEFS[s.item].tool : undefined;
+      if (!s || !tool || (s.durability ?? 0) < tool.durability * 0.75) return;
+      f.tools[s.item as ToolId] = (f.tools[s.item as ToolId] ?? 0) + 1;
+      this.inventory.slots[i] = null;
+      n++;
+    });
+    if (n > 0) this.popup(x, y - 12, `${n} ferramenta(s) no armazém do mercado`, '#e0b860');
+  }
+
+  /** Takes one tool from your market warehouse into your inventory. */
+  takeTool(t: ToolId): boolean {
+    const f = this.factions[PLAYER_FACTION];
+    if ((f.tools[t] ?? 0) <= 0 || this.inventory.space(t) <= 0) return false;
+    f.tools[t] = (f.tools[t] ?? 0) - 1;
+    this.inventory.add(t, 1);
+    return true;
+  }
+
+  /** Daily: rival smiths forge tools; rival merchants set out with caravans. */
+  private updateTrade(worldDt: number): void {
+    this.tradeTimer += worldDt;
+    if (this.tradeTimer < DAY_SECONDS / 2) return;
+    this.tradeTimer = 0;
+    for (const f of this.factions) {
+      if (f.isPlayer || !f.alive) continue;
+      // Smithing: turn spare iron, stone and wood into tools to sell.
+      const totalTools = TOOL_GOODS.reduce((n, t) => n + (f.tools[t] ?? 0), 0);
+      if (totalTools < 6) {
+        const options = RECIPES.filter((r) => f.stock.canAfford(r.cost));
+        const r = options[Math.floor(Math.random() * options.length)];
+        if (r && f.stock.items.wood > 15) {
+          f.stock.pay(r.cost);
+          f.tools[r.item] = (f.tools[r.item] ?? 0) + 1;
+        }
+      }
+      // Caravans to a market at peace.
+      const merchant = this.freeMerchants(f.id)[0];
+      if (!merchant || Math.random() < 0.4) continue;
+      const dests = this.factions.filter((o) => o.id !== f.id && o.alive && this.hasMarket(o.id) && !this.atWar(f.id, o.id));
+      const dest = dests[Math.floor(Math.random() * dests.length)];
+      if (!dest) continue;
+      const home = this.marketOf(f);
+      const plan = planAiCaravan(home);
+      if (GOODS.every((g) => !plan.cargo[g]) && GOODS.every((g) => !plan.shopping[g])) continue;
+      for (const g of GOODS) if (plan.cargo[g]) home.remove(g, plan.cargo[g]!);
+      f.coins -= plan.coins;
+      this.missions.set(merchant.id, {
+        diplomatId: merchant.id,
+        kind: 'trade',
+        target: dest.id,
+        phase: 'going',
+        timer: 0,
+        faction: f.id,
+        ...plan,
+      });
+      if (dest.isPlayer) this.toast(`Uma caravana de ${f.name} está a caminho do seu mercado.`, '#e0b860');
+    }
+  }
+
   /** Your soldiers (Quartel workers). */
   soldiers(faction = PLAYER_FACTION): NpcData[] {
     const barracks = this.buildings.list.filter((b) => b.faction === faction && b.type === 'barracks');
@@ -754,7 +960,7 @@ export class WorldScene extends Phaser.Scene {
     // Missions: talks take a few hours, then the outcome.
     for (const m of [...this.missions.values()]) {
       const d = this.population.npcs.find((n) => n.id === m.diplomatId);
-      if (!d || !this.factions[m.target].alive) {
+      if (!d || !this.factions[m.target].alive || !this.factions[m.faction ?? PLAYER_FACTION].alive) {
         this.missions.delete(m.diplomatId);
         continue;
       }
@@ -762,6 +968,10 @@ export class WorldScene extends Phaser.Scene {
       m.timer -= worldDt;
       if (m.timer > 0) continue;
       m.phase = 'returning';
+      if (m.kind === 'trade') {
+        this.tradeAt(m, d);
+        continue;
+      }
       const f = this.factions[m.target];
       const rel = this.diplomacy.get(PLAYER_FACTION, m.target);
       const rating = d.skills.diplomacy;
@@ -1038,6 +1248,7 @@ export class WorldScene extends Phaser.Scene {
     this.updateTowns(worldDt);
     this.updateFamilies(worldDt);
     this.updateDiplomacy(worldDt);
+    this.updateTrade(worldDt);
 
     this.villagerRegen += worldDt;
     const regen = this.villagerRegen >= 30;
@@ -1361,7 +1572,10 @@ export class WorldScene extends Phaser.Scene {
     }
 
     if (def.deposit) {
-      if (Phaser.Input.Keyboard.JustDown(this.keys.E)) this.deposit(x, y);
+      if (Phaser.Input.Keyboard.JustDown(this.keys.E)) {
+        this.deposit(x, y);
+        if (b.type === 'market') this.stockTools(x, y);
+      }
       const hasItems = this.inventory.slots.some((s) => s !== null);
       this.interaction = { x, y, text: hasItems ? `[E] Guardar no estoque` : def.name, progress: null };
       return;

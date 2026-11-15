@@ -38,7 +38,7 @@ export interface NpcWorld {
   raidTarget(npc: Npc, target: number): Building | null;
   attackBuilding(npc: Npc, b: Building, damage: number): void;
   /** Diplomatic mission of this diplomat, if any. */
-  mission(id: number): { phase: 'going' | 'talking' | 'returning'; target: number } | null;
+  mission(id: number): { phase: 'going' | 'talking' | 'returning'; target: number; kind: string } | null;
   missionArrived(id: number): void;
   missionDone(id: number): void;
   missionFailed(id: number): void;
@@ -80,6 +80,7 @@ export class Npc {
   private marker?: Phaser.GameObjects.Image;
   private carryIcon?: Phaser.GameObjects.Image;
   private hungerIcon?: Phaser.GameObjects.Image;
+  private cart?: Phaser.GameObjects.Image;
   private path: Tile[] = [];
   private idle = 1 + Math.random() * 2;
   private anchor: Tile;
@@ -185,7 +186,9 @@ export class Npc {
 
   /** Fades out and removes the NPC. */
   leave(onDone: () => void): void {
-    const extras = [this.marker, this.carryIcon, this.hungerIcon].filter((o): o is Phaser.GameObjects.Image => o !== undefined);
+    const extras = [this.marker, this.carryIcon, this.hungerIcon, this.cart].filter(
+      (o): o is Phaser.GameObjects.Image => o !== undefined,
+    );
     const targets = [this.sprite, this.shadow, ...extras];
     this.scene.tweens.add({
       targets,
@@ -416,19 +419,20 @@ export class Npc {
   /** Diplomat loop: wait at the embassy; on a mission walk to the other village, talk, come back. */
   private diplomat(dt: number, world: NpcWorld, embassy: Building): void {
     const m = world.mission(this.data.id);
+    this.showCart(m?.kind === 'trade' && m.phase !== 'talking');
     if (!m) {
       this.status = null;
       this.live(dt, world);
       return;
     }
     if (m.phase === 'talking') {
-      this.status = 'Negociando…';
+      this.status = m.kind === 'trade' ? 'Comerciando…' : 'Negociando…';
       this.path = [];
       this.stopWalking();
       return;
     }
     if (m.phase === 'going') {
-      this.status = 'Viajando em missão';
+      this.status = m.kind === 'trade' ? 'Levando a caravana' : 'Viajando em missão';
       const c = world.factionCenter(m.target);
       if (Math.hypot(c.x + 0.5 - this.gx, c.y + 0.5 - this.gy) < 3.5) {
         this.path = [];
@@ -454,6 +458,14 @@ export class Npc {
       return;
     }
     this.walk(dt);
+  }
+
+  private showCart(on: boolean): void {
+    if (on && !this.cart) this.cart = this.scene.add.image(0, 0, 'cart').setOrigin(0.5, 1);
+    if (!on && this.cart) {
+      this.cart.destroy();
+      this.cart = undefined;
+    }
   }
 
   /** Path to any walkable tile within `r` tiles of (x, y). */
@@ -740,5 +752,10 @@ export class Npc {
       this.hungerIcon = undefined;
     }
     this.hungerIcon?.setPosition(s.x + 6, s.y - 18).setDepth(s.y + 0.2);
+    // The handcart trails behind the merchant.
+    this.cart
+      ?.setPosition(s.x + (this.sprite.flipX ? 9 : -9), s.y + 1)
+      .setFlipX(this.sprite.flipX)
+      .setDepth(s.y - 0.2);
   }
 }

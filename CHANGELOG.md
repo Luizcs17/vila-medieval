@@ -2,6 +2,15 @@
 
 Each milestone from `docs/GDD.md` is a minor version.
 
+## 1.8.0: Milestone 18, coins, markets and caravans
+
+- Currency: every village has a treasury in coins (moedas), shown in the HUD. You start with 60; rivals with 120.
+- Mercado (market, the trade centre): employs merchants (rated by Diplomacia, which also makes them haggle ±4% per star), works as a deposit point, and has a warehouse for tools: E there stores the good-condition tools you carry; take them back in V → Comércio.
+- Prices follow supply at each market (0.6×–1.8× base; markets pay 90% and charge 110%), and every unit sold lowers the next price.
+- Caravans: in V → Comércio choose a destination market, what to sell and what to buy, and send a merchant. They walk the roads with a handcart, trade at the destination, and come back with coins and goods (unsold goods return).
+- Rival villages have markets and merchants, forge tools from their iron, stone and wood, and send caravans with their surplus to other markets at peace, yours included. Standing orders ("Mercadores visitantes") say what visiting merchants may buy from you and what you'll buy from them.
+- Rival villages start with 10 villagers and three houses. Save format v6.
+
 ## 1.7.0: Milestone 17, roads
 
 - Cobbled roads (Estrada, 1 stone per tile, placed instantly; B menu keeps placing so you can lay a line). They can leave your territory to reach other villages, but not cross into theirs.

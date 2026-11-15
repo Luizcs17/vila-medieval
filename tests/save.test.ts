@@ -34,6 +34,7 @@ function sampleSave(): SaveData {
     families: { affinity: {}, chattedOn: {} },
     diplomacy: { rel: {}, pending: [] },
     missions: [],
+    tradePolicy: { sellAbove: {}, buyUpTo: {} },
     npcPositions: [],
     animals: [],
   };

@@ -26,7 +26,8 @@ export type BuildingType =
   | 'tower'
   | 'barracks'
   | 'embassy'
-  | 'road';
+  | 'road'
+  | 'market';
 
 export interface BuildingDef {
   name: string;
@@ -183,6 +184,18 @@ export const BUILDING_DEFS: Record<BuildingType, BuildingDef> = {
     buildable: true,
     maxHp: 150,
     job: { skill: 'combat', slots: 4, nodes: [], radius: 10, title: { f: 'Soldada', m: 'Soldado' } },
+  },
+  market: {
+    claim: 5,
+    name: 'Mercado',
+    size: 2,
+    cost: { wood: 25, stone: 15 },
+    buildSeconds: 20,
+    description: 'Centro comercial: mercadores levam caravanas a outros mercados (V → Comércio).',
+    buildable: true,
+    deposit: true,
+    maxHp: 120,
+    job: { skill: 'diplomacy', slots: 2, nodes: [], radius: 0, title: { f: 'Mercadora', m: 'Mercador' } },
   },
   road: {
     claim: 0,

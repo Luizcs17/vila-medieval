@@ -663,6 +663,34 @@ export function createPlaceholderTextures(scene: Phaser.Scene): void {
     door: true,
     window: true,
   });
+  isoBuilding(scene, 'bld_market', 2, {
+    timber: true,
+    roof: 'plank',
+    wallL: '#a89878',
+    wallR: '#867859',
+    roofL: '#7a2a20',
+    roofR: '#a8862e',
+    wallH: 14,
+    roofH: 16,
+    door: true,
+    window: true,
+  });
+  // Merchant's handcart with a covered load.
+  fromRows(
+    scene,
+    'cart',
+    [
+      '...kkkkkk...',
+      '..kccccccK..',
+      '.kccCccCcck.',
+      '.kbbbbbbbbk.',
+      'kbBbbbbbBbbk',
+      '.kkkwkkwkkk.',
+      '...kwk.kwk..',
+      '....k...k...',
+    ],
+    { k: '#140d08', c: '#b8ac8e', C: '#968a6c', K: '#140d08', b: '#5a3d22', B: '#3a2614', w: '#6b4a2a' },
+  );
   palisade(scene, 'bld_palisade', false);
   palisade(scene, 'bld_gate', true);
   constructionSite(scene, 'site_1', 1);
