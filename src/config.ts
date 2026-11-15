@@ -83,6 +83,13 @@ export const REPAIR_RATE = 15;
 export const RAID_INTERVAL = 300;
 /** HP restored by eating one meat (F). */
 export const MEAT_HEAL = 2;
+/** The player's hunger: satiety 0–100 drops this much per game day; one meat gives PLAYER_MEAL back. */
+export const PLAYER_HUNGER_PER_DAY = 70;
+export const PLAYER_MEAL = 35;
+/** With satiety at zero the player loses 1 HP this often (game seconds) and doesn't regenerate. */
+export const PLAYER_STARVE_EVERY = 12;
+/** Claiming land: the hall must stand this close to your house. */
+export const CLAIM_NEAR_HOME = 12;
 export const ANIMAL_SPAWN_INTERVAL = 15;
 /** Multiplies every species' population (the map is 4× the original area). */
 export const WILDLIFE_SCALE = 2.5;

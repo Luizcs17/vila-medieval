@@ -3,7 +3,7 @@ import { BEDS_PER_HOUSE } from '../config';
 import { BUILDING_DEFS, type Building } from '../game/buildings';
 import { isAdult } from '../game/families';
 import { ARMORS, recipeOf, WEAPONS, workplaceTools } from '../game/gear';
-import { ITEM_DEFS, RECIPES, type ToolId } from '../game/items';
+import { ALL_ITEMS, ITEM_DEFS, RECIPES, type ToolId } from '../game/items';
 import { jobTitle, type NpcData, productivity, SKILL_LABEL, stars } from '../game/npcs';
 import { buildingStorage, type Storage, villageStorage } from '../game/storage';
 import { ensurePersonTextures } from '../gfx/people';
@@ -280,6 +280,44 @@ export class BuildingPanelUI {
           },
         });
       }
+    } else if (b.type === 'home') {
+      items.push(
+        s.add.text(
+          PAD,
+          y,
+          this.world.settled
+            ? 'Sua casa. Guarde itens no inventário; ao ser derrubado, você acorda aqui.'
+            : 'Sua casa: guarde aqui o que juntar (inventário). Reivindicar terras paga com isso + a mochila.',
+          {
+            ...TEXT,
+            fontSize: '12px',
+            color: '#cdb98e',
+            wordWrap: { width: W - 2 * PAD },
+          },
+        ),
+      );
+      y += 36;
+      if (b.built) {
+        const night = this.world.clock.isNight;
+        const sleep = s.add
+          .rectangle(PAD, y, 220, 28, night ? 0x2e3a4a : 0x2a2420, 1)
+          .setOrigin(0)
+          .setStrokeStyle(1, 0x8a6a3a);
+        sleep.setInteractive({ useHandCursor: night }).on('pointerdown', () => {
+          if (this.world.sleep()) this.close();
+        });
+        items.push(
+          sleep,
+          s.add
+            .text(PAD + 110, y + 14, night ? 'Dormir até o amanhecer' : 'Só dá para dormir à noite', {
+              ...TEXT,
+              fontSize: '12px',
+              color: night ? '#e8d8b0' : '#8a7e68',
+            })
+            .setOrigin(0.5),
+        );
+        y += 40;
+      }
     } else {
       const residents = pop.residents(b.id);
       items.push(
@@ -343,7 +381,8 @@ export class BuildingPanelUI {
       this.close();
       this.world.openStorage(`${def.name} · inventário`, this.world.storageOf(target));
     });
-    const stored = Object.values(b.storage ?? {}).reduce((a, n) => a + (n ?? 0), 0);
+    const store = this.world.storageOf(b);
+    const stored = ALL_ITEMS.reduce((a, i) => a + store.have(i), 0);
     items.push(inv, s.add.text(PAD + 85, y + 14, `Inventário (${stored})`, { ...TEXT, fontSize: '12px' }).setOrigin(0.5));
     const close = s.add
       .rectangle(W - PAD - 150, y, 150, 28, 0x3a3228, 1)

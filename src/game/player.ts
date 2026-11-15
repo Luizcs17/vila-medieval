@@ -1,4 +1,17 @@
-import { MAX_CARRY_WEIGHT, PLAYER_MAX_HP, PLAYER_REGEN_DELAY, PLAYER_REGEN_EVERY } from '../config';
+import {
+  DAY_SECONDS,
+  MAX_CARRY_WEIGHT,
+  PLAYER_HUNGER_PER_DAY,
+  PLAYER_MAX_HP,
+  PLAYER_MEAL,
+  PLAYER_REGEN_DELAY,
+  PLAYER_REGEN_EVERY,
+  PLAYER_STARVE_EVERY,
+} from '../config';
+
+/** Satiety at or below this shows as hungry (and eating with F is always allowed). */
+export const PLAYER_HUNGRY = 30;
+export type PlayerSnapshot = { hp: number; maxHp: number; level: number; xp: number; food?: number };
 
 /** XP needed to go from `level` to `level + 1`. */
 export const xpToNext = (level: number) => 20 + 15 * (level - 1);
@@ -19,7 +32,10 @@ export class PlayerStats {
   xp = 0;
   /** Game seconds since the last hit (regen starts after PLAYER_REGEN_DELAY). */
   sinceHit = Infinity;
+  /** Satiety 0–100. At zero there's no regeneration and HP drains. */
+  food = 100;
   private regen = 0;
+  private starve = 0;
 
   /** Returns true if this hit knocked the player out. */
   hurt(damage: number): boolean {
@@ -54,27 +70,67 @@ export class PlayerStats {
     return gained;
   }
 
-  snapshot(): { hp: number; maxHp: number; level: number; xp: number } {
-    return { hp: this.hp, maxHp: this.maxHp, level: this.level, xp: this.xp };
+  snapshot(): PlayerSnapshot {
+    return { hp: this.hp, maxHp: this.maxHp, level: this.level, xp: this.xp, food: this.food };
   }
 
-  restore(s: { hp: number; maxHp: number; level: number; xp: number }): void {
-    Object.assign(this, s);
+  restore(s: PlayerSnapshot): void {
+    this.hp = s.hp;
+    this.maxHp = s.maxHp;
+    this.level = s.level;
+    this.xp = s.xp;
+    this.food = s.food ?? 100;
+  }
+
+  get hungry(): boolean {
+    return this.food <= PLAYER_HUNGRY;
+  }
+
+  get starving(): boolean {
+    return this.food <= 0;
+  }
+
+  /** Worth eating now: hungry-ish, or hurt. */
+  wantsFood(): boolean {
+    return this.food <= 100 - PLAYER_MEAL || this.hp < this.maxHp;
+  }
+
+  /** Eats one meal: satiety back and `heal` HP. */
+  eat(heal: number): void {
+    this.food = Math.min(100, this.food + PLAYER_MEAL);
+    this.heal(heal);
   }
 
   heal(amount: number): void {
     this.hp = Math.min(this.maxHp, this.hp + amount);
   }
 
-  /** Advances regeneration by `dt` game seconds. */
-  update(dt: number): void {
+  /**
+   * Advances hunger and regeneration by `dt` game seconds. Returns HP lost to starvation this step
+   * (the caller knocks the player out if HP reaches zero).
+   */
+  update(dt: number): number {
     this.sinceHit += dt;
-    if (this.sinceHit < PLAYER_REGEN_DELAY || this.hp >= this.maxHp) return;
+    this.food = Math.max(0, this.food - (PLAYER_HUNGER_PER_DAY / DAY_SECONDS) * dt);
+    if (this.starving) {
+      this.regen = 0;
+      this.starve += dt;
+      let lost = 0;
+      while (this.starve >= PLAYER_STARVE_EVERY && this.hp > 0) {
+        this.starve -= PLAYER_STARVE_EVERY;
+        this.hp -= 1;
+        lost++;
+      }
+      return lost;
+    }
+    this.starve = 0;
+    if (this.sinceHit < PLAYER_REGEN_DELAY || this.hp >= this.maxHp) return 0;
     this.regen += dt;
     while (this.regen >= PLAYER_REGEN_EVERY && this.hp < this.maxHp) {
       this.regen -= PLAYER_REGEN_EVERY;
       this.hp += 1;
     }
+    return 0;
   }
 }
 
