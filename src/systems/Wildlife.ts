@@ -129,6 +129,11 @@ export class Wildlife {
     return this.nearest(gx, gy, r, (a) => a.alive && (a.def.temper === 'aggressive' || a.hunting));
   }
 
+  /** Nearest live animal of any kind (aggressive fighters hunt everything). */
+  nearestAny(gx: number, gy: number, r: number): Animal | null {
+    return this.nearest(gx, gy, r, (a) => a.alive);
+  }
+
   /** Damage from a soldier, tower or other source; shows a popup. Returns true if it died. */
   damageAnimal(id: number, damage: number, from: Human): boolean {
     const a = this.animals.get(id);

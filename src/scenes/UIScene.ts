@@ -122,7 +122,7 @@ export class UIScene extends Phaser.Scene {
     this.add.text(
       12,
       52,
-      'WASD andar · mouse mira · clique atacar · E usar · F comer · B construir · C criar · I inventário · V vila · M mapa · T acelerar',
+      'WASD andar · clique atacar · E usar · F comer · G chamar o grupo · B construir · C criar · I inventário · V vila · M mapa · T acelerar',
       { ...TEXT, fontSize: '12px', backgroundColor: '#00000088', padding: { x: 8, y: 5 } },
     );
     this.debug = this.add.text(12, 80, '', { ...TEXT, fontSize: '11px', color: '#cdb98e' });
@@ -271,12 +271,14 @@ export class UIScene extends Phaser.Scene {
           this.buildMenu.isOpen ||
           this.crafting.isOpen ||
           this.world.placement !== null ||
+          this.world.commandPick !== null ||
           this.world.demolishing;
         if (!anyOpen) this.pause.open();
         if (this.inventory.isOpen) this.toggleInventory();
         this.crafting.setOpen(false);
         this.closeBuildMode();
-      } else if (key === 'n') this.minimap.toggle();
+      } else if (key === 'g') this.world.rallyNearby();
+      else if (key === 'n') this.minimap.toggle();
       else if (key >= '1' && key <= '9') this.world.selectedHotbar = Number(key) - 1;
     });
 
@@ -286,6 +288,11 @@ export class UIScene extends Phaser.Scene {
       if (this.world.demolishing) {
         if (p.rightButtonDown()) this.world.cancelDemolish();
         else this.world.tryDemolish();
+        return;
+      }
+      if (this.world.commandPick) {
+        if (p.rightButtonDown()) this.world.cancelCommandPick();
+        else this.world.tryCommandPick();
         return;
       }
       if (!this.world.placement) {
@@ -422,6 +429,15 @@ export class UIScene extends Phaser.Scene {
       this.placeHint
         .setText(`${dh.text}   ·   Direito/Esc: sair`)
         .setColor(dh.ok ? '#ffb090' : '#a8977a')
+        .setPosition(Math.round(ptr0.x + 16), Math.round(ptr0.y + 16))
+        .setVisible(true);
+      return;
+    }
+    const ch = this.world.commandHint;
+    if (this.world.commandPick && ch) {
+      this.placeHint
+        .setText(ch.text)
+        .setColor(ch.ok ? '#a8d8ff' : '#a8977a')
         .setPosition(Math.round(ptr0.x + 16), Math.round(ptr0.y + 16))
         .setVisible(true);
       return;

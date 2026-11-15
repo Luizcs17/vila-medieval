@@ -1,16 +1,5 @@
 import Phaser from 'phaser';
-import {
-  COMPANION_LEASH,
-  COMPANION_RANGE,
-  GUARD_LEASH,
-  GUARD_RANGE,
-  HUNTER_DAMAGE,
-  HUNTER_RANGE,
-  NPC_SPEED,
-  ROAD_SPEED,
-  WORKER_LOAD,
-  WORKER_TIME_FACTOR,
-} from '../config';
+import { HUNTER_DAMAGE, HUNTER_RANGE, NPC_SPEED, ROAD_SPEED, WORKER_LOAD, WORKER_TIME_FACTOR } from '../config';
 import { BUILDING_DEFS, type Building, type Buildings } from '../game/buildings';
 import { NODE_DEFS } from '../game/gathering';
 import { toolSpeed } from '../game/gear';
@@ -18,6 +7,7 @@ import type { Resource } from '../game/inventory';
 import type { ToolId } from '../game/items';
 import { isStarving } from '../game/needs';
 import { type NpcData, productivity, soldierDamage, TIER_COLOR } from '../game/npcs';
+import { engagement, stanceOf } from '../game/orders';
 import { ensurePersonTextures } from '../gfx/people';
 import { gridToScreen } from '../iso';
 import { inBounds, isRoad, isWalkable, tileIndex, type WorldMap } from '../world/map';
@@ -48,8 +38,8 @@ export interface NpcWorld {
   useTool(npc: Npc, tool: ToolId): void;
   /** Is this smithy forging right now (queue and materials)? */
   smithyBusy(b: Building): boolean;
-  /** Nearest thing hostile to `faction` within `r` tiles (aggressive animals, enemies at war). */
-  findHostile(faction: number, gx: number, gy: number, r: number): Target | null;
+  /** Nearest thing hostile to `faction` within `r` tiles (aggressive animals, enemies at war; any animal with `anyAnimal`). */
+  findHostile(faction: number, gx: number, gy: number, r: number, anyAnimal?: boolean): Target | null;
   /** A soldier's blow lands on `target`. */
   strike(from: Npc, target: Target, damage: number): void;
   atWar(a: number, b: number): boolean;
@@ -413,11 +403,16 @@ export class Npc {
       this.raid(dt, world);
       return;
     }
+    if (this.data.command) {
+      this.commanded(dt, world, true);
+      return;
+    }
     const f = footprintOf(barracks);
     const cx = f.x + f.s / 2;
     const cy = f.y + f.s / 2;
-    const target = world.findHostile(this.data.faction, this.gx, this.gy, GUARD_RANGE);
-    const inLeash = target && Math.hypot(target.gx - cx, target.gy - cy) < GUARD_LEASH;
+    const e = engagement(stanceOf(this.data), true);
+    const target = world.findHostile(this.data.faction, this.gx, this.gy, e.range, e.anyAnimal);
+    const inLeash = target && Math.hypot(target.gx - cx, target.gy - cy) < e.leash;
     if (target && inLeash) {
       this.fight(dt, world, target);
       return;
@@ -438,17 +433,53 @@ export class Npc {
     }
   }
 
-  /** Companion: stay close to the player, and fight hostiles that come near (not too far from them). */
+  /** Companion: follows the player unless told otherwise. */
   private companion(dt: number, world: NpcWorld): void {
     this.attackCd -= dt;
     this.holding = this.data.weapon ?? null;
-    const p = world.playerAt();
-    const target = world.findHostile(this.data.faction, this.gx, this.gy, COMPANION_RANGE);
-    if (target && Math.hypot(target.gx - p.x, target.gy - p.y) < COMPANION_LEASH) {
+    this.commanded(dt, world, false);
+  }
+
+  /**
+   * Under the player's orders (companions always; soldiers once ordered): stay with the anchor
+   * (the player, or a held spot) and fight what the stance allows around it.
+   */
+  private commanded(dt: number, world: NpcWorld, soldier: boolean): void {
+    const c = this.data.command ?? { kind: 'follow' as const };
+    const anchor = c.kind === 'follow' ? world.playerAt() : { x: c.x + 0.5, y: c.y + 0.5 };
+    const e = engagement(stanceOf(this.data), soldier);
+    const target = world.findHostile(this.data.faction, this.gx, this.gy, e.range, e.anyAnimal);
+    if (target && Math.hypot(target.gx - anchor.x, target.gy - anchor.y) < e.leash) {
       this.fight(dt, world, target);
       return;
     }
-    this.follow(dt, p.x, p.y);
+    if (c.kind === 'follow') this.follow(dt, anchor.x, anchor.y);
+    else this.hold(dt, c.x, c.y);
+  }
+
+  /** Walks to a tile and stands there. */
+  private hold(dt: number, x: number, y: number): void {
+    const d = Math.hypot(x + 0.5 - this.gx, y + 0.5 - this.gy);
+    if (d <= 1.5) {
+      // On the spot or on a tile touching it (diagonals included).
+      this.status = 'Guardando a posição';
+      this.path = [];
+      this.stopWalking();
+      return;
+    }
+    this.repath -= dt;
+    if (this.path.length === 0) {
+      if (this.repath > 0 || !this.goNear(x, y, 1, 8000)) {
+        if (this.repath <= 0) {
+          this.repath = 2; // unreachable: don't search every frame
+          this.status = 'Não consegue chegar ao ponto';
+        }
+        this.stopWalking();
+        return;
+      }
+    }
+    this.status = 'Indo até o ponto';
+    this.walk(dt * (d > 5 ? 1.6 : 1.2));
   }
 
   /** Walks after a point (the player), keeping a step or two away; catches up faster from afar. */

@@ -5,6 +5,7 @@ import { RESOURCE_LABEL, RESOURCES } from '../game/inventory';
 import { ITEM_DEFS } from '../game/items';
 import { isStarving } from '../game/needs';
 import { jobTitle, type NpcData, roleLabel, SKILL_LABEL, SKILLS, stars, TIER_COLOR, TRAITS, tierLabel } from '../game/npcs';
+import { commandLabel, STANCE_HELP, STANCE_LABEL, STANCES, stanceOf } from '../game/orders';
 import { ensurePersonTextures } from '../gfx/people';
 import type { WorldScene } from '../scenes/WorldScene';
 
@@ -123,7 +124,7 @@ export class RecruitDialogUI {
       );
       if (col === 1) y += 18;
     });
-    y += 8;
+    y += (SKILLS.length % 2 === 1 ? 18 : 0) + 8; // an odd last skill still takes its row
 
     items.push(s.add.text(PAD, y, 'Traços', { ...TEXT, fontSize: '13px', color: '#cdb98e' }));
     y += 20;
@@ -259,6 +260,8 @@ export class RecruitDialogUI {
       y += 44;
     }
 
+    if (this.world.canCommand(npc)) y = this.orders(items, y, npc);
+
     // Buttons.
     const btn = (x: number, label: string, onClick: () => void) => {
       const bg = s.add.rectangle(x, y, 190, 30, 0x3a3228, 1).setOrigin(0).setStrokeStyle(1, 0x8a6a3a);
@@ -293,6 +296,57 @@ export class RecruitDialogUI {
     this.container = c;
     this.layout(s.scale.width, s.scale.height);
     this.update();
+  }
+
+  /** Orders and stance for your companions and soldiers. Returns the y below them. */
+  private orders(items: Phaser.GameObjects.GameObject[], y: number, npc: NpcData): number {
+    const s = this.scene;
+    const companion = npc.role === 'companion';
+    items.push(
+      s.add.text(PAD, y, `Ordens · ${commandLabel(npc.command, companion)}`, { ...TEXT, fontSize: '13px', color: '#cdb98e' }),
+    );
+    y += 22;
+    const small = (x: number, w: number, label: string, on: boolean, onClick: () => void) => {
+      const bg = s.add
+        .rectangle(x, y, w, 26, on ? 0x4a3a1e : 0x2e3a4a, 1)
+        .setOrigin(0)
+        .setStrokeStyle(1, on ? 0xe0b860 : 0x8a6a3a);
+      bg.setInteractive({ useHandCursor: true }).on('pointerdown', onClick);
+      items.push(bg, s.add.text(x + w / 2, y + 13, label, { ...TEXT, fontSize: '12px' }).setOrigin(0.5));
+    };
+    const c = npc.command;
+    const w = (W - 2 * PAD - 3 * 6) / 4;
+    const p = this.world.player;
+    small(PAD, w, 'Siga-me', c?.kind === 'follow', () => {
+      this.world.setCommand(npc, { kind: 'follow' });
+      this.open(npc);
+    });
+    small(PAD + (w + 6), w, 'Fique aqui', false, () => {
+      const n = this.world.npcList().find((x) => x.data === npc);
+      const t = n?.tile ?? p.tile;
+      this.world.setCommand(npc, { kind: 'hold', x: t.x, y: t.y });
+      this.open(npc);
+    });
+    small(PAD + 2 * (w + 6), w, 'Vá até…', false, () => {
+      this.close();
+      this.world.startCommandPick(npc);
+    });
+    small(PAD + 3 * (w + 6), w, 'Liberar', !c, () => {
+      this.world.setCommand(npc, null);
+      this.open(npc);
+    });
+    y += 32;
+    const stance = stanceOf(npc);
+    const sw = (W - 2 * PAD - 2 * 6) / 3;
+    STANCES.forEach((st, k) => {
+      small(PAD + k * (sw + 6), sw, STANCE_LABEL[st], st === stance, () => {
+        this.world.setStance(npc, st);
+        this.open(npc);
+      });
+    });
+    y += 30;
+    items.push(s.add.text(PAD, y, STANCE_HELP[stance], { ...TEXT, fontSize: '11px', color: '#a8977a' }));
+    return y + 22;
   }
 
   /** A button showing a companion's weapon or armour; clicking cycles through what you carry. */

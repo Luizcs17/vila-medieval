@@ -92,6 +92,7 @@ import {
   describeCost as summarizeCost,
   WandererSpawner,
 } from '../game/npcs';
+import { type Command, type Stance, takesOrders } from '../game/orders';
 import { inAimCone, PER_LEVEL, PlayerStats, XP } from '../game/player';
 import { clearSave, readSave, SAVE_VERSION, type SaveData, writeSave } from '../game/save';
 import { SlotInventory } from '../game/slots';
@@ -117,7 +118,7 @@ import {
 import { createPlaceholderTextures } from '../gfx/textures';
 import { gridToScreen, screenToGrid } from '../iso';
 import { Wildlife } from '../systems/Wildlife';
-import { Ground, generateMap, Obj, tileCenter, tileIndex, type WorldMap } from '../world/map';
+import { Ground, generateMap, inBounds, isWalkable, Obj, tileCenter, tileIndex, type WorldMap } from '../world/map';
 
 const GROUND_KEY: Record<Ground, string> = {
   [Ground.Grass]: 'grass',
@@ -377,7 +378,7 @@ export class WorldScene extends Phaser.Scene {
           this.toast(`${ITEM_DEFS[tool].label} de ${BUILDING_DEFS[b.type].name} se gastou.`, '#ffb070');
       },
       smithyBusy: (b) => smithyCanWork(b, villageStorage(this.factions[b.faction])),
-      findHostile: (f, gx, gy, r) => this.findHostile(f, gx, gy, r),
+      findHostile: (f, gx, gy, r, any) => this.findHostile(f, gx, gy, r, any),
       atWar: (a, b) => this.atWar(a, b),
       raidTarget: (npc, target) => this.raidTarget(npc, target),
       attackBuilding: (npc, b, dmg) => this.damageBuilding(b, dmg, npc.data.faction),
@@ -630,6 +631,7 @@ export class WorldScene extends Phaser.Scene {
     if (!frozen && Phaser.Input.Keyboard.JustDown(k.F)) this.eat();
     this.selection.clear();
     if (this.demolishing) this.updateDemolish();
+    else if (this.commandPick) this.updateCommandPick();
     else if (this.placement) this.updatePlacement();
     else this.updateInteraction(dt, x !== 0 || y !== 0);
     this.updateDefenses(worldDt);
@@ -1117,6 +1119,7 @@ export class WorldScene extends Phaser.Scene {
     for (const s of this.soldiers()) {
       if (s.hp > 3 && isAdult(s, this.clock.seconds)) {
         s.order = { kind: 'raid', target };
+        s.command = null;
         n++;
       }
     }
@@ -1306,10 +1309,10 @@ export class WorldScene extends Phaser.Scene {
   }
 
   /** Nearest thing hostile to `faction` within `r` of (gx, gy): dangerous animals, or people of a faction at war with it. */
-  findHostile(faction: number, gx: number, gy: number, r: number): Target | null {
+  findHostile(faction: number, gx: number, gy: number, r: number, anyAnimal = false): Target | null {
     let best: Target | null = null;
     let bestD = r;
-    const a = this.wildlife.nearestHostile(gx, gy, r);
+    const a = anyAnimal ? this.wildlife.nearestAny(gx, gy, r) : this.wildlife.nearestHostile(gx, gy, r);
     if (a) {
       best = { kind: 'animal', id: a.data.id, gx: a.data.gx, gy: a.data.gy };
       bestD = Math.hypot(a.data.gx - gx, a.data.gy - gy);
@@ -1843,6 +1846,94 @@ export class WorldScene extends Phaser.Scene {
     return best;
   }
 
+  // ---------- orders to companions and soldiers ----------
+
+  /** Is this one of your soldiers? */
+  isSoldier(n: NpcData): boolean {
+    return n.jobId !== null && this.buildings.list.find((b) => b.id === n.jobId)?.type === 'barracks';
+  }
+
+  /** Can you give this person orders (your companions and soldiers)? */
+  canCommand(n: NpcData): boolean {
+    return takesOrders(n, this.isMine(n.faction), this.isSoldier(n));
+  }
+
+  /** Gives an order (null = back to their default: companions follow, soldiers guard the barracks). */
+  setCommand(n: NpcData, c: Command | null): void {
+    if (!this.canCommand(n)) return;
+    n.command = c;
+    if (c) n.order = null; // a direct order calls them back from a raid
+  }
+
+  setStance(n: NpcData, s: Stance): void {
+    if (this.canCommand(n)) n.stance = s;
+  }
+
+  /** "Vá até…": the next click on the map sends this person there. */
+  commandPick: NpcData | null = null;
+  commandHint: { text: string; ok: boolean } | null = null;
+  private commandTile: { x: number; y: number } | null = null;
+
+  startCommandPick(n: NpcData): void {
+    this.cancelPlacing();
+    this.commandPick = n;
+    this.interaction = null;
+  }
+
+  cancelCommandPick(): void {
+    this.commandPick = null;
+    this.commandHint = null;
+    this.commandTile = null;
+  }
+
+  /** Highlights the tile under the cursor while picking a destination. */
+  private updateCommandPick(): void {
+    const n = this.commandPick!;
+    if (!this.population.npcs.includes(n)) {
+      this.cancelCommandPick();
+      return;
+    }
+    const ptr = this.input.activePointer;
+    const world = this.cameras.main.getWorldPoint(ptr.x, ptr.y);
+    const g = screenToGrid(world.x, world.y);
+    const tx = Math.floor(g.x);
+    const ty = Math.floor(g.y);
+    const ok = inBounds(this.map, tx, ty) && isWalkable(this.map, tx, ty);
+    this.commandTile = ok ? { x: tx, y: ty } : null;
+    this.commandHint = {
+      text: ok ? `Clique: ${n.name} vai até aqui e guarda a posição · botão direito cancela` : 'Não dá para ficar ali',
+      ok,
+    };
+    this.drawFootprint(tx, ty, 1, ok ? 0x8ac8ff : 0xff6060);
+  }
+
+  /** The click that confirms the destination. */
+  tryCommandPick(): void {
+    const n = this.commandPick;
+    const t = this.commandTile;
+    if (!n || !t) return;
+    this.setCommand(n, { kind: 'hold', x: t.x, y: t.y });
+    this.toast(`${n.name} está indo até o ponto.`, '#a8c8ff');
+    this.cancelCommandPick();
+  }
+
+  /** G: everyone of yours nearby (companions and soldiers) follows you; again: they go back to their defaults. */
+  rallyNearby(): void {
+    const near = [...this.npcs.values()]
+      .filter((npc) => this.canCommand(npc.data) && Math.hypot(npc.gx - this.player.gx, npc.gy - this.player.gy) < 15)
+      .map((npc) => npc.data);
+    if (near.length === 0) {
+      this.toast('Ninguém por perto para chamar (companheiros e soldados).', '#cdb98e');
+      return;
+    }
+    const allFollow = near.every((n) => n.command?.kind === 'follow' || (n.role === 'companion' && !n.command));
+    for (const n of near) this.setCommand(n, allFollow ? null : { kind: 'follow' });
+    this.toast(
+      allFollow ? `${near.length} dispensado(s): voltam ao padrão.` : `${near.length} seguindo você (G de novo dispensa).`,
+      '#a8c8ff',
+    );
+  }
+
   /** Opens the trade window with another village (from one of its people). */
   openPeddle(faction: number): void {
     this.events.emit('peddle', faction);
@@ -1949,6 +2040,7 @@ export class WorldScene extends Phaser.Scene {
 
   cancelPlacing(): void {
     if (this.demolishing) this.cancelDemolish();
+    if (this.commandPick) this.cancelCommandPick();
     this.placement = null;
     this.ghost.setVisible(false);
   }
