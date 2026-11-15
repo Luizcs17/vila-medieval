@@ -6,12 +6,13 @@ import { foodDays, isStarving } from '../game/needs';
 import { jobTitle, type NpcData, SKILL_LABEL, SKILLS, stars } from '../game/npcs';
 import type { WorldScene } from '../scenes/WorldScene';
 
-export type Tab = 'summary' | 'people' | 'buildings' | 'diplomacy' | 'dynasty';
+export type Tab = 'summary' | 'people' | 'buildings' | 'trade' | 'diplomacy' | 'dynasty';
 
 const TABS: [Tab, string][] = [
   ['summary', 'Resumo'],
   ['people', 'Aldeões'],
   ['buildings', 'Prédios'],
+  ['trade', 'Comércio'],
   ['diplomacy', 'Diplomacia'],
   ['dynasty', 'Dinastia'],
 ];
@@ -94,7 +95,7 @@ export class ManagementUI {
     const s = this.scene;
     const { width, height } = s.scale;
     const W = Math.min(900, width - 40);
-    const H = Math.min(560, height - 40);
+    const H = Math.min(600, height - 30);
     const x0 = Math.round((width - W) / 2);
     const y0 = Math.round((height - H) / 2);
     this.add(s.add.rectangle(0, 0, width, height, 0x000000, 0.5).setOrigin(0).setInteractive());

@@ -85,10 +85,12 @@ export function foundTown(buildings: Buildings, faction: Faction, rng: Rng): Bui
   const plan: [BuildingType, number, number][] = [
     ['house', 3, 6],
     ['house', 3, 7],
+    ['house', 4, 8],
     ['lumberjack', 4, 10],
     ['quarry', 4, 12],
     ['hunter', 3, 8],
     ['barracks', 4, 10],
+    ['market', 3, 10],
   ];
   for (const [type, minR, maxR] of plan) {
     const spot = findSpot(buildings, type, site, minR, maxR, rng);

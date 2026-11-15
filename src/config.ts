@@ -6,6 +6,9 @@ export const TILE_H = 16;
 export const MAP_W = 128;
 export const MAP_H = 128;
 
+/** Coins each village starts with (rivals get double). */
+export const STARTING_COINS = 60;
+
 /** Rival villages: names and colours, same order as TOWN_SITES. */
 export const RIVAL_TOWNS = [
   { name: 'Pedra Alta', color: 0xd05050 },

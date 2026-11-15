@@ -16,6 +16,7 @@ import { ManagementUI } from '../ui/ManagementUI';
 import { Minimap } from '../ui/Minimap';
 import { PauseMenuUI } from '../ui/PauseMenuUI';
 import { RecruitDialogUI } from '../ui/RecruitDialogUI';
+import { renderTrade } from '../ui/TradeTab';
 import type { PopupEvent, ToastEvent, WorldScene } from './WorldScene';
 
 const TOAST_SECONDS = 5;
@@ -167,6 +168,7 @@ export class UIScene extends Phaser.Scene {
       (b) => this.world.openBuildingPanel(b),
     );
     this.management.renderers.dynasty = renderDynasty;
+    this.management.renderers.trade = (ui, x, y, w) => renderTrade(ui, x, y, w);
     this.management.renderers.diplomacy = (ui, x, y, w) => renderDiplomacy(ui, x, y, w);
     kb.on('keydown', (e: KeyboardEvent) => {
       const key = e.key.toLowerCase();
@@ -272,7 +274,7 @@ export class UIScene extends Phaser.Scene {
       this.counts.meat.setText(`Carne ${w.stockpile.items.meat} · ${days.toFixed(1).replace('.', ',')}d`);
       this.counts.meat.setColor(days < 1 ? '#ff8a7a' : days < 2 ? '#ffc060' : '#e8d8b0');
     }
-    this.popText.setText(`População ${w.population.villagers.length}/${w.population.beds}`);
+    this.popText.setText(`População ${w.population.villagers.length}/${w.population.beds}   ⛁ ${w.factions[0].coins} moedas`);
 
     const light = ambientAt(w.clock.hour);
     this.night.setFillStyle(light.color, light.alpha);

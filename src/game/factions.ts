@@ -1,5 +1,7 @@
-import { RIVAL_TOWNS } from '../config';
+import { RIVAL_TOWNS, STARTING_COINS } from '../config';
 import { Inventory } from './inventory';
+import type { ToolId } from './items';
+import type { Good } from './trade';
 
 /** The player's faction id. Rival towns are 1..N in TOWN_SITES order. */
 export const PLAYER_FACTION = 0;
@@ -19,6 +21,16 @@ export interface Faction {
   alive: boolean;
   /** Ruler NPC id (rival towns) — the player rules faction 0. */
   rulerId: number | null;
+  /** Treasury, in coins (moedas). */
+  coins: number;
+  /** Market warehouse of finished tools and weapons, for trade. */
+  tools: Partial<Record<ToolId, number>>;
+}
+
+/** Player's standing orders for visiting merchants: sell what's above `sellAbove`, buy up to `buyUpTo`. */
+export interface TradePolicy {
+  sellAbove: Partial<Record<Good, number>>;
+  buyUpTo: Partial<Record<Good, number>>;
 }
 
 const css = (c: number) => `#${c.toString(16).padStart(6, '0')}`;
@@ -35,6 +47,8 @@ export function createFactions(sites: { x: number; y: number }[], playerStock: I
     center: sites[0],
     alive: true,
     rulerId: null,
+    coins: STARTING_COINS,
+    tools: {},
   };
   const rivals = RIVAL_TOWNS.map((t, k) => ({
     id: k + 1,
@@ -46,6 +60,8 @@ export function createFactions(sites: { x: number; y: number }[], playerStock: I
     center: sites[k + 1],
     alive: true,
     rulerId: null,
+    coins: STARTING_COINS * 2,
+    tools: {},
   }));
   return [player, ...rivals];
 }
