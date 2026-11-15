@@ -57,6 +57,7 @@ import {
 import { PER_LEVEL, PlayerStats, XP } from '../game/player';
 import { clearSave, readSave, SAVE_VERSION, type SaveData, writeSave } from '../game/save';
 import { SlotInventory } from '../game/slots';
+import { buildingStorage, type Storage, villageStorage } from '../game/storage';
 import { Territory } from '../game/territory';
 import { GameClock } from '../game/time';
 import { buildRoadNetwork, findSpot, foundTown, populateTown } from '../game/towns';
@@ -773,20 +774,6 @@ export class WorldScene extends Phaser.Scene {
         '#e0b860',
       );
     }
-  }
-
-  /** Puts the tools you carry (in good condition) into the market warehouse for trade. */
-  private stockTools(x: number, y: number): void {
-    const f = this.factions[PLAYER_FACTION];
-    let n = 0;
-    this.inventory.slots.forEach((s, i) => {
-      const tool = s ? ITEM_DEFS[s.item].tool : undefined;
-      if (!s || !tool || (s.durability ?? 0) < tool.durability * 0.75) return;
-      f.tools[s.item as ToolId] = (f.tools[s.item as ToolId] ?? 0) + 1;
-      this.inventory.slots[i] = null;
-      n++;
-    });
-    if (n > 0) this.popup(x, y - 12, `${n} ferramenta(s) no armazém do mercado`, '#e0b860');
   }
 
   /** Takes one tool from your market warehouse into your inventory. */
@@ -1695,12 +1682,16 @@ export class WorldScene extends Phaser.Scene {
     }
 
     if (def.deposit) {
-      if (Phaser.Input.Keyboard.JustDown(this.keys.E)) {
-        this.deposit(x, y);
-        if (b.type === 'market') this.stockTools(x, y);
-      }
-      const hasItems = this.inventory.slots.some((s) => s !== null);
-      this.interaction = { x, y, text: hasItems ? `[E] Guardar no estoque` : def.name, progress: null };
+      // The village's stock (stockpile resources + tool warehouse) is reachable from any deposit building.
+      if (Phaser.Input.Keyboard.JustDown(this.keys.E))
+        this.openStorage(`Estoque · ${this.factions[b.faction].name}`, villageStorage(this.factions[b.faction]));
+      this.interaction = { x, y, text: `[E] Estoque da vila`, progress: null };
+      return;
+    }
+    if (!def.job && b.type !== 'house') {
+      // Towers, walls, gates…: just their own inventory.
+      if (Phaser.Input.Keyboard.JustDown(this.keys.E)) this.openStorage(def.name, buildingStorage(b));
+      this.interaction = { x, y, text: `[E] ${def.name} · inventário`, progress: null };
       return;
     }
 
@@ -1785,6 +1776,16 @@ export class WorldScene extends Phaser.Scene {
     this.events.emit('building', b);
   }
 
+  /** Opens the two-column storage screen (UIScene listens for 'storage'). */
+  openStorage(title: string, storage: Storage): void {
+    this.events.emit('storage', { title, storage });
+  }
+
+  /** A building's own inventory, for the building panel's "Inventário" button. */
+  storageOf(b: Building): Storage {
+    return buildingStorage(b);
+  }
+
   /** Why a villager isn't working (e.g. no resources nearby), or null. */
   npcStatus(id: number): string | null {
     return this.npcs.get(id)?.status ?? null;
@@ -1823,13 +1824,6 @@ export class WorldScene extends Phaser.Scene {
     }
 
     if (result.depleted) this.replaceObjectImage(i);
-  }
-
-  private deposit(x: number, y: number): void {
-    const moved = this.inventory.takeAllResources();
-    for (const r of RESOURCES) this.stockpile.add(r, moved[r]);
-    const parts = RESOURCES.filter((r) => moved[r] > 0).map((r) => `+${moved[r]} ${RESOURCE_LABEL[r]}`);
-    if (parts.length > 0) this.events.emit('popup', { x, y, text: parts.join('  '), color: '#ffe08a' } satisfies PopupEvent);
   }
 
   // ---------- rendering ----------

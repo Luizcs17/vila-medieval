@@ -153,6 +153,15 @@ export class BuildingPanelUI {
     }
 
     y += 8;
+    // Every building has its own inventory.
+    const inv = s.add.rectangle(PAD, y, 170, 28, 0x3a3228, 1).setOrigin(0).setStrokeStyle(1, 0x8a6a3a);
+    inv.setInteractive({ useHandCursor: true }).on('pointerdown', () => {
+      const target = b;
+      this.close();
+      this.world.openStorage(`${def.name} · inventário`, this.world.storageOf(target));
+    });
+    const stored = Object.values(b.storage ?? {}).reduce((a, n) => a + (n ?? 0), 0);
+    items.push(inv, s.add.text(PAD + 85, y + 14, `Inventário (${stored})`, { ...TEXT, fontSize: '12px' }).setOrigin(0.5));
     const close = s.add
       .rectangle(W - PAD - 150, y, 150, 28, 0x3a3228, 1)
       .setOrigin(0)

@@ -1,5 +1,6 @@
 import { Ground, inBounds, Obj, tileIndex, type WorldMap } from '../world/map';
 import type { Amounts, Resource } from './inventory';
+import type { ItemId } from './items';
 import type { Skill } from './npcs';
 
 /** A workplace: villagers assigned here use `skill` on `nodes` within `radius` tiles. */
@@ -249,6 +250,8 @@ export interface Building {
   progress: number;
   /** Current hit points (max is BUILDING_DEFS[type].maxHp). */
   hp: number;
+  /** The building's own inventory (tools for its workers, a smith's output, anything you leave there). */
+  storage: Partial<Record<ItemId, number>>;
 }
 
 export type PlaceCheck = { ok: true } | { ok: false; reason: string };
@@ -300,7 +303,17 @@ export class Buildings {
 
   /** Places a building or construction site. Does not check or pay; call `check` first. */
   place(type: BuildingType, tx: number, ty: number, built = false, faction = 0): Building {
-    const b: Building = { id: this.nextId++, type, faction, tx, ty, built, progress: 0, hp: BUILDING_DEFS[type].maxHp };
+    const b: Building = {
+      id: this.nextId++,
+      type,
+      faction,
+      tx,
+      ty,
+      built,
+      progress: 0,
+      hp: BUILDING_DEFS[type].maxHp,
+      storage: {},
+    };
     for (const i of this.footprint(type, tx, ty)) {
       this.map.objects[i] = type === 'gate' ? Obj.Gate : Obj.Building;
       this.byTile.set(i, b);
@@ -318,7 +331,7 @@ export class Buildings {
     this.list.length = 0;
     this.byTile.clear();
     for (const b of s.list) {
-      const copy = { ...b };
+      const copy = { ...b, storage: { ...(b.storage ?? {}) } };
       for (const i of this.footprint(copy.type, copy.tx, copy.ty)) {
         this.map.objects[i] = copy.type === 'gate' ? Obj.Gate : Obj.Building;
         this.byTile.set(i, copy);

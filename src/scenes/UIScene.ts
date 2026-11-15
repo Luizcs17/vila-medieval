@@ -4,6 +4,7 @@ import { RESOURCE_LABEL, RESOURCES, type Resource } from '../game/inventory';
 import { foodDays } from '../game/needs';
 import type { NpcData } from '../game/npcs';
 import { MAX_LEVEL, xpToNext } from '../game/player';
+import type { Storage } from '../game/storage';
 import { ambientAt, formatClock } from '../game/time';
 import { BuildingPanelUI } from '../ui/BuildingPanelUI';
 import { BuildMenuUI } from '../ui/BuildMenuUI';
@@ -16,6 +17,7 @@ import { ManagementUI } from '../ui/ManagementUI';
 import { Minimap } from '../ui/Minimap';
 import { PauseMenuUI } from '../ui/PauseMenuUI';
 import { RecruitDialogUI } from '../ui/RecruitDialogUI';
+import { StoragePanelUI } from '../ui/StoragePanelUI';
 import { renderTrade } from '../ui/TradeTab';
 import type { PopupEvent, ToastEvent, WorldScene } from './WorldScene';
 
@@ -62,6 +64,7 @@ export class UIScene extends Phaser.Scene {
   private placeHint!: Phaser.GameObjects.Text;
   private dialog!: RecruitDialogUI;
   private panel!: BuildingPanelUI;
+  private storagePanel!: StoragePanelUI;
   private popText!: Phaser.GameObjects.Text;
   private popups: Popup[] = [];
   private toasts: { text: Phaser.GameObjects.Text; age: number }[] = [];
@@ -74,7 +77,7 @@ export class UIScene extends Phaser.Scene {
     this.world = this.scene.get('World') as WorldScene;
     // This scene restarts whenever the world does (loading a save). The world's event emitter
     // survives restarts, so drop listeners from the previous run before adding new ones.
-    for (const e of ['popup', 'toast', 'talk', 'building']) this.world.events.off(e);
+    for (const e of ['popup', 'toast', 'talk', 'building', 'storage']) this.world.events.off(e);
     this.popups = [];
     this.toasts = [];
 
@@ -158,6 +161,12 @@ export class UIScene extends Phaser.Scene {
       this.dialog.open(npc);
     });
 
+    this.storagePanel = new StoragePanelUI(this, this.world);
+    this.world.events.on('storage', (e: { title: string; storage: Storage }) => {
+      if (this.inventory.isOpen) this.toggleInventory();
+      this.closeBuildMode();
+      this.storagePanel.open(e.title, e.storage);
+    });
     this.panel = new BuildingPanelUI(this, this.world, () => this.world.closeBuildingPanel());
     this.world.events.on('building', (b: Building) => {
       if (this.inventory.isOpen) this.toggleInventory();
@@ -182,6 +191,11 @@ export class UIScene extends Phaser.Scene {
       const key = e.key.toLowerCase();
       if (this.pause.isOpen) {
         if (key === 'escape') this.pause.close();
+        return;
+      }
+      if (this.storagePanel.isOpen) {
+        if (key === 'escape') this.storagePanel.close();
+        else if (key === 'e') this.storagePanel.depositAll();
         return;
       }
       if (this.panel.isOpen) {
@@ -320,6 +334,7 @@ export class UIScene extends Phaser.Scene {
     this.updatePlaceHint();
     this.dialog.update();
     this.panel.update();
+    this.storagePanel.update(deltaMs / 1000);
     this.updateToasts(deltaMs / 1000);
   }
 
@@ -438,6 +453,7 @@ export class UIScene extends Phaser.Scene {
     this.inventory.layout(width, height);
     this.dialog.layout(width, height);
     this.panel.layout(width, height);
+    this.storagePanel?.layout();
     this.minimap.layout(width, height);
     this.pause?.layout(width, height);
     this.fullMap?.layout();
