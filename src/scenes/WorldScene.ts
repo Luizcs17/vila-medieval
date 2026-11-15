@@ -16,6 +16,7 @@ import {
   NPC_REACH,
   PLAYER_HUNGER_PER_DAY,
   PLAYER_RADIUS,
+  QUICK_ORDER_RADIUS,
   RAID_INTERVAL,
   REPAIR_RATE,
   START_HOUR,
@@ -47,6 +48,7 @@ import {
   missionChance,
   type Proposal,
 } from '../game/diplomacy';
+import { DROP_LIFETIME, type Drop, Drops, takeFromSlot } from '../game/drops';
 import {
   COLONY_MIN_DISTANCE,
   COLONY_NAMES,
@@ -318,6 +320,8 @@ export class WorldScene extends Phaser.Scene {
     this.attackCd = 0;
     this.villagerRegen = 0;
     this.autosaveTimer = 0;
+    this.drops = new Drops();
+    this.dropViews = new Map();
     this.placeTile = { x: 0, y: 0 };
     this.zoomIndex = DEFAULT_ZOOM_INDEX;
   }
@@ -538,6 +542,7 @@ export class WorldScene extends Phaser.Scene {
       tradePolicy: structuredClone(this.tradePolicy),
       npcPositions: [...this.npcs.values()].map((n) => [n.data.id, n.gx, n.gy]),
       animals: this.wildlife.snapshot(),
+      drops: this.drops.snapshot(),
     };
     const ok = writeSave(data);
     if (!quiet) this.toast(ok ? 'Jogo salvo.' : 'Não foi possível salvar neste navegador.', ok ? '#a8ffa8' : '#ff8a7a');
@@ -577,6 +582,8 @@ export class WorldScene extends Phaser.Scene {
     const pos = new Map(save.npcPositions.map(([id, x, y]) => [id, { x, y }]));
     for (const data of this.population.npcs) this.spawnVillagerEntity(data, pos.get(data.id) ?? this.villageCenter);
     this.wildlife.restore(save.animals);
+    this.drops.restore(save.drops);
+    for (const d of this.drops.list) this.addDropView(d);
     for (const sf of save.factions) {
       const f = this.factions[sf.id];
       if (!f) continue;
@@ -635,6 +642,7 @@ export class WorldScene extends Phaser.Scene {
     else if (this.placement) this.updatePlacement();
     else this.updateInteraction(dt, x !== 0 || y !== 0);
     this.updateDefenses(worldDt);
+    for (const d of this.drops.expire(this.clock.seconds)) this.removeDropView(d);
     this.drawBuildingHealth();
     this.sortBuildingsAroundPlayer();
     this.fadeObjectsInFrontOfPlayer();
@@ -1917,21 +1925,74 @@ export class WorldScene extends Phaser.Scene {
     this.cancelCommandPick();
   }
 
-  /** G: everyone of yours nearby (companions and soldiers) follows you; again: they go back to their defaults. */
-  rallyNearby(): void {
-    const near = [...this.npcs.values()]
-      .filter((npc) => this.canCommand(npc.data) && Math.hypot(npc.gx - this.player.gx, npc.gy - this.player.gy) < 15)
+  /** Your companions and soldiers within QUICK_ORDER_RADIUS of you (who F1/F2 orders reach), nearest first. */
+  nearbyCommandables(): NpcData[] {
+    return [...this.npcs.values()]
+      .filter(
+        (npc) =>
+          !npc.indoors &&
+          this.canCommand(npc.data) &&
+          Math.hypot(npc.gx - this.player.gx, npc.gy - this.player.gy) < QUICK_ORDER_RADIUS,
+      )
+      .sort(
+        (a, b) =>
+          Math.hypot(a.gx - this.player.gx, a.gy - this.player.gy) - Math.hypot(b.gx - this.player.gx, b.gy - this.player.gy),
+      )
       .map((npc) => npc.data);
-    if (near.length === 0) {
-      this.toast('Ninguém por perto para chamar (companheiros e soldados).', '#cdb98e');
+  }
+
+  /** Quick order to everyone nearby: follow you, or stay where each one stands. Returns how many got it. */
+  orderNearby(kind: 'follow' | 'stay'): number {
+    const near = this.nearbyCommandables();
+    for (const n of near) {
+      const t = this.npcs.get(n.id)!.tile;
+      this.setCommand(n, kind === 'follow' ? { kind: 'follow' } : { kind: 'hold', x: t.x, y: t.y });
+    }
+    if (near.length === 0) this.toast('Ninguém por perto para receber ordens (companheiros e soldados).', '#cdb98e');
+    else this.toast(`${near.length} ${kind === 'follow' ? 'seguindo você' : 'ficando onde estão'}.`, '#a8c8ff');
+    return near.length;
+  }
+
+  // ---------- items on the ground ----------
+
+  private drops!: Drops;
+  private dropViews!: Map<number, Phaser.GameObjects.Image>;
+
+  /** G drops one of the selected hotbar item (Shift+G: the whole stack) at your feet. */
+  dropSelected(all: boolean): void {
+    const slot = this.selectedHotbar;
+    const stack = takeFromSlot(this.inventory, slot, all ? Infinity : 1);
+    const p = this.player.sprite;
+    if (!stack) {
+      this.popup(p.x, p.y - p.height, 'Nada selecionado na barra', '#cdb98e');
       return;
     }
-    const allFollow = near.every((n) => n.command?.kind === 'follow' || (n.role === 'companion' && !n.command));
-    for (const n of near) this.setCommand(n, allFollow ? null : { kind: 'follow' });
-    this.toast(
-      allFollow ? `${near.length} dispensado(s): voltam ao padrão.` : `${near.length} seguindo você (G de novo dispensa).`,
-      '#a8c8ff',
-    );
+    // Merge with a drop of the same resource right here, so dropping one by one makes one pile.
+    const here = this.drops.nearest(this.player.gx, this.player.gy, 0.6);
+    if (here && here.item === stack.item && here.durability === undefined && stack.durability === undefined) {
+      here.count += stack.count;
+      here.expiresAt = this.clock.seconds + DROP_LIFETIME;
+    } else this.addDropView(this.drops.add(stack, this.player.gx, this.player.gy + 0.3, this.clock.seconds));
+    this.popup(p.x, p.y - p.height, `Largou ${stack.count} ${ITEM_DEFS[stack.item].label}`, '#cdb98e');
+  }
+
+  private addDropView(d: Drop): void {
+    const s = gridToScreen(d.gx, d.gy);
+    const img = this.add
+      .image(s.x, s.y, `icon_${d.item}`)
+      .setOrigin(0.5, 1)
+      .setScale(1.2)
+      .setDepth(s.y - 1);
+    this.tweens.add({ targets: img, y: s.y - 2, duration: 700, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+    this.dropViews.set(d.id, img);
+  }
+
+  private removeDropView(d: Drop): void {
+    const img = this.dropViews.get(d.id);
+    if (!img) return;
+    this.tweens.killTweensOf(img);
+    img.destroy();
+    this.dropViews.delete(d.id);
   }
 
   /** Opens the trade window with another village (from one of its people). */
@@ -2145,6 +2206,23 @@ export class WorldScene extends Phaser.Scene {
         this.talkingTo = d;
         this.player.face(npc.sprite.x);
         this.events.emit('talk', d);
+      }
+      return;
+    }
+
+    const drop = this.inventoryOpen ? null : this.drops.nearest(this.player.gx, this.player.gy, 1.2);
+    if (drop) {
+      this.gatherer.tick(dt, null, false, 1);
+      const view = this.dropViews.get(drop.id);
+      const label = ITEM_DEFS[drop.item].label;
+      const text = `[E] Pegar ${drop.count > 1 ? `${drop.count} ` : ''}${label}`;
+      this.interaction = { x: view?.x ?? 0, y: (view?.y ?? 0) - 12, text, progress: null };
+      if (Phaser.Input.Keyboard.JustDown(this.keys.E)) {
+        const n = this.drops.take(drop, this.inventory);
+        if (n === 0) this.popup(view?.x ?? 0, (view?.y ?? 0) - 12, 'Não cabe na mochila', '#ffb070');
+        else this.popup(view?.x ?? 0, (view?.y ?? 0) - 12, `+${n} ${label}`);
+        if (drop.count <= 0) this.removeDropView(drop);
+        else view?.setData('count', drop.count);
       }
       return;
     }
