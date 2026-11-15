@@ -26,21 +26,21 @@ function update() {
   else run('git checkout --detach main', prod);
   // Reinstall only when dependencies changed: a running prod server keeps native files in
   // node_modules locked on Windows, which makes `npm ci` fail.
-  const lockHash = createHash('sha1').update(readFileSync(join(prod, 'package-lock.json'))).digest('hex');
+  const lockHash = createHash('sha1')
+    .update(readFileSync(join(prod, 'package-lock.json')))
+    .digest('hex');
   const marker = join(prod, 'node_modules', '.installed-lock');
   const installed = existsSync(marker) ? readFileSync(marker, 'utf8') : '';
   if (installed !== lockHash) {
     try {
       run('npm ci', prod);
     } catch {
-      console.error('
-Falha ao instalar dependências. Se o servidor de prod estiver rodando, pare-o e rode de novo.');
+      console.error('\nFalha ao instalar dependências. Se o servidor de prod estiver rodando, pare-o e rode de novo.');
       process.exit(1);
     }
     writeFileSync(marker, lockHash);
   } else {
-    console.log('
-Dependências iguais: pulando npm ci.');
+    console.log('\nDependências iguais: pulando npm ci.');
   }
   run('npm run build', prod);
   const rev = execSync('git log -1 --format="%h %s"', { cwd: prod }).toString().trim();
