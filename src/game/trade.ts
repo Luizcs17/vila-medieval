@@ -18,6 +18,7 @@ export const BASE_PRICE: Record<Good, number> = {
   iron: 8,
   meat: 3,
   leather: 5,
+  seed: 2,
   stone_axe: 12,
   stone_pick: 14,
   spear: 12,

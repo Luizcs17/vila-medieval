@@ -65,6 +65,19 @@ import {
   type TradePolicy,
 } from '../game/factions';
 import { ageOf, Families, fullName, isAdult, PLAYER_ID } from '../game/families';
+import {
+  clearPlot,
+  type FarmTask,
+  FIELD_OBJS,
+  harvestCrop,
+  nextFarmTask,
+  plant,
+  plotRect,
+  plotTileProblem,
+  rectTiles,
+  ripen,
+  setPlot,
+} from '../game/farms';
 import { Gatherer, NODE_DEFS, nearestTile, ResourceNodes } from '../game/gathering';
 import {
   ARMORS,
@@ -140,6 +153,10 @@ const OBJECT_KEY: Partial<Record<Obj, string>> = {
   [Obj.Stump]: 'stump',
   [Obj.Sapling]: 'sapling',
   [Obj.Road]: 'road',
+  [Obj.Grass]: 'grass_tuft',
+  [Obj.Field]: 'field',
+  [Obj.Crop]: 'crop',
+  [Obj.CropRipe]: 'crop_ripe',
 };
 
 const BUILDING_KEY: Record<BuildingType, string> = {
@@ -161,6 +178,7 @@ const BUILDING_KEY: Record<BuildingType, string> = {
   colony: 'stockpile',
   home: 'bld_home',
   claim: 'stockpile',
+  farm: 'bld_farm',
 };
 
 /** Ground is drawn beneath everything; objects and characters are depth-sorted by their screen y. */
@@ -225,7 +243,7 @@ interface BuildingView {
   baseDepth: number;
 }
 
-const isInteractable = (o: Obj) => o === Obj.Building || o === Obj.Gate || NODE_DEFS[o] !== undefined;
+const isInteractable = (o: Obj) => o === Obj.Building || o === Obj.Gate || o === Obj.CropRipe || NODE_DEFS[o] !== undefined;
 
 export class WorldScene extends Phaser.Scene {
   map!: WorldMap;
@@ -324,6 +342,11 @@ export class WorldScene extends Phaser.Scene {
     this.villagerRegen = 0;
     this.autosaveTimer = 0;
     this.drops = new Drops();
+    this.farmReserved = new Map();
+    this.plotFarm = null;
+    this.plotStart = null;
+    this.commandPick = null;
+    this.hungerStage = 0;
     this.dropViews = new Map();
     this.placeTile = { x: 0, y: 0 };
     this.zoomIndex = DEFAULT_ZOOM_INDEX;
@@ -333,7 +356,15 @@ export class WorldScene extends Phaser.Scene {
     createPlaceholderTextures(this);
     const save = this.initData.fresh ? null : (this.initData.save ?? readSave());
     this.map = generateMap();
-    if (save) this.map.objects.splice(0, this.map.objects.length, ...save.objects);
+    if (save) {
+      const generated = [...this.map.objects];
+      this.map.objects.splice(0, this.map.objects.length, ...save.objects);
+      // Saves from before farming have no grass tufts: sprinkle them where the map would have them.
+      if (!save.objects.includes(Obj.Grass))
+        generated.forEach((o, i) => {
+          if (o === Obj.Grass && this.map.objects[i] === Obj.None) this.map.objects[i] = Obj.Grass;
+        });
+    }
     this.nodes = new ResourceNodes(this.map);
     this.buildings = new Buildings(this.map);
     this.population = new Population(this.buildings);
@@ -406,6 +437,8 @@ export class WorldScene extends Phaser.Scene {
       factionCenter: (f) => this.factions[f].center,
       playerAt: () => ({ x: this.player.gx, y: this.player.gy }),
       buildSite: (npc) => this.buildSiteFor(npc),
+      farmTask: (npc, farm) => this.farmTaskFor(npc, farm),
+      farmDo: (npc, farm, task) => this.farmDo(npc, farm, task),
       buildWork: (npc, b, dt) => {
         if (!this.buildings.work(b, dt * BUILDER_RATE)) return;
         this.refreshBuildingView(b);
@@ -648,10 +681,12 @@ export class WorldScene extends Phaser.Scene {
     if (!frozen && Phaser.Input.Keyboard.JustDown(k.F)) this.eat();
     this.selection.clear();
     if (this.demolishing) this.updateDemolish();
+    else if (this.plotFarm) this.updatePlot();
     else if (this.commandPick) this.updateCommandPick();
     else if (this.placement) this.updatePlacement();
     else this.updateInteraction(dt, x !== 0 || y !== 0);
     this.updateDefenses(worldDt);
+    this.updateFarms(worldDt);
     for (const d of this.drops.expire(this.clock.seconds)) this.removeDropView(d);
     this.drawBuildingHealth();
     this.sortBuildingsAroundPlayer();
@@ -1415,6 +1450,7 @@ export class WorldScene extends Phaser.Scene {
       if (n.homeId === b.id) n.homeId = null;
       if (n.jobId === b.id) n.jobId = null;
     }
+    for (const i of clearPlot(this.map, b)) this.replaceObjectImage(i);
     this.buildings.remove(b);
     for (const i of this.buildings.footprint(b.type, b.tx, b.ty)) this.replaceObjectImage(i);
     this.territory.recompute(this.buildings.list);
@@ -1682,7 +1718,7 @@ export class WorldScene extends Phaser.Scene {
       this.demolishHint = { text: 'Estrada no território de outra vila', ok: false };
       return;
     }
-    if (this.map.objects[i] === Obj.Road) {
+    if (this.map.objects[i] === Obj.Road || FIELD_OBJS.has(this.map.objects[i])) {
       this.drawFootprint(tx, ty, 1, 0xff6040);
       this.demolishPick = { road: i };
       this.demolishHint = { text: 'Remover estrada (devolve 1 pedra)', ok: true };
@@ -1798,6 +1834,150 @@ export class WorldScene extends Phaser.Scene {
       }
     }
     return best;
+  }
+
+  // ---------- farms ----------
+
+  /** Tiles a farmer is walking to (so two farmers don't take the same one). */
+  private farmReserved = new Map<number, number>();
+  private farmTimer = 0;
+
+  /** Seeds a farm can plant with: its own inventory, then its village's stock. */
+  farmSeeds(farm: Building): number {
+    return (farm.storage.seed ?? 0) + this.factions[farm.faction].stock.items.seed;
+  }
+
+  private farmTaskFor(npc: Npc, farm: Building): FarmTask | string {
+    if (!farm.plot || farm.plot.tiles.length === 0) return 'Defina a área de plantio (painel da fazenda)';
+    for (const [tile, who] of this.farmReserved) if (who === npc.data.id) this.farmReserved.delete(tile);
+    const taken = new Set(this.farmReserved.keys());
+    const task = nextFarmTask(this.map, farm.plot, this.farmSeeds(farm) > 0, taken);
+    if (!task) {
+      const empty = farm.plot.tiles.some((i) => this.map.objects[i] === Obj.Field);
+      return empty && this.farmSeeds(farm) === 0 ? 'Sem sementes (colete grama)' : 'Esperando a plantação crescer';
+    }
+    this.farmReserved.set(task.tile, npc.data.id);
+    return task;
+  }
+
+  private farmDo(_npc: Npc, farm: Building, task: FarmTask): number {
+    this.farmReserved.delete(task.tile);
+    const plot = farm.plot;
+    if (!plot) return 0;
+    if (task.kind === 'plant') {
+      if (this.farmSeeds(farm) <= 0 || !plant(this.map, plot, task.tile, this.clock.seconds)) return 0;
+      if ((farm.storage.seed ?? 0) > 0) farm.storage.seed = (farm.storage.seed ?? 0) - 1;
+      else this.factions[farm.faction].stock.items.seed -= 1;
+      this.replaceObjectImage(task.tile);
+      return 0;
+    }
+    const got = harvestCrop(this.map, plot, task.tile, Math.random);
+    if (!got) return 0;
+    farm.storage.seed = (farm.storage.seed ?? 0) + got.seeds;
+    this.replaceObjectImage(task.tile);
+    return got.food;
+  }
+
+  /** You pick a ripe crop yourself: the food and seeds go to your bag. */
+  private harvestByHand(i: number): void {
+    const farm = this.buildings.list.find((b) => b.plot?.tiles.includes(i));
+    const img = this.objectImages.get(i);
+    if (!farm?.plot || !this.isMine(farm.faction)) return;
+    if (this.inventory.space('meat') < 1) {
+      if (img) this.popup(img.x, img.y - 10, 'Mochila cheia', '#ffb070');
+      return;
+    }
+    const got = harvestCrop(this.map, farm.plot, i, Math.random);
+    if (!got) return;
+    this.inventory.add('meat', got.food);
+    const seeds = this.inventory.add('seed', got.seeds);
+    this.replaceObjectImage(i);
+    this.gainXp(XP.gather);
+    if (img) this.popup(img.x, img.y - 10, `+${got.food} Comida  +${seeds} Semente`);
+  }
+
+  /** Crops ripen after GROW_SECONDS (checked once a second). */
+  private updateFarms(worldDt: number): void {
+    this.farmTimer += worldDt;
+    if (this.farmTimer < 1) return;
+    this.farmTimer = 0;
+    for (const b of this.buildings.list) for (const i of ripen(this.map, b.plot, this.clock.seconds)) this.replaceObjectImage(i);
+  }
+
+  /** "Definir área de plantio": drag a rectangle (up to 5×5) of grass near the farm. */
+  plotFarm: Building | null = null;
+  plotHint: { text: string; ok: boolean } | null = null;
+  private plotStart: { x: number; y: number } | null = null;
+  private plotTiles: { tiles: number[]; problem: string | null } | null = null;
+
+  startPlot(farm: Building): void {
+    this.cancelPlacing();
+    this.plotFarm = farm;
+    this.plotStart = null;
+    this.interaction = null;
+  }
+
+  cancelPlot(): void {
+    this.plotFarm = null;
+    this.plotStart = null;
+    this.plotTiles = null;
+    this.plotHint = null;
+  }
+
+  private pointerTile(): { x: number; y: number } {
+    const ptr = this.input.activePointer;
+    const world = this.cameras.main.getWorldPoint(ptr.x, ptr.y);
+    const g = screenToGrid(world.x, world.y);
+    return { x: Math.floor(g.x), y: Math.floor(g.y) };
+  }
+
+  private updatePlot(): void {
+    const farm = this.plotFarm!;
+    if (!this.buildings.list.includes(farm)) {
+      this.cancelPlot();
+      return;
+    }
+    const t = this.pointerTile();
+    const a = this.plotStart ?? t;
+    const rect = plotRect(a.x, a.y, t.x, t.y);
+    const tiles = rectTiles(this.map, rect);
+    let problem: string | null = null;
+    for (const i of tiles) {
+      const why = plotTileProblem(this.map, farm, i, (k) => this.territory.owner[k]);
+      this.drawFootprint(i % this.map.w, Math.floor(i / this.map.w), 1, why ? 0xff6060 : 0x8aff8a);
+      problem ??= why;
+    }
+    this.plotTiles = { tiles, problem };
+    const size = `${rect.x1 - rect.x0 + 1}×${rect.y1 - rect.y0 + 1}`;
+    this.plotHint = problem
+      ? { text: problem, ok: false }
+      : this.plotStart
+        ? { text: `${size} · solte para definir`, ok: true }
+        : { text: 'Arraste sobre a grama (até 5×5) · direito/Esc cancela', ok: true };
+  }
+
+  plotPointerDown(): void {
+    if (this.plotFarm) this.plotStart = this.pointerTile();
+  }
+
+  /** Releasing the drag sets the area (if every tile is fine). */
+  plotPointerUp(): void {
+    const farm = this.plotFarm;
+    if (!farm || !this.plotStart) return;
+    this.updatePlot();
+    const sel = this.plotTiles;
+    this.plotStart = null;
+    if (!sel || sel.problem) {
+      if (sel?.problem) this.toast(sel.problem, '#ffb070');
+      return;
+    }
+    for (const i of setPlot(this.map, farm, sel.tiles)) this.replaceObjectImage(i);
+    this.territory.recompute(this.buildings.list);
+    this.toast(
+      `Área de plantio definida: ${sel.tiles.length} quadrados. O fazendeiro planta com sementes da fazenda ou do estoque.`,
+      '#a8ffa8',
+    );
+    this.cancelPlot();
   }
 
   /** One of your villagers joins your group: leaves their job and house. */
@@ -2145,6 +2325,7 @@ export class WorldScene extends Phaser.Scene {
     view?.img.destroy();
     view?.sign?.destroy();
     this.buildingViews.delete(b.id);
+    for (const i of clearPlot(this.map, b)) this.replaceObjectImage(i);
     this.buildings.remove(b);
     for (const i of this.buildings.footprint(b.type, b.tx, b.ty)) this.replaceObjectImage(i);
     this.territory.recompute(this.buildings.list);
@@ -2164,6 +2345,7 @@ export class WorldScene extends Phaser.Scene {
   cancelPlacing(): void {
     if (this.demolishing) this.cancelDemolish();
     if (this.commandPick) this.cancelCommandPick();
+    if (this.plotFarm) this.cancelPlot();
     this.placement = null;
     this.ghost.setVisible(false);
   }
@@ -2333,8 +2515,14 @@ export class WorldScene extends Phaser.Scene {
     const img = this.objectImages.get(target);
     const anchorX = img?.x ?? 0;
     const anchorY = img ? img.y - img.height - 2 : 0;
+    if (obj === Obj.CropRipe) {
+      this.gatherer.tick(dt, null, false, 1);
+      this.interaction = { x: anchorX, y: anchorY + img!.height - 8, text: '[E] Colher', progress: null };
+      if (Phaser.Input.Keyboard.JustDown(this.keys.E)) this.harvestByHand(target);
+      return;
+    }
     const def = NODE_DEFS[obj]!;
-    const tool = this.selectedTool(def.tool);
+    const tool = def.tool ? this.selectedTool(def.tool) : null;
     const full = this.inventory.space(def.resource) <= 0;
     const missingTool = def.needsTool && !tool;
     const active = this.keys.E.isDown && !moving && !full && !missingTool;
@@ -2578,7 +2766,7 @@ export class WorldScene extends Phaser.Scene {
   private harvest(i: number, toolSlot?: number): void {
     const result = this.nodes.harvest(i);
     if (!result) return;
-    this.inventory.add(result.resource);
+    if (result.resource) this.inventory.add(result.resource);
     if (toolSlot !== undefined) this.wearTool(toolSlot);
     this.gainXp(XP.gather);
 
@@ -2587,7 +2775,8 @@ export class WorldScene extends Phaser.Scene {
       this.events.emit('popup', {
         x: img.x,
         y: img.y - img.height,
-        text: `+1 ${RESOURCE_LABEL[result.resource]}`,
+        text: result.resource ? `+1 ${RESOURCE_LABEL[result.resource]}` : 'Nada',
+        color: result.resource ? undefined : '#a8977a',
       } satisfies PopupEvent);
       this.tweens.add({ targets: img, x: img.x + 1, duration: 40, yoyo: true, repeat: 1 });
     }

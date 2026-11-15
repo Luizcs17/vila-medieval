@@ -94,7 +94,7 @@ describe('wanderer generation', () => {
 describe('skills and productivity', () => {
   it('rates 1–5 and turns ratings and traits into a work multiplier', () => {
     const base = {
-      skills: { woodcutting: 1, stonework: 3, mining: 5, hunting: 2, combat: 1, diplomacy: 1, smithing: 1 },
+      skills: { woodcutting: 1, stonework: 3, mining: 5, hunting: 2, combat: 1, diplomacy: 1, smithing: 1, farming: 1 },
       traits: [] as TraitId[],
     };
     expect(productivity(base, 'woodcutting')).toBeCloseTo(0.75);

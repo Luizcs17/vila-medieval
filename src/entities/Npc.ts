@@ -1,6 +1,7 @@
 import Phaser from 'phaser';
 import { HUNTER_DAMAGE, HUNTER_RANGE, NPC_SPEED, ROAD_SPEED, WORKER_LOAD, WORKER_TIME_FACTOR } from '../config';
 import { BUILDING_DEFS, type Building, type Buildings } from '../game/buildings';
+import type { FarmTask } from '../game/farms';
 import { NODE_DEFS } from '../game/gathering';
 import { toolSpeed } from '../game/gear';
 import type { Resource } from '../game/inventory';
@@ -58,6 +59,10 @@ export interface NpcWorld {
   buildSite(npc: Npc): Building | null;
   /** One step of an idle villager's building work. */
   buildWork(npc: Npc, b: Building, dt: number): void;
+  /** A farmer's next field job (harvest or plant), reserved for them; null with a reason when there's none. */
+  farmTask(npc: Npc, farm: Building): FarmTask | string;
+  /** Does the job on that tile. Returns the food harvested (0 when planting or if it failed). */
+  farmDo(npc: Npc, farm: Building, task: FarmTask): number;
 }
 
 /** Something a soldier or tower can attack. */
@@ -680,6 +685,76 @@ export class Npc {
     return true;
   }
 
+  /** The field job a farmer is walking to or doing. */
+  private farmJob: FarmTask | null = null;
+
+  /** Farmer loop: harvest ripe crops and plant empty fields; carry the food to the stock. */
+  private farm(dt: number, world: NpcWorld, farm: Building): void {
+    const load = this.carrying?.n ?? 0;
+    if (this.state === 'toDeposit') {
+      if (this.path.length > 0) this.walk(dt);
+      else {
+        if (this.carrying) world.deposit(this.data.faction, this.carrying.resource, this.carrying.n);
+        this.carrying = null;
+        this.updateCarryIcon();
+        this.state = 'idle';
+      }
+      return;
+    }
+    if (this.state === 'idle') {
+      if (load >= WORKER_LOAD) {
+        this.startDeposit(world);
+        return;
+      }
+      const task = world.farmTask(this, farm);
+      if (typeof task === 'string') {
+        if (load > 0) {
+          this.startDeposit(world);
+          return;
+        }
+        this.live(dt, world);
+        this.status = task;
+        return;
+      }
+      const x = task.tile % world.map.w;
+      const y = Math.floor(task.tile / world.map.w);
+      if (!this.goNear(x, y, 1, 4000)) {
+        this.status = 'Não consegue chegar à plantação';
+        this.idle = 2;
+        return;
+      }
+      this.farmJob = task;
+      this.state = 'toNode';
+      this.status = null;
+      return;
+    }
+    if (this.state === 'toNode') {
+      if (this.path.length > 0) {
+        this.walk(dt);
+        return;
+      }
+      this.state = 'working';
+      this.workTimer = 0;
+    }
+    const job = this.farmJob;
+    if (!job) {
+      this.state = 'idle';
+      return;
+    }
+    this.status = job.kind === 'plant' ? 'Plantando' : 'Colhendo';
+    this.faceTile(job.tile);
+    this.animateWork(dt);
+    this.workTimer += dt * this.workRate('farming');
+    if (this.workTimer < 3) return;
+    const food = world.farmDo(this, farm, job);
+    if (food > 0) {
+      this.carrying = { resource: 'meat', n: load + food };
+      this.updateCarryIcon();
+    }
+    this.farmJob = null;
+    this.state = 'idle';
+  }
+
   /** True when standing at building `b` (used for smiths' presence). */
   isAt(b: Building): boolean {
     return this.isNextTo(b) && !this.indoors;
@@ -752,6 +827,10 @@ export class Npc {
     }
     this.tool = tool;
     this.holding = job.skill === 'combat' ? (this.data.weapon ?? null) : tool === 'none' ? null : tool;
+    if (job.skill === 'farming') {
+      this.farm(dt, world, workplace);
+      return;
+    }
     if (job.skill === 'smithing') {
       this.smith(dt, world, workplace);
       return;

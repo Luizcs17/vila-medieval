@@ -8,6 +8,7 @@ import { jobTitle, type NpcData, productivity, SKILL_LABEL, stars } from '../gam
 import { buildingStorage, type Storage, villageStorage } from '../game/storage';
 import { ensurePersonTextures } from '../gfx/people';
 import type { WorldScene } from '../scenes/WorldScene';
+import { Obj } from '../world/map';
 
 const W = 460;
 const PAD = 16;
@@ -373,6 +374,45 @@ export class BuildingPanelUI {
         }),
       );
       y += 30;
+    }
+    if (b.type === 'farm' && b.built) {
+      const plot = b.plot;
+      const objs = this.world.map.objects;
+      const n = plot?.tiles.length ?? 0;
+      const growing = plot?.tiles.filter((i) => objs[i] === Obj.Crop).length ?? 0;
+      const ripe = plot?.tiles.filter((i) => objs[i] === Obj.CropRipe).length ?? 0;
+      items.push(
+        s.add.text(
+          PAD,
+          y,
+          n === 0
+            ? 'Sem área de plantio.'
+            : `Plantação ${n} quadrados · ${growing} crescendo · ${ripe} prontos · ${n - growing - ripe} vazios`,
+          { ...TEXT, fontSize: '12px', color: '#cdb98e' },
+        ),
+        s.add.text(PAD, y + 18, `Sementes: ${this.world.farmSeeds(b)} (fazenda + estoque). Colhe em 3 dias.`, {
+          ...TEXT,
+          fontSize: '11px',
+          color: '#a8977a',
+        }),
+      );
+      y += 40;
+      const plotBtn = s.add.rectangle(PAD, y, 220, 28, 0x2c4a2a, 1).setOrigin(0).setStrokeStyle(1, 0x8a6a3a);
+      plotBtn.setInteractive({ useHandCursor: true }).on('pointerdown', () => {
+        const farm = b;
+        this.close();
+        this.world.startPlot(farm);
+      });
+      items.push(
+        plotBtn,
+        s.add
+          .text(PAD + 110, y + 14, n === 0 ? 'Definir área de plantio' : 'Redefinir área de plantio', {
+            ...TEXT,
+            fontSize: '12px',
+          })
+          .setOrigin(0.5),
+      );
+      y += 38;
     }
     // Every building has its own inventory.
     const inv = s.add.rectangle(PAD, y, 170, 28, 0x3a3228, 1).setOrigin(0).setStrokeStyle(1, 0x8a6a3a);

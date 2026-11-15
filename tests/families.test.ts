@@ -138,7 +138,7 @@ describe('children', () => {
 
   it('inherited skills stay near the parents’ average', () => {
     const rng = seeded(8);
-    const five = { woodcutting: 5, stonework: 5, mining: 5, hunting: 5, combat: 5, diplomacy: 5, smithing: 5 };
+    const five = { woodcutting: 5, stonework: 5, mining: 5, hunting: 5, combat: 5, diplomacy: 5, smithing: 5, farming: 5 };
     for (let i = 0; i < 20; i++)
       for (const v of Object.values(inheritSkills(rng, five, five))) expect(v).toBeGreaterThanOrEqual(4);
   });

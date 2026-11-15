@@ -1,4 +1,5 @@
 import { Ground, inBounds, Obj, tileIndex, type WorldMap } from '../world/map';
+import type { Plot } from './farms';
 import type { Amounts, Resource } from './inventory';
 import type { ItemId, ToolId } from './items';
 import type { Skill } from './npcs';
@@ -34,7 +35,8 @@ export type BuildingType =
   | 'claim'
   | 'road'
   | 'market'
-  | 'smithy';
+  | 'smithy'
+  | 'farm';
 
 export interface BuildingDef {
   name: string;
@@ -236,6 +238,17 @@ export const BUILDING_DEFS: Record<BuildingType, BuildingDef> = {
     maxHp: 120,
     job: { skill: 'smithing', slots: 2, nodes: [], radius: 0, title: { f: 'Ferreira', m: 'Ferreiro' } },
   },
+  farm: {
+    claim: 4,
+    name: 'Fazenda',
+    size: 2,
+    cost: { wood: 20, stone: 5 },
+    buildSeconds: 18,
+    description: 'Defina a área de plantio (até 5×5 de grama); o fazendeiro planta sementes e colhe.',
+    buildable: true,
+    maxHp: 100,
+    job: { skill: 'farming', slots: 2, nodes: [], radius: 0, title: { f: 'Fazendeira', m: 'Fazendeiro' } },
+  },
   home: {
     claim: 3,
     maxHp: 120,
@@ -329,12 +342,14 @@ export interface Building {
   paid?: boolean;
   /** A "missing materials" toast was already shown for the current item. */
   blockedNotice?: boolean;
+  /** Farm: its planting area and crops. */
+  plot?: Plot;
 }
 
 export type PlaceCheck = { ok: true } | { ok: false; reason: string };
 
 /** Objects a building can be placed over (they get cleared). */
-const CLEARABLE = new Set<Obj>([Obj.None, Obj.Stump, Obj.Sapling, Obj.Road]);
+const CLEARABLE = new Set<Obj>([Obj.None, Obj.Stump, Obj.Sapling, Obj.Road, Obj.Grass]);
 
 /** All buildings and construction sites, and which tiles they cover. */
 export class Buildings {

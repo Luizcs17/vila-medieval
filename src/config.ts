@@ -74,6 +74,8 @@ export const QUICK_ORDER_RADIUS = 15;
 export const BUILDER_RATE = 0.4;
 /** …at construction sites of their village up to this far away. */
 export const BUILDER_RANGE = 40;
+/** Chance a grass tuft gives a seed when gathered. */
+export const SEED_CHANCE = 0.12;
 
 /** Combat and animals. Damage/HP are in hit points. */
 export const PLAYER_MAX_HP = 10;

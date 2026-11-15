@@ -1,3 +1,4 @@
+import { SEED_CHANCE } from '../config';
 import { inBounds, Obj, tileCenter, tileIndex, type WorldMap } from '../world/map';
 import type { Resource } from './inventory';
 
@@ -11,8 +12,10 @@ export interface NodeDef {
   depletesTo: Obj;
   /** Game seconds until a depleted node grows back (trees pass through a sapling stage at half time). */
   regrowSeconds: number;
-  /** Which tool speeds this up; `needsTool` means bare hands can't do it. */
-  tool: 'axe' | 'pick';
+  /** Which tool speeds this up (none: bare hands); `needsTool` means bare hands can't do it. */
+  tool?: 'axe' | 'pick';
+  /** Each unit only gives the resource with this chance (grass rarely gives a seed). */
+  chance?: number;
   needsTool?: boolean;
   /** UI words, e.g. "Cortar árvore". */
   verb: string;
@@ -62,6 +65,16 @@ export const NODE_DEFS: Partial<Record<Obj, NodeDef>> = {
     verb: 'Minerar',
     name: 'ferro',
   },
+  [Obj.Grass]: {
+    resource: 'seed',
+    amount: 1,
+    secondsPerUnit: 0.6,
+    depletesTo: Obj.None,
+    regrowSeconds: 480,
+    chance: SEED_CHANCE,
+    verb: 'Arrancar',
+    name: 'grama',
+  },
 };
 
 export interface Regrowth {
@@ -75,7 +88,8 @@ export interface Regrowth {
 const REGROW_STAGES = new Set<Obj>([Obj.None, Obj.Stump, Obj.Sapling]);
 
 export interface HarvestResult {
-  resource: Resource;
+  /** Null when a chancy node (grass) gave nothing this time. */
+  resource: Resource | null;
   depleted: boolean;
   /** The tile's object after harvesting (changes only when depleted). */
   obj: Obj;
@@ -100,18 +114,19 @@ export class ResourceNodes {
   }
 
   /** Takes one unit from the node at tile index `i`. Returns null if there is no node there. */
-  harvest(i: number): HarvestResult | null {
+  harvest(i: number, rng: () => number = Math.random): HarvestResult | null {
     const def = NODE_DEFS[this.map.objects[i]];
     if (!def) return null;
+    const resource = def.chance === undefined || rng() < def.chance ? def.resource : null;
     const left = this.remainingAt(i) - 1;
     if (left > 0) {
       this.remaining.set(i, left);
-      return { resource: def.resource, depleted: false, obj: this.map.objects[i] };
+      return { resource, depleted: false, obj: this.map.objects[i] };
     }
     this.remaining.delete(i);
     this.regrowing.push({ i, original: this.map.objects[i], timeLeft: def.regrowSeconds, total: def.regrowSeconds });
     this.map.objects[i] = def.depletesTo;
-    return { resource: def.resource, depleted: true, obj: def.depletesTo };
+    return { resource, depleted: true, obj: def.depletesTo };
   }
 
   /**

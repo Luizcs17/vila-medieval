@@ -58,7 +58,7 @@ export const TRAITS: Record<TraitId, { name: string; description: string; positi
 
 // ---------- skills (rated 1–5 stars) ----------
 
-export const SKILLS = ['woodcutting', 'stonework', 'mining', 'hunting', 'combat', 'diplomacy', 'smithing'] as const;
+export const SKILLS = ['woodcutting', 'stonework', 'mining', 'hunting', 'combat', 'diplomacy', 'smithing', 'farming'] as const;
 export type Skill = (typeof SKILLS)[number];
 export type Skills = Record<Skill, number>;
 
@@ -70,6 +70,7 @@ export const SKILL_LABEL: Record<Skill, string> = {
   combat: 'Combate',
   diplomacy: 'Diplomacia',
   smithing: 'Forja',
+  farming: 'Agricultura',
 };
 
 /** The trait that gives +50% in each skill's job. */
@@ -339,7 +340,12 @@ export class Population {
 
   restore(s: PopulationSnapshot): void {
     this.npcs.length = 0;
-    for (const n of s.npcs) this.npcs.push(structuredClone(n));
+    for (const n of s.npcs) {
+      const copy = structuredClone(n);
+      // Saves from before farming: everyone gets an average rating in the new skill.
+      if (copy.skills.farming === undefined) copy.skills.farming = 2;
+      this.npcs.push(copy);
+    }
     this.nextId = s.nextId;
     this.deceased = structuredClone(s.deceased ?? []);
     this.playerPartnerId = s.playerPartnerId ?? null;

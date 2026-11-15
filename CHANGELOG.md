@@ -2,6 +2,15 @@
 
 Each milestone from `docs/GDD.md` is a minor version.
 
+## 1.19.0: Milestone 29, farms, grass and seeds
+
+- Grass tufts are spread over the map (old saves get them too). Pulling one with E rarely gives a **seed** (12%), a new resource, and the tuft grows back in a day.
+- New building **Fazenda** (20 wood, 5 stone) with a new job and skill, Fazendeiro/Fazendeira and Agricultura. Everyone in old saves gets 2 stars in it.
+- Its panel has "Definir área de plantio": drag the mouse over grass (not sand, stone ground, water or anything in the way) near the farm, up to 5×5. Tiles turn into tilled fields and count as your village's territory. Redefining the area drops fields that are left out.
+- The farmer plants a seed on each empty field (seeds come from the farm's inventory first, then the village stock). After 3 days the crop is ripe; the farmer harvests it: 1 food (the same "Carne" that feeds the village, for now) carried to the stock, and 1 seed (15% chance of 2) kept in the farm to replant. You can also harvest a ripe crop yourself with E.
+- Demolishing or losing the farm turns its fields back into plain ground.
+- Carried weight is shown to one decimal (a seed weighs 0.2 kg).
+
 ## 1.18.0: Milestone 28, switching companions and villagers, idle builders
 
 - Companions no longer become villagers when you claim land. Their card has "Morar na vila": they move into a free bed in the village you're standing in (build a house first).
