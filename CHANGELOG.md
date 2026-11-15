@@ -2,6 +2,13 @@
 
 Each milestone from `docs/GDD.md` is a minor version.
 
+## 1.16.0: Milestone 26, orders and stances
+
+- Your companions and soldiers take individual orders from their card (E on them): "Siga-me", "Fique aqui", "Vá até…" (then click a spot on the map; right click cancels) and "Liberar" (back to the default: companions follow you, soldiers guard their barracks). A direct order also calls a soldier back from a raid.
+- Stance, also on the card: Defensivo (fights only what comes right up to them, stays near the spot), Neutro (the default: faces nearby threats) and Agressivo (chases any enemy further and hunts any animal in range).
+- G calls everyone of yours nearby (companions and soldiers within 15 tiles) to follow you. G again dismisses them back to their defaults.
+- The NPC card no longer draws the last skill (Forja) over "Traços".
+
 ## 1.15.0: Milestone 25, trading in person and companions
 
 - Talk (E) to someone from another village: their card has "Comerciar". The trade window lists what their village sells and what you carry that it would buy, at its market prices (supply moves them), paid with your coins. Worn tools sell for less. Not with villages at war with you.

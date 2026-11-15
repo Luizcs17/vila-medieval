@@ -14,6 +14,7 @@ import { BUILDING_DEFS, type Building, type Buildings } from './buildings';
 import { type Amounts, type Inventory, RESOURCE_LABEL, RESOURCES } from './inventory';
 import { ITEM_DEFS, type ToolId } from './items';
 import { type Look, randomLook } from './looks';
+import type { Command, Stance } from './orders';
 import type { SlotInventory } from './slots';
 
 export type Rng = () => number;
@@ -213,6 +214,10 @@ export interface NpcData {
   armor?: ToolId | null;
   /** Soldiers on campaign: attack village `target`. */
   order: { kind: 'raid'; target: number } | null;
+  /** The player's order to a companion or soldier (follow me, hold a spot); null = default behaviour. */
+  command?: Command | null;
+  /** How eagerly they fight (default neutral). */
+  stance?: Stance;
   /** Game seconds spent at zero satiety. */
   starving: number;
   /** Game time (clock seconds) when a wanderer gives up and leaves. */
@@ -473,6 +478,7 @@ export class Population {
 
   unassign(npc: NpcData): void {
     npc.jobId = null;
+    npc.command = null;
   }
 }
 
