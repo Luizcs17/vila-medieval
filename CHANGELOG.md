@@ -2,6 +2,13 @@
 
 Each milestone from `docs/GDD.md` is a minor version.
 
+## 1.9.0: Milestone 19, hunters, nights indoors and demolition
+
+- Fix: hunters now actually bring meat. They search 24 tiles around the hut (was 14, while animals spawn 14+ tiles from villages), shoot from 6 tiles (farther than deer and rabbits bolt) and arrows deal 2 damage. In a 2-day test with natural wildlife, two hunters delivered 11 meat.
+- Villagers (not soldiers, not travelling diplomats/merchants) go inside their house at night and come out at dawn; they also take shelter inside when fleeing a predator, and stay in while it's near. People indoors are hidden and can't be attacked.
+- Demolition: X or the "Demolir" button in the B menu. Point at one of your buildings and click twice to demolish it: unfinished sites refund everything, finished buildings half. Residents and workers lose their house/job, territory is recomputed. The hall can't be demolished. Roads are removed with one click (1 stone back).
+- The B menu now uses two columns.
+
 ## 1.8.1: Dev and prod servers
 
 - `npm run prod` serves a stable build on http://localhost:4173 from a separate copy of the project (git worktree at `main`), so the game can be played while development continues on http://localhost:5173. `npm run prod:update` moves it to the latest `main` and rebuilds it. Prod and dev keep separate save games.

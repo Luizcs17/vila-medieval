@@ -24,7 +24,7 @@ import {
 import type { Animal, Human } from '../entities/Animal';
 import { Npc, type NpcWorld, type Target } from '../entities/Npc';
 import { Player } from '../entities/Player';
-import { BUILDING_DEFS, type Building, Buildings, type BuildingType, type PlaceCheck } from '../game/buildings';
+import { BUILDING_DEFS, type Building, Buildings, type BuildingType, demolitionRefund, type PlaceCheck } from '../game/buildings';
 import { type CraftCheck, craft } from '../game/crafting';
 import {
   ALLIANCE_MIN,
@@ -51,6 +51,7 @@ import {
   Population,
   payFrom,
   pickSpawnTile,
+  describeCost as summarizeCost,
   WandererSpawner,
 } from '../game/npcs';
 import { PER_LEVEL, PlayerStats, XP } from '../game/player';
@@ -262,6 +263,10 @@ export class WorldScene extends Phaser.Scene {
     this.panelBuilding = null;
     this.inventoryOpen = false;
     this.modalOpen = false;
+    this.demolishing = false;
+    this.demolishHint = null;
+    this.demolishPick = null;
+    this.demolishArmed = null;
     this.selectedHotbar = 0;
     this.fastForward = false;
     this.attackCd = 0;
@@ -536,7 +541,8 @@ export class WorldScene extends Phaser.Scene {
     if (!frozen && !this.placement && Phaser.Input.Keyboard.JustDown(k.SPACE)) this.attack();
     if (!frozen && Phaser.Input.Keyboard.JustDown(k.F)) this.eat();
     this.selection.clear();
-    if (this.placement) this.updatePlacement();
+    if (this.demolishing) this.updateDemolish();
+    else if (this.placement) this.updatePlacement();
     else this.updateInteraction(dt, x !== 0 || y !== 0);
     this.updateDefenses(worldDt);
     this.drawBuildingHealth();
@@ -551,7 +557,7 @@ export class WorldScene extends Phaser.Scene {
   private humans(): Human[] {
     const list: Human[] = [{ kind: 'player', id: 0, gx: this.player.gx, gy: this.player.gy }];
     for (const n of this.npcs.values())
-      if (n.data.role === 'villager') list.push({ kind: 'npc', id: n.data.id, gx: n.gx, gy: n.gy });
+      if (n.data.role === 'villager' && !n.indoors) list.push({ kind: 'npc', id: n.data.id, gx: n.gx, gy: n.gy });
     return list;
   }
 
@@ -1056,7 +1062,8 @@ export class WorldScene extends Phaser.Scene {
       bestD = Math.hypot(a.data.gx - gx, a.data.gy - gy);
     }
     for (const n of this.npcs.values()) {
-      if (n.data.role !== 'villager' || !this.atWar(faction, n.data.faction) || this.missions.has(n.data.id)) continue;
+      if (n.data.role !== 'villager' || n.indoors || !this.atWar(faction, n.data.faction) || this.missions.has(n.data.id))
+        continue;
       const d = Math.hypot(n.gx - gx, n.gy - gy);
       if (d < bestD) {
         bestD = d;
@@ -1294,6 +1301,7 @@ export class WorldScene extends Phaser.Scene {
     let best: Npc | null = null;
     let bestD = NPC_REACH;
     for (const npc of this.npcs.values()) {
+      if (npc.indoors) continue;
       const d = Math.hypot(npc.gx - this.player.gx, npc.gy - this.player.gy);
       if (d <= bestD) {
         bestD = d;
@@ -1328,6 +1336,120 @@ export class WorldScene extends Phaser.Scene {
     this.events.emit('toast', { text, color } satisfies ToastEvent);
   }
 
+  // ---------- demolition (driven by UIScene) ----------
+
+  /** Demolish mode is on (X or the button in the B menu). */
+  demolishing = false;
+  /** What the cursor would demolish, for the UI hint. */
+  demolishHint: { text: string; ok: boolean } | null = null;
+  private demolishPick: { building?: Building; road?: number } | null = null;
+  private demolishArmed: { key: string; until: number } | null = null;
+
+  startDemolish(): void {
+    this.cancelPlacing();
+    this.demolishing = true;
+    this.interaction = null;
+  }
+
+  cancelDemolish(): void {
+    this.demolishing = false;
+    this.demolishHint = null;
+    this.demolishPick = null;
+    this.demolishArmed = null;
+  }
+
+  /** Finds your building or road under the cursor and outlines it. */
+  private updateDemolish(): void {
+    const ptr = this.input.activePointer;
+    const world = this.cameras.main.getWorldPoint(ptr.x, ptr.y);
+    const g = screenToGrid(world.x, world.y);
+    const tx = Math.floor(g.x);
+    const ty = Math.floor(g.y);
+    this.demolishPick = null;
+    this.demolishHint = { text: 'Aponte para um prédio ou estrada seu', ok: false };
+    if (tx < 0 || ty < 0 || tx >= this.map.w || ty >= this.map.h) return;
+    const i = tileIndex(this.map, tx, ty);
+    const b = this.buildings.at(i);
+    if (b) {
+      const def = BUILDING_DEFS[b.type];
+      this.drawFootprint(b.tx, b.ty, def.size, 0xff6040);
+      if (b.faction !== PLAYER_FACTION) this.demolishHint = { text: 'Não é seu', ok: false };
+      else if (b.type === 'stockpile') this.demolishHint = { text: 'O Salão não pode ser demolido', ok: false };
+      else {
+        this.demolishPick = { building: b };
+        const armed = this.demolishArmed?.key === `b${b.id}` && this.demolishArmed.until > this.time.now;
+        const refund = summarizeCost(this.refundFor(b));
+        this.demolishHint = {
+          text: armed ? `Clique de novo para demolir ${def.name}` : `Demolir ${def.name}${refund ? ` (devolve ${refund})` : ''}`,
+          ok: true,
+        };
+      }
+      return;
+    }
+    if (
+      this.map.objects[i] === Obj.Road &&
+      this.territory.ownerAt(tx, ty) !== -1 &&
+      this.territory.ownerAt(tx, ty) !== PLAYER_FACTION
+    ) {
+      this.demolishHint = { text: 'Estrada no território de outra vila', ok: false };
+      return;
+    }
+    if (this.map.objects[i] === Obj.Road) {
+      this.drawFootprint(tx, ty, 1, 0xff6040);
+      this.demolishPick = { road: i };
+      this.demolishHint = { text: 'Remover estrada (devolve 1 pedra)', ok: true };
+    }
+  }
+
+  /** What demolishing gives back: everything for an unfinished site, half for a finished building. */
+  private refundFor(b: Building): Partial<Record<Resource, number>> {
+    return demolitionRefund(b);
+  }
+
+  /** Click in demolish mode: the first click arms, a second click on the same thing within 4 s demolishes. */
+  tryDemolish(): void {
+    const pick = this.demolishPick;
+    if (!pick) return;
+    const key = pick.building ? `b${pick.building.id}` : `r${pick.road}`;
+    if (pick.road !== undefined) {
+      // Roads are cheap: no confirmation.
+      this.map.objects[pick.road] = Obj.None;
+      this.replaceObjectImage(pick.road);
+      this.stockpile.add('stone', 1);
+      return;
+    }
+    if (this.demolishArmed?.key !== key || this.demolishArmed.until < this.time.now) {
+      this.demolishArmed = { key, until: this.time.now + 4000 };
+      return;
+    }
+    this.demolishArmed = null;
+    this.demolish(pick.building!);
+  }
+
+  /** Tears down one of your buildings: refunds materials, frees its people, recomputes territory. */
+  demolish(b: Building): void {
+    if (b.type === 'stockpile' || b.faction !== PLAYER_FACTION) return;
+    const def = BUILDING_DEFS[b.type];
+    const refund = this.refundFor(b);
+    for (const r of RESOURCES) this.stockpile.add(r, refund[r] ?? 0);
+    for (const n of this.population.npcs) {
+      if (n.homeId === b.id) n.homeId = null;
+      if (n.jobId === b.id) {
+        n.jobId = null;
+        n.order = null;
+      }
+    }
+    const view = this.buildingViews.get(b.id);
+    view?.img.destroy();
+    view?.sign?.destroy();
+    this.buildingViews.delete(b.id);
+    this.buildings.remove(b);
+    for (const i of this.buildings.footprint(b.type, b.tx, b.ty)) this.replaceObjectImage(i);
+    this.territory.recompute(this.buildings.list);
+    const back = summarizeCost(refund);
+    this.toast(`${def.name} demolida${back ? `: voltaram ${back}` : ''}.`, '#cdb98e');
+  }
+
   // ---------- build mode (driven by UIScene) ----------
 
   startPlacing(type: BuildingType): void {
@@ -1337,6 +1459,7 @@ export class WorldScene extends Phaser.Scene {
   }
 
   cancelPlacing(): void {
+    if (this.demolishing) this.cancelDemolish();
     this.placement = null;
     this.ghost.setVisible(false);
   }
