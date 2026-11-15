@@ -113,7 +113,7 @@ export class UIScene extends Phaser.Scene {
     for (const r of RESOURCES) {
       this.add.image(x, 26, `icon_${r}`).setScale(2).setOrigin(0, 0.5);
       this.counts[r] = this.add.text(x + 20, 26, '', TEXT).setOrigin(0, 0.5);
-      x += r === 'meat' ? 170 : 116; // meat also shows days of food left
+      x += r === 'meat' ? 170 : r === 'seed' ? 124 : 112; // meat also shows days of food left
     }
     this.add.image(x, 26, 'icon_person').setScale(2).setOrigin(0, 0.5);
     this.popText = this.add.text(x + 20, 26, '', TEXT).setOrigin(0, 0.5);
@@ -289,6 +289,7 @@ export class UIScene extends Phaser.Scene {
           this.crafting.isOpen ||
           this.world.placement !== null ||
           this.world.commandPick !== null ||
+          this.world.plotFarm !== null ||
           this.world.demolishing;
         if (!anyOpen) this.pause.open();
         if (this.inventory.isOpen) this.toggleInventory();
@@ -312,6 +313,11 @@ export class UIScene extends Phaser.Scene {
         else this.world.tryCommandPick();
         return;
       }
+      if (this.world.plotFarm) {
+        if (p.rightButtonDown()) this.world.cancelPlot();
+        else this.world.plotPointerDown();
+        return;
+      }
       if (!this.world.placement) {
         if (p.leftButtonDown()) this.world.clickAttack();
         return;
@@ -319,6 +325,8 @@ export class UIScene extends Phaser.Scene {
       if (p.rightButtonDown()) this.world.cancelPlacing();
       else this.world.tryPlace();
     });
+
+    this.input.on('pointerup', () => this.world.plotPointerUp());
 
     this.world.events.on('popup', (e: PopupEvent) => {
       const text = this.add
@@ -447,6 +455,15 @@ export class UIScene extends Phaser.Scene {
       this.placeHint
         .setText(`${dh.text}   ·   Direito/Esc: sair`)
         .setColor(dh.ok ? '#ffb090' : '#a8977a')
+        .setPosition(Math.round(ptr0.x + 16), Math.round(ptr0.y + 16))
+        .setVisible(true);
+      return;
+    }
+    const ph = this.world.plotHint;
+    if (this.world.plotFarm && ph) {
+      this.placeHint
+        .setText(ph.text)
+        .setColor(ph.ok ? '#c8ffc8' : '#ff9a8a')
         .setPosition(Math.round(ptr0.x + 16), Math.round(ptr0.y + 16))
         .setVisible(true);
       return;

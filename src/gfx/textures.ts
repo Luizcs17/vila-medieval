@@ -287,6 +287,10 @@ const ICON_ROWS: Record<string, { rows: string[]; palette: Record<string, string
     rows: ['........', '.k.kk.k.', 'kllllllk', '.klLlLk.', '.kllllk.', 'kllLlllk', '.k.kk.k.', '........'],
     palette: { k: '#2b1d14', l: '#a0683a', L: '#7a4c28' },
   },
+  icon_seed: {
+    rows: ['........', '...kk...', '..kssk..', '.ksSsk..', '.kssSk..', '..kssk..', '...kk...', '........'],
+    palette: { k: '#2b1d14', s: '#d8b860', S: '#a8842a' },
+  },
   icon_leather_armor: {
     rows: ['.kk..kk.', 'kllkkllk', 'klllllLk', '.kllllk.', '.klLLlk.', '.kllllk.', '.kllllk.', '..kkkk..'],
     palette: { k: '#2b1d14', l: '#9a6236', L: '#6e4424' },
@@ -613,6 +617,18 @@ export function createPlaceholderTextures(scene: Phaser.Scene): void {
     door: true,
     window: true,
   });
+  // The farm: a red barn with a dark shingle roof.
+  isoBuilding(scene, 'bld_farm', 2, {
+    timber: true,
+    roof: 'plank',
+    wallL: '#8a3a2a',
+    wallR: '#6e2e22',
+    roofL: '#4a3a2a',
+    roofR: '#3a2d20',
+    wallH: 16,
+    roofH: 22,
+    door: true,
+  });
   isoBuilding(scene, 'bld_lumberjack', 2, {
     roof: 'plank',
     wallL: '#5e4126',
@@ -747,6 +763,29 @@ export function createPlaceholderTextures(scene: Phaser.Scene): void {
       return cobble[(row * 7 + col * 3 + Math.floor(r() * 2)) % cobble.length];
     });
   }
+  // Farm fields lie flat like roads: tilled soil, sprouting crop, ripe golden crop.
+  {
+    const soil = ['#4a3424', '#3f2c1e', '#553c29'].map(hex);
+    const sprout = ['#5f9a3e', '#7cc25a'].map(hex);
+    const grain = ['#c9a23a', '#e0bd52', '#a8842a'].map(hex);
+    const r = rng(91);
+    const field = (key: string, plant: RGB[] | null, density: number) =>
+      paint(scene, key, TILE_W, TILE_H, (x, y) => {
+        const d = inDiamond(x, y);
+        if (d > 1.0) return null;
+        const furrow = (x + 2 * y) % 6 < 2; // diagonal furrows
+        if (plant && !furrow && r() < density) return plant[Math.floor(r() * plant.length)];
+        return furrow ? soil[1] : soil[(x + y) % 3 === 0 ? 2 : 0];
+      });
+    field('field', null, 0);
+    field('crop', sprout, 0.35);
+    field('crop_ripe', grain, 0.75);
+  }
+  fromRows(scene, 'grass_tuft', ['........', '..k..k..', '.klk.lk.', '.kglkgk.', 'kgllglk.', '.kgggk..'], {
+    k: '#1c2b14',
+    l: '#8ad06a',
+    g: '#4c8a3b',
+  });
   fromRows(scene, 'sapling', ['...kk...', '..kllk..', '.kllgk..', '.kglggk.', '..kgggk.', '...kbk..', '..kbbk..', '.kkkkkk.'], {
     k: '#1c2b14',
     l: '#7cc25a',

@@ -23,6 +23,12 @@ export enum Obj {
   Gate,
   /** Cobbled road: walkable, faster to travel, preferred by pathfinding. */
   Road,
+  /** A grass tuft: gathering it sometimes gives a seed. Walkable. */
+  Grass,
+  /** A farm's tilled soil, a growing crop, a ripe crop. Walkable. */
+  Field,
+  Crop,
+  CropRipe,
 }
 
 /** Objects that block movement. Anything not listed here can be walked over. */
@@ -130,6 +136,7 @@ export function generateMap(seed = MAP_SEED, w = MAP_W, h = MAP_H): WorldMap {
       if (forest > 0.55 && r < 0.6) objects[i] = forest > 0.66 ? Obj.Pine : Obj.Tree;
       else if (r < 0.025) objects[i] = Obj.Tree;
       else if (r < 0.032) objects[i] = Obj.Rock;
+      else if (r < 0.09) objects[i] = Obj.Grass;
     }
   }
 

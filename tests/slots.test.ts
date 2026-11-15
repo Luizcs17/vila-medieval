@@ -34,7 +34,7 @@ describe('SlotInventory', () => {
     const inv = new SlotInventory(4, 2);
     inv.add('wood', 3);
     inv.add('iron', 2);
-    expect(inv.takeAllResources()).toEqual({ wood: 3, stone: 0, iron: 2, meat: 0, leather: 0 });
+    expect(inv.takeAllResources()).toEqual({ wood: 3, stone: 0, iron: 2, meat: 0, leather: 0, seed: 0 });
     expect(inv.slots.every((s) => s === null)).toBe(true);
   });
 

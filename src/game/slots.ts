@@ -40,7 +40,8 @@ export class SlotInventory {
 
   /** Total carried weight, in kg. */
   get weight(): number {
-    return this.slots.reduce((w, s) => w + (s ? s.count * ITEM_WEIGHT[s.item] : 0), 0);
+    const w = this.slots.reduce((sum, s) => sum + (s ? s.count * ITEM_WEIGHT[s.item] : 0), 0);
+    return Math.round(w * 10) / 10; // seeds weigh fractions of a kg
   }
 
   /** How many more units of `item` fit, by slots and by weight. */

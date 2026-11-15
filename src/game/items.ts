@@ -45,6 +45,7 @@ export const ITEM_DEFS: Record<ItemId, ItemDef> = {
   iron: { label: 'Ferro', weight: 4, maxStack: 20 },
   meat: { label: 'Carne', weight: 1, maxStack: 20 },
   leather: { label: 'Couro', weight: 1, maxStack: 20 },
+  seed: { label: 'Semente', weight: 0.2, maxStack: 50 },
   leather_armor: { label: 'Armadura de couro', weight: 4, maxStack: 1, armor: { reduction: 0.3, durability: 60 } },
   iron_armor: { label: 'Armadura de ferro', weight: 8, maxStack: 1, armor: { reduction: 0.55, durability: 150 } },
   stone_axe: { label: 'Machado de pedra', weight: 2, maxStack: 1, tool: { type: 'axe', speed: 1.6, damage: 2, durability: 80 } },

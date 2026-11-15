@@ -45,6 +45,12 @@ export class Territory {
         }
       }
     }
+    // A farm's planting area belongs to the farm's village.
+    for (const b of buildings)
+      for (const i of b.plot?.tiles ?? []) {
+        this.best[i] = 0;
+        this.owner[i] = b.faction;
+      }
   }
 
   /** Tiles owned by `faction`. */
