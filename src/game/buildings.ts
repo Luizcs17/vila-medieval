@@ -1,6 +1,6 @@
 import { Ground, inBounds, Obj, tileIndex, type WorldMap } from '../world/map';
 import type { Amounts, Resource } from './inventory';
-import type { ItemId } from './items';
+import type { ItemId, ToolId } from './items';
 import type { Skill } from './npcs';
 
 /** A workplace: villagers assigned here use `skill` on `nodes` within `radius` tiles. */
@@ -12,6 +12,8 @@ export interface JobDef {
   radius: number;
   /** Job title, gendered. */
   title: { f: string; m: string };
+  /** Tools a worker needs in the building's inventory (one per worker), best first. */
+  tools?: ToolId[];
 }
 
 export type BuildingType =
@@ -28,7 +30,8 @@ export type BuildingType =
   | 'barracks'
   | 'embassy'
   | 'road'
-  | 'market';
+  | 'market'
+  | 'smithy';
 
 export interface BuildingDef {
   name: string;
@@ -91,7 +94,14 @@ export const BUILDING_DEFS: Record<BuildingType, BuildingDef> = {
     near: { objs: [Obj.Tree, Obj.Pine], radius: 6, label: 'árvores' },
     buildable: true,
     sign: 'wood',
-    job: { skill: 'woodcutting', slots: 2, nodes: [Obj.Tree, Obj.Pine], radius: 9, title: { f: 'Lenhadora', m: 'Lenhador' } },
+    job: {
+      skill: 'woodcutting',
+      slots: 2,
+      nodes: [Obj.Tree, Obj.Pine],
+      radius: 9,
+      title: { f: 'Lenhadora', m: 'Lenhador' },
+      tools: ['iron_axe', 'stone_axe'],
+    },
   },
   quarry: {
     claim: 4,
@@ -104,7 +114,14 @@ export const BUILDING_DEFS: Record<BuildingType, BuildingDef> = {
     near: { objs: [Obj.Rock], radius: 6, label: 'pedras' },
     buildable: true,
     sign: 'stone',
-    job: { skill: 'stonework', slots: 2, nodes: [Obj.Rock], radius: 9, title: { f: 'Pedreira', m: 'Pedreiro' } },
+    job: {
+      skill: 'stonework',
+      slots: 2,
+      nodes: [Obj.Rock],
+      radius: 9,
+      title: { f: 'Pedreira', m: 'Pedreiro' },
+      tools: ['iron_pick', 'stone_pick'],
+    },
   },
   mine: {
     claim: 4,
@@ -117,7 +134,14 @@ export const BUILDING_DEFS: Record<BuildingType, BuildingDef> = {
     near: { objs: [Obj.Iron], radius: 6, label: 'ferro' },
     buildable: true,
     sign: 'iron',
-    job: { skill: 'mining', slots: 2, nodes: [Obj.Iron], radius: 9, title: { f: 'Mineira', m: 'Mineiro' } },
+    job: {
+      skill: 'mining',
+      slots: 2,
+      nodes: [Obj.Iron],
+      radius: 9,
+      title: { f: 'Mineira', m: 'Mineiro' },
+      tools: ['iron_pick', 'stone_pick'],
+    },
   },
   hunter: {
     claim: 4,
@@ -129,7 +153,7 @@ export const BUILDING_DEFS: Record<BuildingType, BuildingDef> = {
     description: 'Um aldeão aqui caça animais.',
     buildable: true,
     sign: 'meat',
-    job: { skill: 'hunting', slots: 2, nodes: [], radius: 24, title: { f: 'Caçadora', m: 'Caçador' } },
+    job: { skill: 'hunting', slots: 2, nodes: [], radius: 24, title: { f: 'Caçadora', m: 'Caçador' }, tools: ['spear'] },
   },
   depot: {
     claim: 5,
@@ -198,6 +222,17 @@ export const BUILDING_DEFS: Record<BuildingType, BuildingDef> = {
     maxHp: 120,
     job: { skill: 'diplomacy', slots: 2, nodes: [], radius: 0, title: { f: 'Mercadora', m: 'Mercador' } },
   },
+  smithy: {
+    claim: 4,
+    name: 'Ferreiro',
+    size: 2,
+    cost: { wood: 20, stone: 20 },
+    buildSeconds: 20,
+    description: 'Forja ferramentas, armas e armaduras numa fila de produção.',
+    buildable: true,
+    maxHp: 120,
+    job: { skill: 'smithing', slots: 2, nodes: [], radius: 0, title: { f: 'Ferreira', m: 'Ferreiro' } },
+  },
   road: {
     claim: 0,
     name: 'Estrada',
@@ -252,6 +287,15 @@ export interface Building {
   hp: number;
   /** The building's own inventory (tools for its workers, a smith's output, anything you leave there). */
   storage: Partial<Record<ItemId, number>>;
+  /** Uses taken off the tool its workers are wearing down. */
+  wear?: number;
+  /** Smithy: items waiting to be forged, and progress on the first. */
+  queue?: ToolId[];
+  craft?: number;
+  /** Smithy: whether the first item's materials were already taken. */
+  paid?: boolean;
+  /** A "missing materials" toast was already shown for the current item. */
+  blockedNotice?: boolean;
 }
 
 export type PlaceCheck = { ok: true } | { ok: false; reason: string };

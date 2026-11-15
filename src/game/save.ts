@@ -11,7 +11,9 @@ import type { Goods } from './trade';
 
 export const SAVE_KEY = 'vila-medieval-save';
 /** Bump when the shape changes; older saves are then ignored instead of half-loaded. */
-export const SAVE_VERSION = 6;
+export const SAVE_VERSION = 7;
+/** Oldest save that still loads (older ones are migrated on load). */
+export const MIN_SAVE_VERSION = 6;
 
 /** Everything needed to rebuild a game. The map layout itself comes from the fixed seed. */
 export interface SaveData {
@@ -72,7 +74,9 @@ export function isSaveData(x: unknown): x is SaveData {
   if (typeof x !== 'object' || x === null) return false;
   const d = x as Partial<SaveData>;
   return (
-    d.version === SAVE_VERSION &&
+    typeof d.version === 'number' &&
+    d.version >= MIN_SAVE_VERSION &&
+    d.version <= SAVE_VERSION &&
     typeof d.clock === 'number' &&
     Array.isArray(d.objects) &&
     Array.isArray(d.inventory) &&

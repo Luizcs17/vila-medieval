@@ -3,7 +3,10 @@ import { ITEM_DEFS, type ToolId } from './items';
 
 /** Anything caravans carry: raw materials and finished tools/weapons. */
 export type Good = Resource | ToolId;
-export const TOOL_GOODS = Object.keys(ITEM_DEFS).filter((k) => ITEM_DEFS[k as keyof typeof ITEM_DEFS].tool) as ToolId[];
+export const TOOL_GOODS = Object.keys(ITEM_DEFS).filter((k) => {
+  const d = ITEM_DEFS[k as keyof typeof ITEM_DEFS];
+  return d.tool || d.armor;
+}) as ToolId[];
 export const GOODS: Good[] = [...RESOURCES, ...TOOL_GOODS];
 export const isToolGood = (g: Good): g is ToolId => (TOOL_GOODS as string[]).includes(g);
 export const goodLabel = (g: Good) => ITEM_DEFS[g].label;
@@ -14,12 +17,15 @@ export const BASE_PRICE: Record<Good, number> = {
   stone: 3,
   iron: 8,
   meat: 3,
+  leather: 5,
   stone_axe: 12,
   stone_pick: 14,
   spear: 12,
   iron_axe: 30,
   iron_pick: 30,
   iron_sword: 40,
+  leather_armor: 35,
+  iron_armor: 90,
 };
 
 /** How much of a good a village wants to keep around; prices rise below it and fall above. */

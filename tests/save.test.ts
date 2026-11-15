@@ -25,7 +25,7 @@ function sampleSave(): SaveData {
     objects: [...map.objects],
     nodes: { remaining: [], regrowing: [] },
     buildings: { list: [], nextId: 1 },
-    stockpile: { wood: 5, stone: 0, iron: 0, meat: 2 },
+    stockpile: { wood: 5, stone: 0, iron: 0, meat: 2, leather: 0 },
     factions: [],
     inventory: [{ item: 'stone_axe', count: 1, durability: 40 }, null],
     selectedHotbar: 0,

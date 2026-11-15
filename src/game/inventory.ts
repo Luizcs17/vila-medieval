@@ -1,4 +1,4 @@
-export const RESOURCES = ['wood', 'stone', 'iron', 'meat'] as const;
+export const RESOURCES = ['wood', 'stone', 'iron', 'meat', 'leather'] as const;
 export type Resource = (typeof RESOURCES)[number];
 
 export const RESOURCE_LABEL: Record<Resource, string> = {
@@ -6,12 +6,13 @@ export const RESOURCE_LABEL: Record<Resource, string> = {
   stone: 'Pedra',
   iron: 'Ferro',
   meat: 'Carne',
+  leather: 'Couro',
 };
 
 export type Amounts = Record<Resource, number>;
 
 export function emptyAmounts(): Amounts {
-  return { wood: 0, stone: 0, iron: 0, meat: 0 };
+  return { wood: 0, stone: 0, iron: 0, meat: 0, leather: 0 };
 }
 
 /** A bag of resources with an optional total capacity (the player's backpack, the central stockpile). */

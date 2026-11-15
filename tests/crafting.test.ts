@@ -37,7 +37,10 @@ describe('crafting', () => {
   });
 
   it('has a recipe for every tool and weapon', () => {
-    const tools = Object.keys(ITEM_DEFS).filter((i) => ITEM_DEFS[i as keyof typeof ITEM_DEFS].tool);
+    const tools = Object.keys(ITEM_DEFS).filter((i) => {
+      const d = ITEM_DEFS[i as keyof typeof ITEM_DEFS];
+      return d.tool || d.armor; // every piece of gear can be made
+    });
     expect(RECIPES.map((r) => r.item).sort()).toEqual(tools.sort());
   });
 });

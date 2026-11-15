@@ -1,7 +1,7 @@
 import type { Building } from './buildings';
 import type { Faction } from './factions';
 import { RESOURCES, type Resource } from './inventory';
-import { ALL_ITEMS, ITEM_DEFS, type ItemId, type ToolId } from './items';
+import { ALL_ITEMS, type ItemId, maxDurability, type ToolId } from './items';
 import type { SlotInventory } from './slots';
 
 /**
@@ -77,8 +77,8 @@ export function takeFrom(s: Storage, inv: SlotInventory, item: ItemId, n: number
  * Returns how many moved.
  */
 export function putInto(s: Storage, inv: SlotInventory, item: ItemId, n: number): number {
-  const tool = ITEM_DEFS[item].tool;
-  if (!tool) {
+  const wear = maxDurability(item);
+  if (wear === undefined) {
     const k = inv.remove(item, Math.min(n, inv.count(item))); // n may be Infinity ("everything")
     s.add(item, k);
     return k;
@@ -86,7 +86,7 @@ export function putInto(s: Storage, inv: SlotInventory, item: ItemId, n: number)
   let moved = 0;
   inv.slots.forEach((slot, i) => {
     if (moved >= n || slot?.item !== item) return;
-    if ((slot.durability ?? tool.durability) < tool.durability * STORE_MIN_DURABILITY) return;
+    if ((slot.durability ?? wear) < wear * STORE_MIN_DURABILITY) return;
     inv.slots[i] = null;
     s.add(item, 1);
     moved++;

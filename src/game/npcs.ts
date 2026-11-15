@@ -11,6 +11,7 @@ import {
 import { isWalkable, type WorldMap } from '../world/map';
 import { BUILDING_DEFS, type Building, type Buildings } from './buildings';
 import { type Amounts, type Inventory, RESOURCE_LABEL, RESOURCES } from './inventory';
+import { ITEM_DEFS, type ToolId } from './items';
 import { type Look, randomLook } from './looks';
 import type { SlotInventory } from './slots';
 
@@ -45,7 +46,7 @@ export const TRAITS: Record<TraitId, { name: string; description: string; positi
 
 // ---------- skills (rated 1–5 stars) ----------
 
-export const SKILLS = ['woodcutting', 'stonework', 'mining', 'hunting', 'combat', 'diplomacy'] as const;
+export const SKILLS = ['woodcutting', 'stonework', 'mining', 'hunting', 'combat', 'diplomacy', 'smithing'] as const;
 export type Skill = (typeof SKILLS)[number];
 export type Skills = Record<Skill, number>;
 
@@ -56,6 +57,7 @@ export const SKILL_LABEL: Record<Skill, string> = {
   hunting: 'Caça',
   combat: 'Combate',
   diplomacy: 'Diplomacia',
+  smithing: 'Forja',
 };
 
 /** The trait that gives +50% in each skill's job. */
@@ -194,6 +196,9 @@ export interface NpcData {
   parents: number[];
   /** Randomized appearance (sprite is built from it). */
   look: Look;
+  /** Gear handed out from the barracks (soldiers). */
+  weapon?: ToolId | null;
+  armor?: ToolId | null;
   /** Soldiers on campaign: attack village `target`. */
   order: { kind: 'raid'; target: number } | null;
   /** Game seconds spent at zero satiety. */
@@ -430,8 +435,9 @@ export class Population {
 }
 
 /** Melee damage of a soldier: 1 + half their Combate rating (1–3), halved while starving. */
-export function soldierDamage(npc: Pick<NpcData, 'skills' | 'food'>): number {
-  const base = 1 + Math.floor(npc.skills.combat / 2);
+export function soldierDamage(npc: Pick<NpcData, 'skills' | 'food' | 'weapon'>): number {
+  const weapon = npc.weapon ? (ITEM_DEFS[npc.weapon].tool?.damage ?? 1) - 1 : 0;
+  const base = 1 + Math.floor(npc.skills.combat / 2) + weapon;
   return npc.food <= 0 ? Math.max(1, Math.floor(base / 2)) : base;
 }
 
