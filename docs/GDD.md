@@ -78,6 +78,26 @@ Pedido em 14/11/2026. Decisões tomadas para começar (ajustáveis):
 14. ✅ **Relacionamentos, famílias, filhos e árvore genealógica**
 15. ✅ **Diplomatas, diplomacia, alianças, guerras e conquista**
 
+## v3: Visual medieval, estradas e comércio
+
+Pedido em 14/11/2026.
+
+| Tema      | Decisão                                                                                                                                                                                                                                                                                                         |
+| --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Visual    | Paleta escura e terrosa, vinheta, dias mornos e noites mais escuras. Casas em enxaimel com telhados de palha, ardósia ou tábuas. Fontes medievais (MedievalSharp nos títulos, Alegreya no texto) e painéis de madeira escura com moldura de bronze                                                              |
+| Aldeões   | Aparência sorteada: tom de pele, cor e estilo de cabelo, barba, capuz, gorro, chapéu de palha, avental, 12 cores de túnica e 5 de calça. Filhos herdam pele e cabelo                                                                                                                                            |
+| Estradas  | Calçada de pedra (1 pedra por quadrado, instantânea). 40% mais rápido andar nela, e os caminhos dão preferência às estradas. O mapa começa com estradas ligando as vilas. Podem sair do seu território, mas não entrar no de outra vila                                                                         |
+| Moeda     | Moedas no tesouro de cada vila (você começa com 60)                                                                                                                                                                                                                                                             |
+| Mercado   | Centro comercial: emprega mercadores (nota de Diplomacia para negociar), recebe depósitos e tem um armazém de ferramentas                                                                                                                                                                                       |
+| Preços    | Variam com a oferta de cada mercado (0,6× a 1,8× do preço base). O mercado paga 90% e cobra 110%, e cada unidade vendida baixa o próximo preço                                                                                                                                                                  |
+| Caravanas | Em V → Comércio: destino, o que vender e o que comprar. O mercador vai pela estrada com uma carroça, negocia e volta com moedas e mercadorias. As vilas rivais forjam ferramentas e mandam caravanas com o excedente a outros mercados em paz, inclusive o seu, seguindo suas ordens para mercadores visitantes |
+
+### Marcos
+
+16. ✅ **Visual escuro e medieval + aparência sorteada dos aldeões**
+17. ✅ **Estradas**
+18. ✅ **Moeda, mercados e caravanas de comércio**
+
 ## Fora da v1 (futuro)
 
 - Agricultura / fazendas
