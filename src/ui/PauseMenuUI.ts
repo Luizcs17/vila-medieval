@@ -9,7 +9,7 @@ const TEXT = { fontFamily: '"Alegreya", Georgia, serif', color: '#e8d8b0' } sati
 const CONTROLS = [
   'WASD / setas: andar   Shift: correr',
   'E: coletar, construir, falar, usar',
-  'Espaço: atacar   F: comer carne',
+  'Clique: atacar na direção do mouse (ou Espaço)   F: comer carne',
   '1–9: escolher ferramenta da hotbar',
   'B: construir   C: criar   I/Tab: inventário',
   'V: gestão da vila   M: mapa   N: minimapa',

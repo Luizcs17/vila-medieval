@@ -67,7 +67,7 @@ import {
   describeCost as summarizeCost,
   WandererSpawner,
 } from '../game/npcs';
-import { PER_LEVEL, PlayerStats, XP } from '../game/player';
+import { inAimCone, PER_LEVEL, PlayerStats, XP } from '../game/player';
 import { clearSave, readSave, SAVE_VERSION, type SaveData, writeSave } from '../game/save';
 import { SlotInventory } from '../game/slots';
 import { buildingStorage, type Storage, villageStorage } from '../game/storage';
@@ -576,7 +576,10 @@ export class WorldScene extends Phaser.Scene {
     this.clock.advance(worldDt);
     for (const i of this.nodes.update(worldDt, (t) => !this.playerOverlapsTile(t))) this.replaceObjectImage(i);
 
-    this.player.update(dt, { x, y, run: k.SHIFT.isDown });
+    const aim = frozen ? undefined : this.aimPoint();
+    this.player.update(dt, { x, y, run: k.SHIFT.isDown, aimX: aim?.x });
+    const heldItem = this.inventory.slots[this.selectedHotbar]?.item;
+    this.player.hold(heldItem && ITEM_DEFS[heldItem].tool ? heldItem : null);
     this.stats.update(worldDt);
     this.wildlife.update(worldDt);
     this.updateNpcs(worldDt);
@@ -610,22 +613,55 @@ export class WorldScene extends Phaser.Scene {
     return (s && ITEM_DEFS[s.item].tool?.damage) || 1;
   }
 
+  /** The mouse position in world (screen-space) coordinates. */
+  aimPoint(): { x: number; y: number } {
+    const p = this.input.activePointer;
+    const v = this.cameras.main.getWorldPoint(p.x, p.y);
+    return { x: v.x, y: v.y };
+  }
+
+  /** Left click on the world: swing toward the mouse (when no panel or build mode is active). */
+  clickAttack(): void {
+    const frozen = this.inventoryOpen || this.modalOpen || this.talkingTo !== null || this.panelBuilding !== null;
+    if (!frozen && !this.placement && !this.demolishing) this.attack();
+  }
+
   private attack(): void {
     if (this.attackCd > 0) return;
     this.attackCd = ATTACK_COOLDOWN;
     const p = this.player.sprite;
-    const dir = p.flipX ? -1 : 1;
+    const chest = { x: p.x, y: p.y - 9 };
+    const aim = this.aimPoint();
+    let ax = aim.x - chest.x;
+    let ay = aim.y - chest.y;
+    if (Math.hypot(ax, ay) < 1) {
+      ax = p.flipX ? -1 : 1;
+      ay = 0;
+    }
+    const len = Math.hypot(ax, ay);
+    this.player.face(aim.x);
     this.slash
-      .setPosition(p.x + dir * 9, p.y - 9)
-      .setFlipX(dir < 0)
+      .setPosition(chest.x + (ax / len) * 10, chest.y + (ay / len) * 10)
+      .setFlipX(false)
+      .setRotation(Math.atan2(ay, ax))
       .setVisible(true)
       .setAlpha(1);
     this.tweens.add({ targets: this.slash, alpha: 0, duration: 160, onComplete: () => this.slash.setVisible(false) });
+    this.tweens.killTweensOf(this.player.swing);
+    this.player.swing.r = -1.1;
+    this.tweens.add({
+      targets: this.player.swing,
+      r: 0.9,
+      duration: 120,
+      yoyo: true,
+      onComplete: () => (this.player.swing.r = 0),
+    });
     const held = this.inventory.slots[this.selectedHotbar];
     const reach = (held && ITEM_DEFS[held.item].tool?.reach) || 0;
-    const hit = this.wildlife.playerAttack(this.player.gx, this.player.gy, this.playerDamage(), this.humans()[0], reach);
+    const hit = this.wildlife.playerAttack(this.player.gx, this.player.gy, this.playerDamage(), this.humans()[0], reach, (a) =>
+      inAimCone(ax, ay, a.sprite.x - p.x, a.sprite.y - p.y),
+    );
     if (hit) {
-      this.player.face(hit.sprite.x);
       if (held?.durability !== undefined) this.wearTool(this.selectedHotbar);
       if (!hit.alive) this.gainXp(hit.def.hp * XP.killPerHp);
     }

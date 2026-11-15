@@ -77,3 +77,15 @@ export class PlayerStats {
     }
   }
 }
+
+/**
+ * Whether a target at offset (tx, ty) from the player lies in the swing aimed along (ax, ay).
+ * Both in the same space (screen pixels). Targets right next to the player always count.
+ */
+export function inAimCone(ax: number, ay: number, tx: number, ty: number, close = 8, minCos = 0.35): boolean {
+  const t = Math.hypot(tx, ty);
+  if (t <= close) return true;
+  const a = Math.hypot(ax, ay);
+  if (a === 0) return true;
+  return (ax * tx + ay * ty) / (a * t) >= minCos;
+}

@@ -8,6 +8,8 @@ export interface MoveInput {
   x: number;
   y: number;
   run: boolean;
+  /** Screen x the player looks at (the mouse); without it they face where they walk. */
+  aimX?: number;
 }
 
 /** The protagonist. Position is in grid space (tile units); the sprite follows it in screen space. */
@@ -16,6 +18,11 @@ export class Player {
   gy: number;
   readonly sprite: Phaser.GameObjects.Sprite;
   private readonly shadow: Phaser.GameObjects.Image;
+  /** The selected hotbar tool or weapon, drawn in hand. */
+  private readonly hand: Phaser.GameObjects.Image;
+  private held: string | null = null;
+  /** Swing tilt (radians), animated by attacks. */
+  swing = { r: 0 };
 
   constructor(
     scene: Phaser.Scene,
@@ -27,6 +34,7 @@ export class Player {
     this.gy = gy;
     this.shadow = scene.add.image(0, 0, 'shadow').setAlpha(0.3);
     this.sprite = scene.add.sprite(0, 0, 'player_idle').setOrigin(0.5, 1);
+    this.hand = scene.add.image(0, 0, 'icon_stone_axe').setVisible(false);
 
     if (!scene.anims.exists('player_walk')) {
       scene.anims.create({
@@ -52,7 +60,7 @@ export class Player {
       const ny = this.gy + dir.y * speed;
       if (!this.blocked(this.gx, ny)) this.gy = ny;
 
-      if (input.x !== 0) this.sprite.setFlipX(input.x < 0);
+      if (input.aimX === undefined && input.x !== 0) this.sprite.setFlipX(input.x < 0);
       this.sprite.anims.play('player_walk', true);
       this.sprite.anims.timeScale = input.run ? 1.6 : 1;
     } else if (this.sprite.anims.isPlaying) {
@@ -60,7 +68,15 @@ export class Player {
       this.sprite.setTexture('player_idle');
     }
 
+    if (input.aimX !== undefined) this.face(input.aimX);
     this.syncSprite();
+  }
+
+  /** Shows `item` (a texture-key suffix) in hand, or nothing. */
+  hold(item: string | null): void {
+    this.held = item;
+    if (item) this.hand.setTexture(`icon_${item}`);
+    this.hand.setVisible(item !== null);
   }
 
   /** Turns the sprite toward a screen-space x coordinate. */
@@ -92,5 +108,15 @@ export class Player {
     this.sprite.setDepth(s.y);
     this.shadow.setPosition(s.x, s.y);
     this.shadow.setDepth(s.y - 0.5);
+    if (this.held) {
+      const left = this.sprite.flipX;
+      this.hand
+        .setFlipX(left)
+        .setOrigin(left ? 0.85 : 0.15, 0.85)
+        .setRotation(left ? -this.swing.r : this.swing.r)
+        .setPosition(s.x + (left ? -4 : 4), s.y - 6)
+        .setDepth(s.y + 0.15)
+        .setAlpha(this.sprite.alpha);
+    }
   }
 }

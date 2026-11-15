@@ -96,6 +96,10 @@ export class Npc {
   private readonly shadow: Phaser.GameObjects.Image;
   private marker?: Phaser.GameObjects.Image;
   private carryIcon?: Phaser.GameObjects.Image;
+  /** Tool or weapon in hand (job tool while working, a soldier's weapon). */
+  private handIcon?: Phaser.GameObjects.Image;
+  private holding: ToolId | null = null;
+  private swing = 0;
   private hungerIcon?: Phaser.GameObjects.Image;
   private cart?: Phaser.GameObjects.Image;
   private path: Tile[] = [];
@@ -161,6 +165,8 @@ export class Npc {
    * `dt` is game time. `frozen`: stand still (e.g. while talking to the player), facing `faceX` if given.
    */
   update(dt: number, world: NpcWorld, frozen: boolean, faceX?: number): void {
+    this.holding = null;
+    this.swing = 0;
     if (frozen) {
       this.stopWalking();
       if (faceX !== undefined) this.sprite.setFlipX(faceX < this.sprite.x);
@@ -214,7 +220,7 @@ export class Npc {
 
   /** Fades out and removes the NPC. */
   leave(onDone: () => void): void {
-    const extras = [this.marker, this.carryIcon, this.hungerIcon, this.cart].filter(
+    const extras = [this.marker, this.carryIcon, this.hungerIcon, this.cart, this.handIcon].filter(
       (o): o is Phaser.GameObjects.Image => o !== undefined,
     );
     const targets = [this.sprite, this.shadow, ...extras];
@@ -594,6 +600,7 @@ export class Npc {
       return;
     }
     this.tool = tool;
+    this.holding = job.skill === 'combat' ? (this.data.weapon ?? null) : tool === 'none' ? null : tool;
     if (job.skill === 'smithing') {
       this.smith(dt, world, workplace);
       return;
@@ -795,7 +802,9 @@ export class Npc {
   private animateWork(dt: number): void {
     this.sprite.anims.stop();
     this.workAnim += dt;
-    this.sprite.setTexture(Math.floor(this.workAnim * 3) % 2 === 0 ? `${this.key}_idle` : `${this.key}_step_a`);
+    const up = Math.floor(this.workAnim * 3) % 2 === 0;
+    this.sprite.setTexture(up ? `${this.key}_idle` : `${this.key}_step_a`);
+    this.swing = up ? -0.7 : 0.5;
   }
 
   private updateCarryIcon(): void {
@@ -815,7 +824,27 @@ export class Npc {
     this.indoors = on;
     this.path = [];
     this.stopWalking();
-    for (const o of [this.sprite, this.shadow, this.marker, this.carryIcon, this.hungerIcon, this.cart]) o?.setVisible(!on);
+    for (const o of [this.sprite, this.shadow, this.marker, this.carryIcon, this.hungerIcon, this.cart, this.handIcon])
+      o?.setVisible(!on);
+  }
+
+  /** Draws the held tool at the hand, mirrored with the body and tilted while working. */
+  private syncHand(x: number, y: number): void {
+    const item = this.indoors || this.sprite.scaleY < 1 ? null : this.holding;
+    if (!item) {
+      this.handIcon?.setVisible(false);
+      return;
+    }
+    this.handIcon ??= this.scene.add.image(0, 0, `icon_${item}`);
+    const left = this.sprite.flipX;
+    this.handIcon
+      .setTexture(`icon_${item}`)
+      .setVisible(true)
+      .setFlipX(left)
+      .setOrigin(left ? 0.85 : 0.15, 0.85)
+      .setRotation(left ? -this.swing : this.swing)
+      .setPosition(x + (left ? -4 : 4), y - 6)
+      .setDepth(y + 0.15);
   }
 
   /** Children are drawn smaller (set by the world from their age). */
@@ -830,6 +859,7 @@ export class Npc {
     this.shadow.setPosition(s.x, s.y).setDepth(s.y - 0.5);
     this.marker?.setPosition(s.x, Math.round(s.y - 19 + this.bob.v)).setDepth(s.y + 0.1);
     this.carryIcon?.setPosition(s.x, s.y - 17).setDepth(s.y + 0.1);
+    this.syncHand(s.x, s.y);
     // Starving villagers show a red meat icon over their head.
     const starving = this.data.role === 'villager' && isStarving(this.data);
     if (starving && !this.hungerIcon)
