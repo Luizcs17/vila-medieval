@@ -119,7 +119,7 @@ export class UIScene extends Phaser.Scene {
     this.add.text(
       12,
       52,
-      'WASD andar · E usar · Espaço atacar · F comer · B construir · C criar · I inventário · V vila · M mapa · T acelerar',
+      'WASD andar · mouse mira · clique atacar · E usar · F comer · B construir · C criar · I inventário · V vila · M mapa · T acelerar',
       { ...TEXT, fontSize: '12px', backgroundColor: '#00000088', padding: { x: 8, y: 5 } },
     );
     this.debug = this.add.text(12, 80, '', { ...TEXT, fontSize: '11px', color: '#cdb98e' });
@@ -268,7 +268,10 @@ export class UIScene extends Phaser.Scene {
         else this.world.tryDemolish();
         return;
       }
-      if (!this.world.placement) return;
+      if (!this.world.placement) {
+        if (p.leftButtonDown()) this.world.clickAttack();
+        return;
+      }
       if (p.rightButtonDown()) this.world.cancelPlacing();
       else this.world.tryPlace();
     });

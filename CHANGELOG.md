@@ -2,6 +2,12 @@
 
 Each milestone from `docs/GDD.md` is a minor version.
 
+## 1.12.0: Milestone 22, tools in hand and mouse combat
+
+- Tools and weapons show in people's hands: the player holds the selected hotbar tool or weapon, workers hold their job tool (axe, pick, spear) and swing it while working, and soldiers carry their weapon.
+- WASD still moves the player, but they now face the mouse.
+- Attacks are a left click on the world, aimed toward the mouse: only animals in front of the swing (or touching you) are hit. Space still works as a shortcut. Gathering stays on E. Clicks on panels or in build/demolish mode don't attack.
+
 ## 1.11.0: Milestone 21, smithy, tools, weapons and armour
 
 - New building: Ferreiro (smithy; 20 wood, 20 stone). Employs up to 2 smiths, rated by the new Forja skill. In its panel you queue up to 8 items; each one takes its materials from the village stock when work starts and a set time to forge (40 s stone tools and spear, 70 s iron tools, 90 s sword, 60 s leather armour, 120 s iron armour, faster with better smiths). Finished items go to the village stock. Click a queued item to cancel it (started work is refunded).
