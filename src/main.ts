@@ -2,6 +2,7 @@ import '@fontsource/alegreya/400.css';
 import '@fontsource/alegreya/700.css';
 import '@fontsource/medievalsharp/400.css';
 import Phaser from 'phaser';
+import { sound } from './audio/sound';
 import { TitleScene } from './scenes/TitleScene';
 import { UIScene } from './scenes/UIScene';
 import { WorldScene } from './scenes/WorldScene';
@@ -25,5 +26,5 @@ const game = new Phaser.Game({
 });
 
 // Dev-only handle for debugging from the browser console, e.g.
-// game.scene.getScene('World').stockpile.add('wood', 50). Stripped from production builds.
-if (import.meta.env.DEV) (window as unknown as { game: Phaser.Game }).game = game;
+// game.scene.getScene('World').stockpile.add('wood', 50); `sound` is the audio system. Stripped from production builds.
+if (import.meta.env.DEV) Object.assign(window as unknown as object, { game, sound });

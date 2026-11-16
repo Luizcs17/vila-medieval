@@ -7,4 +7,4 @@ O jogo toca estes arquivos se existirem (veja `src/audio/sound.ts` e `docs/CREDI
 - `night_legend.mp3`, `night_theme.mp3` — noite
 - `battle.mp3` — batalha
 
-Sem os arquivos, o jogo fica sem música (os efeitos sonoros são sintetizados e sempre funcionam).
+Licenças e autores em `docs/CREDITS.md`. Se faltar um arquivo, aquele clima fica sem música (os efeitos sonoros são sintetizados e sempre funcionam).
