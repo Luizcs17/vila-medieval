@@ -7,6 +7,7 @@ import {
   AUTOSAVE_SECONDS,
   BANDIT_EVERY_MAX,
   BANDIT_EVERY_MIN,
+  BANDIT_KILL_THANKS,
   BANDIT_MAX,
   BANDIT_MIN,
   BANDIT_STAY,
@@ -373,6 +374,7 @@ export class WorldScene extends Phaser.Scene {
     this.battleTimer = 0;
     this.banditTimer = this.nextBandits();
     this.drops = new Drops();
+    this.holdLock = false;
     this.farmReserved = new Map();
     this.plotFarm = null;
     this.plotStart = null;
@@ -860,7 +862,12 @@ export class WorldScene extends Phaser.Scene {
       sound.play('hit');
       this.battleTimer = Math.max(this.battleTimer, 8);
       if (held?.durability !== undefined) this.wearTool(this.selectedHotbar);
-      this.hurtHuman({ kind: 'npc', id: person.data.id, gx: person.gx, gy: person.gy }, this.playerDamage(), 'você');
+      this.hurtHuman(
+        { kind: 'npc', id: person.data.id, gx: person.gx, gy: person.gy },
+        this.playerDamage(),
+        'você',
+        PLAYER_FACTION,
+      );
       return;
     }
     sound.play(hit ? 'hit' : 'swing');
@@ -1066,8 +1073,13 @@ export class WorldScene extends Phaser.Scene {
     return null;
   }
 
-  /** A bandit falls: their weapon stays on the ground. */
-  private banditFalls(npc: Npc): void {
+  /** A bandit falls: their weapon stays on the ground; killing them on a rival's land pleases that village. */
+  private banditFalls(npc: Npc, by?: number): void {
+    const owner = this.territory.ownerAt(Math.floor(npc.gx), Math.floor(npc.gy));
+    if (by !== undefined && this.isMine(by) && owner >= 0 && !this.isMine(owner) && this.factions[owner]?.alive) {
+      this.diplomacy.adjust(PLAYER_FACTION, owner, BANDIT_KILL_THANKS);
+      this.toast(`${this.factions[owner].name} agradece: um bandido a menos em suas terras (+${BANDIT_KILL_THANKS}).`, '#a8ffa8');
+    }
     const w = npc.data.weapon;
     if (w)
       this.addDropView(this.drops.add({ item: w, count: 1, durability: maxDurability(w) }, npc.gx, npc.gy, this.clock.seconds));
@@ -1078,7 +1090,7 @@ export class WorldScene extends Phaser.Scene {
   }
 
   /** Damage to the player or a villager from `source` (e.g. "um lobo"). */
-  private hurtHuman(target: Human, damage: number, source: string): void {
+  private hurtHuman(target: Human, damage: number, source: string, by?: number): void {
     if (target.kind === 'player') {
       const p = this.player.sprite;
       const armor = this.inventory.armor;
@@ -1103,7 +1115,7 @@ export class WorldScene extends Phaser.Scene {
     this.time.delayedCall(150, () => npc.sprite.clearTint());
     this.popup(npc.sprite.x, npc.sprite.y - npc.sprite.height, `-${damage}`, '#ff6a5a');
     if (npc.data.hp <= 0) {
-      if (npc.data.role === 'bandit') this.banditFalls(npc);
+      if (npc.data.role === 'bandit') this.banditFalls(npc, by);
       const mine = this.isMine(npc.data.faction);
       this.removeVillager(npc.data.id, mine ? `${npc.data.name} foi morto por ${source}.` : null);
     }
@@ -1794,7 +1806,12 @@ export class WorldScene extends Phaser.Scene {
   /** A hit from a soldier (`from`) or a tower on `target`. */
   private strikeTarget(target: Target, damage: number, source: string, from: Human): void {
     if (target.kind === 'animal') this.wildlife.damageAnimal(target.id, damage, from);
-    else this.hurtHuman({ kind: target.kind, id: target.id, gx: target.gx, gy: target.gy }, damage, source);
+    else {
+      // Whose blow it is: a person's village, or (negative ids) a tower's.
+      const by =
+        from.id >= 0 ? this.npcs.get(from.id)?.data.faction : this.buildings.list.find((b) => b.id === -from.id)?.faction;
+      this.hurtHuman({ kind: target.kind, id: target.id, gx: target.gx, gy: target.gy }, damage, source, by);
+    }
   }
 
   /** Towers shoot the nearest hostile in range on their cooldown. */
@@ -3009,14 +3026,26 @@ export class WorldScene extends Phaser.Scene {
 
   // ---------- interaction ----------
 
+  /** Holding E on something (building, gathering, repairing, digging): other targets can't take over. */
+  private holdLock = false;
+
+  /** Called by hold actions: while active, E stays on this target and its press is used up. */
+  private lockHold(active: boolean): void {
+    if (!active) return;
+    this.holdLock = true;
+    Phaser.Input.Keyboard.JustDown(this.keys.E); // so the same press can't also open something later
+  }
+
   private updateInteraction(dt: number, moving: boolean): void {
     if (this.talkingTo || this.panelBuilding) {
       this.interaction = null;
       return;
     }
+    if (!this.keys.E.isDown) this.holdLock = false;
+    const busy = this.holdLock;
 
-    // People take priority over things.
-    const npc = this.inventoryOpen ? null : this.nearestNpc();
+    // People take priority over things (not while you're in the middle of something else).
+    const npc = this.inventoryOpen || busy ? null : this.nearestNpc();
     if (npc) {
       this.gatherer.tick(dt, null, false, 1);
       const d = npc.data;
@@ -3033,7 +3062,7 @@ export class WorldScene extends Phaser.Scene {
       return;
     }
 
-    const drop = this.inventoryOpen ? null : this.drops.nearest(this.player.gx, this.player.gy, 1.2);
+    const drop = this.inventoryOpen || busy ? null : this.drops.nearest(this.player.gx, this.player.gy, 1.2);
     if (drop) {
       this.gatherer.tick(dt, null, false, 1);
       const view = this.dropViews.get(drop.id);
@@ -3051,7 +3080,7 @@ export class WorldScene extends Phaser.Scene {
       return;
     }
 
-    const carcass = this.inventoryOpen ? null : this.wildlife.nearestCarcass(this.player.gx, this.player.gy, 1.2);
+    const carcass = this.inventoryOpen || busy ? null : this.wildlife.nearestCarcass(this.player.gx, this.player.gy, 1.2);
     if (carcass) {
       this.gatherer.tick(dt, null, false, 1);
       const s = carcass.sprite;
@@ -3122,6 +3151,7 @@ export class WorldScene extends Phaser.Scene {
       const shovel = this.selectedTool('shovel')!;
       const land = this.forbiddenLand(tx, ty);
       const active = this.keys.E.isDown && !moving && !land;
+      this.lockHold(active);
       if (active) this.player.face(anchorX);
       const seconds = 1.2 / this.stats.gatherSpeed;
       if (this.gatherer.tick(dt, target, active, seconds) && this.nodes.dig(target)) {
@@ -3152,6 +3182,7 @@ export class WorldScene extends Phaser.Scene {
     const missingTool = def.needsTool && !tool;
     const land = this.forbiddenLand(tx, ty);
     const active = this.keys.E.isDown && !moving && !full && !missingTool && !land;
+    this.lockHold(active);
     if (active) this.player.face(anchorX);
 
     const seconds = def.secondsPerUnit / (this.stats.gatherSpeed * (tool ? ITEM_DEFS[tool.item].tool!.speed : 1));
@@ -3222,6 +3253,7 @@ export class WorldScene extends Phaser.Scene {
 
     if (!b.built) {
       const active = this.keys.E.isDown && !moving;
+      this.lockHold(active);
       if (active) {
         this.player.face(x);
         this.hammer -= dt;
@@ -3248,6 +3280,7 @@ export class WorldScene extends Phaser.Scene {
 
     if (b.hp < def.maxHp) {
       const active = this.keys.E.isDown && !moving;
+      this.lockHold(active);
       if (active) {
         this.player.face(x);
         this.repairAcc += REPAIR_RATE * dt;

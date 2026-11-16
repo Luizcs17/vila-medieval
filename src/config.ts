@@ -80,6 +80,8 @@ export const BANDIT_EVERY_MAX = 5;
 export const BANDIT_MIN = 2;
 export const BANDIT_MAX = 4;
 export const BANDIT_STAY = 2;
+/** Relation gained with a village when you kill a bandit on its land. */
+export const BANDIT_KILL_THANKS = 5;
 /** Chance a grass tuft gives a seed when gathered. */
 export const SEED_CHANCE = 0.12;
 
