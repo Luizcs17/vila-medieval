@@ -562,6 +562,7 @@ const TOOL_SHAPES = {
   axe: ['...kgg..', '..kgggk.', '..kbggk.', '..kb.k..', '.kb.....', '.kb.....', 'kb......', 'k.......'],
   pick: ['.kgggk..', 'kg.b.gk.', 'k..b..k.', '...b....', '...b....', '...b....', '...b....', '........'],
   spear: ['......kg', '.....kgk', '....kbk.', '...kbk..', '..kbk...', '.kbk....', 'kbk.....', 'kk......'],
+  shovel: ['......kb', '.....kb.', '....kb..', '...kb...', '.kgk....', 'kgggk...', 'kggk....', '.kk.....'],
   sword: ['......kg', '.....kgk', '....kgk.', '...kgk..', '.k.gk...', '..kk....', '.kbk....', 'k.k.....'],
 };
 const STONE = '#a8a39b';
@@ -572,6 +573,7 @@ const TOOL_ICONS: Record<string, [keyof typeof TOOL_SHAPES, string]> = {
   stone_pick: ['pick', STONE],
   iron_pick: ['pick', IRON],
   spear: ['spear', STONE],
+  shovel: ['shovel', IRON],
   iron_sword: ['sword', IRON],
 };
 

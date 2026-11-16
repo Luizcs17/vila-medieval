@@ -26,12 +26,12 @@ export interface NpcWorld {
   /** Position of an aggressive animal hunting near (gx, gy), if any. */
   threat(gx: number, gy: number): { x: number; y: number } | null;
   /** Nearest live prey (skittish animal) within `r` tiles of (cx, cy). */
-  findPrey(cx: number, cy: number, r: number): Prey | null;
+  findPrey(cx: number, cy: number, r: number, faction: number): Prey | null;
   prey(id: number): Prey | null;
   /** A hunter's shot hits prey `id`. Returns true if it died. */
   shoot(from: Npc, id: number, damage: number): boolean;
   /** Nearest carcass with meat within `r` tiles of (cx, cy). */
-  findCarcass(cx: number, cy: number, r: number): Prey | null;
+  findCarcass(cx: number, cy: number, r: number, faction: number): Prey | null;
   takeMeat(id: number, max: number, faction?: number): number;
   /** The tool this worker uses from its workplace's inventory ('none' if the job needs none, null if missing). */
   toolFor(npc: Npc): ToolId | null | 'none';
@@ -55,6 +55,8 @@ export interface NpcWorld {
   factionCenter(faction: number): { x: number; y: number };
   /** Where the player is (companions follow them). */
   playerAt(): { x: number; y: number };
+  /** May people of `faction` take resources on tile (x, y)? (Not on another village's land.) */
+  mayTake(faction: number, x: number, y: number): boolean;
   /** An unfinished building an idle villager should help build, or null. */
   buildSite(npc: Npc): Building | null;
   /** One step of an idle villager's building work. */
@@ -318,7 +320,7 @@ export class Npc {
         this.startDeposit(world);
         return;
       }
-      const carcass = world.findCarcass(cx, cy, job.radius);
+      const carcass = world.findCarcass(cx, cy, job.radius, this.data.faction);
       if (carcass && this.goNear(carcass.gx, carcass.gy, 1)) {
         this.preyId = carcass.id;
         this.state = 'toCarcass';
@@ -329,7 +331,7 @@ export class Npc {
         this.startDeposit(world);
         return;
       }
-      const prey = world.findPrey(cx, cy, job.radius);
+      const prey = world.findPrey(cx, cy, job.radius, this.data.faction);
       if (prey) {
         this.preyId = prey.id;
         this.state = 'hunt';
@@ -920,7 +922,8 @@ export class Npc {
       for (let x = Math.floor(cx - r); x <= Math.ceil(cx + r); x++) {
         if (!inBounds(world.map, x, y) || Math.hypot(x + 0.5 - cx, y + 0.5 - cy) > r) continue;
         const i = tileIndex(world.map, x, y);
-        if (job.nodes.includes(world.map.objects[i])) candidates.push({ i, d: Math.hypot(x + 0.5 - this.gx, y + 0.5 - this.gy) });
+        if (job.nodes.includes(world.map.objects[i]) && world.mayTake(this.data.faction, x, y))
+          candidates.push({ i, d: Math.hypot(x + 0.5 - this.gx, y + 0.5 - this.gy) });
       }
     }
     candidates.sort((a, b) => a.d - b.d);

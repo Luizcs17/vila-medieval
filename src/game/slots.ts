@@ -39,8 +39,12 @@ export class SlotInventory {
   }
 
   /** Total carried weight, in kg. */
+  /** Armour you wear (one piece; it protects you and still weighs). */
+  armor: Stack | null = null;
+
   get weight(): number {
-    const w = this.slots.reduce((sum, s) => sum + (s ? s.count * ITEM_WEIGHT[s.item] : 0), 0);
+    const worn = this.armor ? ITEM_WEIGHT[this.armor.item] : 0;
+    const w = this.slots.reduce((sum, s) => sum + (s ? s.count * ITEM_WEIGHT[s.item] : 0), worn);
     return Math.round(w * 10) / 10; // seeds weigh fractions of a kg
   }
 
@@ -87,6 +91,32 @@ export class SlotInventory {
     }
     stack.count -= this.add(stack.item, stack.count);
     return stack.count > 0 ? stack : null;
+  }
+
+  /** Click on the armour slot: put on the held armour (or take yours off into the hand). Returns the new held stack. */
+  armorClick(held: Stack | null): Stack | null {
+    if (held && !ITEM_DEFS[held.item].armor) return held; // only armour goes there
+    const off = this.armor;
+    this.armor = held;
+    return off;
+  }
+
+  /** Shift+click on armour in the bag: wear it (whatever you wore goes to that slot). */
+  equipFrom(i: number): boolean {
+    const s = this.slots[i];
+    if (!s || !ITEM_DEFS[s.item].armor) return false;
+    this.slots[i] = this.armor;
+    this.armor = s;
+    return true;
+  }
+
+  /** One hit on the worn armour. Returns true if it broke. */
+  wearArmor(): boolean {
+    if (this.armor?.durability === undefined) return false;
+    this.armor.durability -= 1;
+    if (this.armor.durability > 0) return false;
+    this.armor = null;
+    return true;
   }
 
   /** Wears the tool in slot `i` by one use. Returns true if it broke (and was removed). */
