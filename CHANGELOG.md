@@ -2,6 +2,13 @@
 
 Each milestone from `docs/GDD.md` is a minor version.
 
+## 1.34.0: Milestone 44, steadier E, scarcer wood, thanks for bandits
+
+- While you hold E on something (building, gathering, repairing, digging), people, items and carcasses passing by can't take over the key: a companion walking past no longer opens their card.
+- Finishing a construction with E held no longer opens the building's panel or inventory: release and press E again to open it.
+- Trees and pines now give 2 wood each (were 4 and 5).
+- Killing a bandit on a rival village's land (you, your companions, soldiers or towers) raises your relation with that village by 5.
+
 ## 1.33.0: Milestone 43, leaders' dynasties and marriages between them
 
 - V → Dinastia now shows only the leaders' family trees: yours and each rival ruler's (no more trees for every family of your village).

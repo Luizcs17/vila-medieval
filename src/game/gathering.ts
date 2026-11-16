@@ -26,7 +26,7 @@ export interface NodeDef {
 export const NODE_DEFS: Partial<Record<Obj, NodeDef>> = {
   [Obj.Tree]: {
     resource: 'wood',
-    amount: 4,
+    amount: 2,
     secondsPerUnit: 0.9,
     depletesTo: Obj.Stump,
     regrowSeconds: 240,
@@ -36,7 +36,7 @@ export const NODE_DEFS: Partial<Record<Obj, NodeDef>> = {
   },
   [Obj.Pine]: {
     resource: 'wood',
-    amount: 5,
+    amount: 2,
     secondsPerUnit: 1.0,
     depletesTo: Obj.Stump,
     regrowSeconds: 300,
