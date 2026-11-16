@@ -106,6 +106,36 @@ export function tickSmithy(b: Building, workforce: number, dt: number, village: 
   return { type: 'made', item };
 }
 
+/** Smithy queue length limit. */
+export const QUEUE_MAX = 8;
+/** Recurring production: the maximum a new item starts with, and the highest allowed. */
+export const RECURRING_DEFAULT = 2;
+export const RECURRING_LIMIT = 99;
+
+/**
+ * Recurring production: with an empty queue, the smithy queues the first recurring item (in recipe
+ * order) whose stock (`have`, the village warehouse) plus what's already queued is below its
+ * maximum. Manual orders always come first. Returns the item queued, or null.
+ */
+export function planRecurring(b: Building, have: (t: ToolId) => number): ToolId | null {
+  const rec = b.recurring;
+  if (!rec || (b.queue?.length ?? 0) > 0) return null;
+  for (const r of RECIPES) {
+    const max = rec[r.item];
+    if (max === undefined || have(r.item) >= max) continue;
+    b.queue = [r.item];
+    return r.item;
+  }
+  return null;
+}
+
+/** Turns recurring production of `item` on (with the default maximum) or sets its maximum. */
+export function setRecurring(b: Building, item: ToolId, max: number | null): void {
+  b.recurring ??= {};
+  if (max === null) delete b.recurring[item];
+  else b.recurring[item] = Math.max(0, Math.min(RECURRING_LIMIT, Math.round(max)));
+}
+
 /** Is the smithy able to forge now: something queued, already paid or affordable from `village`? */
 export function smithyCanWork(b: Building, village: Storage): boolean {
   const item = b.queue?.[0];

@@ -344,6 +344,8 @@ export interface Building {
   blockedNotice?: boolean;
   /** Farm: its planting area and crops. */
   plot?: Plot;
+  /** Smithy: items forged on their own whenever the village stock has fewer than the given maximum. */
+  recurring?: Partial<Record<ToolId, number>>;
 }
 
 export type PlaceCheck = { ok: true } | { ok: false; reason: string };

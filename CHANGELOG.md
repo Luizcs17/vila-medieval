@@ -2,6 +2,12 @@
 
 Each milestone from `docs/GDD.md` is a minor version.
 
+## 1.26.0: Milestone 36, recurring production at the smithy
+
+- In the smithy panel, clicking a recipe now turns on **recurring production**: the cell lights up and shows the stock, a box with the maximum (default 2) and an "x". Whenever the village stock has fewer than the maximum, the smith queues that item by itself, and stops when it's reached. Click the box and type a number (Enter confirms) to change the maximum; "x" turns it off.
+- Shift+click on a recipe queues a single item, as plain clicks did before. Manual orders always go first; recurring items are queued one at a time when the queue is empty.
+- What the smith makes goes to the stock, and from there to the workplaces that need it (milestone 34).
+
 ## 1.25.0: Milestone 35, a stronger bear
 
 - The bear now has 18 HP (was 10) and bites for 5 every 1.2 s (was 3 every 1.8 s). One person with a spear loses to it; two with spears kill it, usually losing one of them. A tuning test checks this for you and for soldiers of any Combate rating. Players with higher levels or armour can still take one on alone.

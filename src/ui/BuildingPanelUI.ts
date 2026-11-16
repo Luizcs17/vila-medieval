@@ -2,7 +2,7 @@ import type Phaser from 'phaser';
 import { BEDS_PER_HOUSE } from '../config';
 import { BUILDING_DEFS, type Building } from '../game/buildings';
 import { isAdult } from '../game/families';
-import { ARMORS, recipeOf, WEAPONS, workplaceTools } from '../game/gear';
+import { ARMORS, RECURRING_DEFAULT, recipeOf, setRecurring, WEAPONS, workplaceTools } from '../game/gear';
 import { ALL_ITEMS, ITEM_DEFS, RECIPES, type ToolId } from '../game/items';
 import { jobTitle, type NpcData, productivity, SKILL_LABEL, stars } from '../game/npcs';
 import { buildingStorage, type Storage, villageStorage } from '../game/storage';
@@ -37,6 +37,7 @@ export class BuildingPanelUI {
 
   open(b: Building): void {
     this.building = b;
+    this.editing = null;
     this.rebuild();
   }
 
@@ -74,6 +75,7 @@ export class BuildingPanelUI {
         .join(','),
       JSON.stringify(b.storage),
       (b.queue ?? []).join(','),
+      JSON.stringify(b.recurring ?? {}),
       b.paid,
       JSON.stringify(f.tools),
       JSON.stringify(f.stock.items),
@@ -98,22 +100,34 @@ export class BuildingPanelUI {
   /** Smithy: recipes to queue, the queue and progress. Returns the new y. */
   private smithy(items: Phaser.GameObjects.GameObject[], b: Building, y: number, village: Storage): number {
     const s = this.scene;
-    items.push(s.add.text(PAD, y, 'Encomendar (custo sai do estoque da vila)', { ...TEXT, fontSize: '13px', color: '#cdb98e' }));
-    y += 20;
+    items.push(s.add.text(PAD, y, 'Produção (custo sai do estoque da vila)', { ...TEXT, fontSize: '13px', color: '#cdb98e' }));
+    items.push(
+      s.add.text(PAD, y + 16, 'Clique: produzir sempre até o máximo no estoque · Shift+clique: só 1 na fila', {
+        ...TEXT,
+        fontSize: '10px',
+        color: '#a8977a',
+      }),
+    );
+    y += 34;
     const colW = (W - 2 * PAD - 8) / 2;
+    const rec = b.recurring ?? {};
     RECIPES.forEach((r, i) => {
       const x = PAD + (i % 2) * (colW + 8);
       const ry = y + Math.floor(i / 2) * 28;
+      const max = rec[r.item];
+      const on = max !== undefined;
       const cost = Object.entries(r.cost)
         .map(([k, n]) => `${n} ${ITEM_DEFS[k as ToolId].label.toLowerCase()}`)
         .join(', ');
       const ok = Object.entries(r.cost).every(([k, n]) => village.have(k as ToolId) >= (n ?? 0));
       const bg = s.add
-        .rectangle(x, ry, colW, 26, ok ? 0x2e3a24 : 0x2a2420, 1)
+        .rectangle(x, ry, colW, 26, on ? 0x4a3a1e : ok ? 0x2e3a24 : 0x2a2420, 1)
         .setOrigin(0)
-        .setStrokeStyle(1, 0x6a5232);
-      bg.setInteractive({ useHandCursor: true }).on('pointerdown', () => {
-        this.world.queueCraft(b, r.item);
+        .setStrokeStyle(on ? 2 : 1, on ? 0xe0b860 : 0x6a5232);
+      bg.setInteractive({ useHandCursor: true }).on('pointerdown', (p: Phaser.Input.Pointer) => {
+        if ((p.event as MouseEvent).shiftKey) this.world.queueCraft(b, r.item);
+        else if (!on) setRecurring(b, r.item, RECURRING_DEFAULT);
+        this.editing = on ? this.editing : null;
         this.rebuild();
       });
       items.push(
@@ -122,6 +136,7 @@ export class BuildingPanelUI {
         s.add.text(x + 24, ry + 1, ITEM_DEFS[r.item].label, { ...TEXT, fontSize: '11px' }),
         s.add.text(x + 24, ry + 13, `${cost} · ${r.seconds}s`, { ...TEXT, fontSize: '10px', color: ok ? '#a8c890' : '#a8977a' }),
       );
+      if (on) this.recurringControls(items, b, r.item, x + colW, ry, max, village.have(r.item));
     });
     y += Math.ceil(RECIPES.length / 2) * 28 + 6;
     const queue = b.queue ?? [];
@@ -153,6 +168,64 @@ export class BuildingPanelUI {
       y += 8;
     } else y += 6;
     return y + 6;
+  }
+
+  /** Recurring item being typed into (its maximum box has the keyboard). */
+  private editing: { item: ToolId; text: string } | null = null;
+
+  /**
+   * On a recurring recipe, at its right edge: the maximum box (click it and type a number; Enter
+   * or a click elsewhere confirms) and an "x" that turns recurring production off. Covers the cost text.
+   */
+  private recurringControls(
+    items: Phaser.GameObjects.GameObject[],
+    b: Building,
+    item: ToolId,
+    right: number,
+    y: number,
+    max: number,
+    have: number,
+  ): void {
+    const s = this.scene;
+    const x0 = right - 92;
+    items.push(s.add.rectangle(x0 - 2, y + 1, 94, 24, 0x4a3a1e, 1).setOrigin(0));
+    items.push(s.add.text(x0, y + 7, `${have}/`, { ...TEXT, fontSize: '11px', color: have >= max ? '#a8e890' : '#ffc060' }));
+    const editing = this.editing?.item === item;
+    const box = s.add
+      .rectangle(x0 + 26, y + 3, 34, 20, editing ? 0x140f0a : 0x2a2420, 1)
+      .setOrigin(0)
+      .setStrokeStyle(1, editing ? 0xffe08a : 0x8a6a3a);
+    box.setInteractive({ useHandCursor: true }).on('pointerdown', () => {
+      this.editing = { item, text: '' };
+      this.rebuild();
+    });
+    const shown = editing ? `${this.editing!.text}|` : String(max);
+    items.push(box, s.add.text(x0 + 43, y + 13, shown, { ...TEXT, fontSize: '12px' }).setOrigin(0.5));
+    const x = s.add
+      .rectangle(x0 + 66, y + 3, 20, 20, 0x6a2a24, 1)
+      .setOrigin(0)
+      .setStrokeStyle(1, 0x8a6a3a);
+    x.setInteractive({ useHandCursor: true }).on('pointerdown', () => {
+      setRecurring(b, item, null);
+      if (this.editing?.item === item) this.editing = null;
+      this.rebuild();
+    });
+    items.push(x, s.add.text(x0 + 76, y + 13, '✕', { ...TEXT, fontSize: '12px' }).setOrigin(0.5));
+  }
+
+  /** Keys typed into a maximum box. Returns true when the panel used the key. */
+  typeKey(key: string): boolean {
+    const e = this.editing;
+    const b = this.building;
+    if (!e || !b) return false;
+    if (/^[0-9]$/.test(key) && e.text.length < 2) e.text += key;
+    else if (key === 'backspace') e.text = e.text.slice(0, -1);
+    else if (key === 'enter' || key === 'escape' || key === 'e') {
+      if (key !== 'escape' && e.text !== '') setRecurring(b, e.item, Number(e.text));
+      this.editing = null;
+    } else return true; // other keys are ignored while typing
+    this.rebuild();
+    return true;
   }
 
   private rebuild(): void {
