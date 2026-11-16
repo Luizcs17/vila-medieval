@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { ANIMAL_SPAWN_INTERVAL, PLAYER_MAX_HP, PLAYER_REGEN_DELAY, PLAYER_REGEN_EVERY } from '../src/config';
+import {
+  ANIMAL_SPAWN_INTERVAL,
+  ATTACK_COOLDOWN,
+  PLAYER_MAX_HP,
+  PLAYER_REGEN_DELAY,
+  PLAYER_REGEN_EVERY,
+  SOLDIER_BONUS_HP,
+  VILLAGER_HP,
+} from '../src/config';
 import {
   ALL_SPECIES,
   AnimalSpawner,
@@ -11,6 +19,8 @@ import {
   takeMeat,
   targetPopulation,
 } from '../src/game/animals';
+import { ITEM_DEFS } from '../src/game/items';
+import { type NpcData, soldierDamage } from '../src/game/npcs';
 import { PlayerStats } from '../src/game/player';
 import { generateMap, isWalkable } from '../src/world/map';
 
@@ -101,5 +111,50 @@ describe('player stats', () => {
     expect(p.hp).toBe(PLAYER_MAX_HP);
     expect(p.hurt(999)).toBe(true);
     expect(p.hp).toBe(0);
+  });
+});
+
+describe('bear balance', () => {
+  // Everyone in reach; the bear bites one person at a time until they fall.
+  const duel = (people: { hp: number; dmg: number; every: number }[], bearFirst: number) => {
+    const bear = SPECIES.bear;
+    let hp = bear.hp;
+    let bite = bearFirst;
+    const f = people.map((p) => ({ ...p, cd: 0 }));
+    for (let t = 0; t < 60; t += 0.01) {
+      const alive = f.filter((p) => p.hp > 0);
+      if (alive.length === 0) return 'bear';
+      for (const p of alive) {
+        p.cd -= 0.01;
+        if (p.cd <= 0) {
+          p.cd = p.every;
+          hp -= p.dmg;
+        }
+      }
+      if (hp <= 0) return 'people';
+      bite -= 0.01;
+      if (bite <= 0) {
+        bite = bear.attackCooldown;
+        alive[0].hp -= bear.damage;
+      }
+    }
+    return 'draw';
+  };
+  const player = { hp: PLAYER_MAX_HP, dmg: ITEM_DEFS.spear.tool!.damage, every: ATTACK_COOLDOWN };
+  const soldier = (combat: number) => ({
+    hp: VILLAGER_HP + SOLDIER_BONUS_HP,
+    dmg: soldierDamage({ skills: { combat } as NpcData['skills'], food: 100, weapon: 'spear' }),
+    every: 1.1, // Npc.fight cooldown
+  });
+
+  it('kills one person with a spear, even if they strike first', () => {
+    expect(duel([player], 0)).toBe('bear');
+    expect(duel([player], 0.6)).toBe('bear');
+    for (const c of [1, 3, 5]) expect(duel([soldier(c)], 0)).toBe('bear');
+  });
+
+  it('falls to two people with spears', () => {
+    expect(duel([player, player], 0)).toBe('people');
+    for (const c of [1, 3, 5]) expect(duel([soldier(c), soldier(c)], 0)).toBe('people');
   });
 });
