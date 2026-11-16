@@ -146,6 +146,7 @@ import { SlotInventory } from '../game/slots';
 import { buildingStorage, type Storage, villageStorage } from '../game/storage';
 import { Territory } from '../game/territory';
 import { GameClock } from '../game/time';
+import { chooseBuild, type Personality, randomPersonality } from '../game/townAI';
 import { buildRoadNetwork, findSpot, foundTown, JOB_PRIORITY, populateTown, staffInOrder } from '../game/towns';
 import {
   executeTrade,
@@ -386,6 +387,7 @@ export class WorldScene extends Phaser.Scene {
     this.battleTimer = 0;
     this.banditTimer = this.nextBandits();
     this.drops = new Drops();
+    this.townBias = new Map();
     this.holdLock = false;
     this.farmReserved = new Map();
     this.plotFarm = null;
@@ -1241,22 +1243,28 @@ export class WorldScene extends Phaser.Scene {
 
   /** Rival towns keep their workplaces tooled and soldiers armed, paying recipe costs from their stock. */
   private supplyTown(f: Faction): void {
+    const smithy = this.buildings.list.some((b) => b.faction === f.id && b.type === 'smithy' && b.built);
     for (const b of this.buildings.list) {
       if (b.faction !== f.id) continue;
       const job = BUILDING_DEFS[b.type].job;
       const t = basicTool(b);
       if (job && t && workplaceTools(b).length < this.population.workers(b.id).length) {
-        if ((f.tools[t] ?? 0) > 0) f.tools[t]!--;
-        else if (!f.stock.pay(recipeOf(t).cost)) continue;
-        b.storage[t] = (b.storage[t] ?? 0) + 1;
+        // Tools come from the warehouse (the smithy's work); a village without a smithy improvises
+        // the basic one from materials.
+        const best = (job.tools ?? []).find((x) => (f.tools[x] ?? 0) > 0);
+        if (best) f.tools[best]!--;
+        else if (smithy || !f.stock.pay(recipeOf(t).cost)) continue;
+        b.storage[best ?? t] = (b.storage[best ?? t] ?? 0) + 1;
       }
     }
     for (const n of this.soldiers(f.id)) {
       if (n.weapon) continue;
       const b = this.buildings.list.find((x) => x.id === n.jobId);
+      const w = WEAPONS.find((x) => (f.tools[x] ?? 0) > 0);
       if (b && (b.storage.spear ?? 0) > 0) b.storage.spear!--;
-      else if (!f.stock.pay(recipeOf('spear').cost)) continue;
-      n.weapon = 'spear';
+      else if (w) f.tools[w]!--;
+      else if (smithy || !f.stock.pay(recipeOf('spear').cost)) continue;
+      n.weapon = w ?? 'spear';
     }
   }
 
@@ -1435,7 +1443,11 @@ export class WorldScene extends Phaser.Scene {
         f.coins = v;
       },
       have,
-      forSale: (g) => Math.max(0, have(g) - (player ? (policy.sellAbove[g] ?? Infinity) : Math.floor(targetStock(g) * 0.3))),
+      forSale: (g) => {
+        if (player) return Math.max(0, have(g) - (policy.sellAbove[g] ?? Infinity));
+        if (this.withholds(f, g)) return 0;
+        return Math.max(0, have(g) - Math.floor(targetStock(g) * 0.3));
+      },
       wants: (g) => Math.max(0, player ? (policy.buyUpTo[g] ?? 0) - have(g) : targetStock(g) * 2 - have(g)),
       add: (g, n) => {
         if (isToolGood(g)) f.tools[g] = (f.tools[g] ?? 0) + n;
@@ -1446,6 +1458,19 @@ export class WorldScene extends Phaser.Scene {
         else f.stock.items[g] = Math.max(0, f.stock.items[g] - n);
       },
     };
+  }
+
+  /**
+   * A rival village keeps what it needs: no food while its food runs low, no wood or stone while it
+   * hasn't enough for a house, no tools its own workers lack. Some days it just won't sell a good.
+   */
+  withholds(f: Faction, g: Good): boolean {
+    if (g === 'meat' && foodDays(this.population.villagersOf(f.id), f.stock) < 4) return true;
+    if (g === 'seed') return true;
+    const house = BUILDING_DEFS.house.cost;
+    if ((g === 'wood' || g === 'stone') && f.stock.items[g] < (house[g] ?? 0) * 2) return true;
+    const mood = Math.sin((f.id + 1) * 97.13 + this.clock.day * 12.7 + GOODS.indexOf(g) * 3.91) * 43758.5453;
+    return mood - Math.floor(mood) < 0.15; // "hoje não"
   }
 
   /** Free merchants of a village (market workers not travelling), best haggler first. */
@@ -1969,8 +1994,8 @@ export class WorldScene extends Phaser.Scene {
     b.storage.seed = (b.storage.seed ?? 0) + (tiles?.length ?? 0);
   }
 
-  /** Each rival village's leaning when it has spare materials (random, fixed per game). */
-  private townBias = new Map<number, BuildingType[]>();
+  /** Each rival village's personality for the planner (random, fixed per game). */
+  private townBias = new Map<number, Personality>();
 
   /**
    * Rival villages grow on their own, twice a day: food first (staff farms and hunters, build a farm
@@ -2003,7 +2028,6 @@ export class WorldScene extends Phaser.Scene {
             this.population.assign(spare[k], b);
           }
         }
-        if (mine('farm').length < 1 + Math.floor(people.length / 6)) this.aiBuild(f, 'farm', 4, 12);
       }
 
       // 2. Protection.
@@ -2011,8 +2035,7 @@ export class WorldScene extends Phaser.Scene {
         (o) => o.id !== f.id && o.alive && (this.atWar(f.id, o.id) || this.diplomacy.get(f.id, o.id).score < -30),
       );
       const hasBarracks = this.buildings.list.some((b) => b.faction === f.id && b.type === 'barracks');
-      if (threatened && !hasBarracks) this.aiBuild(f, 'barracks', 3, 10);
-      if (threatened && hasBarracks && this.soldiers(f.id).length < 2) {
+      if (hasBarracks && this.soldiers(f.id).length < (threatened ? 3 : 1)) {
         const barracks = this.buildings.list.find((b) => b.faction === f.id && b.type === 'barracks')!;
         const pool = people
           .filter((n) => {
@@ -2021,32 +2044,60 @@ export class WorldScene extends Phaser.Scene {
           })
           .sort((a, b) => b.skills.combat - a.skills.combat);
         for (const n of pool) {
-          if (this.soldiers(f.id).length >= 2) break;
+          if (this.soldiers(f.id).length >= (threatened ? 3 : 1)) break;
           n.jobId = null;
           this.population.assign(n, barracks);
         }
       }
-      if (mine('tower').length === 0) this.aiBuild(f, 'tower', 4, 9);
-
-      // 3. Growth, only with food to spare: beds, then the village's own leaning.
-      if (days >= 3) {
-        if (this.population.freeBedsOf(f.id) < 2) this.aiBuild(f, 'house', 2, 10);
-        let bias = this.townBias.get(f.id);
-        if (!bias) {
-          const all: BuildingType[] = ['lumberjack', 'quarry', 'hunter', 'farm', 'tower', 'smithy', 'mine'];
-          bias = all.sort(() => Math.random() - 0.5).slice(0, 3);
-          this.townBias.set(f.id, bias);
-        }
-        if (Math.random() < 0.35) {
-          const t = bias[Math.floor(Math.random() * bias.length)];
-          if (mine(t).length < 2) this.aiBuild(f, t, 4, 12);
-        }
+      // 3. Building: a utility planner weighs every option by need and the village's personality,
+      // builds the best it can afford, or saves up for something urgent. Up to two per half day.
+      let personality = this.townBias.get(f.id);
+      if (!personality) {
+        personality = randomPersonality(Math.random);
+        this.townBias.set(f.id, personality);
+      }
+      for (let k = 0; k < 2; k++) {
+        const count: Partial<Record<BuildingType, number>> = {};
+        for (const b of this.buildings.list) if (b.faction === f.id && b.built) count[b.type] = (count[b.type] ?? 0) + 1;
+        const choice = chooseBuild(
+          {
+            people: this.population.villagersOf(f.id).length,
+            freeBeds: this.population.freeBedsOf(f.id),
+            foodDays: foodDays(this.population.villagersOf(f.id), f.stock),
+            threatened,
+            count,
+            stock: f.stock.items,
+            soldiers: this.soldiers(f.id).length,
+          },
+          personality,
+        );
+        if (!choice) break;
+        const b = this.aiBuild(f, choice, choice === 'house' ? 2 : 3, choice === 'house' ? 10 : 12);
+        if (!b) break;
+        // A new smithy keeps the village's tools stocked by itself.
+        if (b.type === 'smithy') b.recurring = { stone_axe: 2, stone_pick: 2, spear: 3, leather_armor: 1 };
       }
 
-      // Jobs: food first, then the rest.
+      // Jobs: food first while food is short; with food to spare, wood and stone come first.
+      const plenty = foodDays(this.population.villagersOf(f.id), f.stock) >= 6;
+      const rank = (t: BuildingType) => (plenty && (t === 'lumberjack' || t === 'quarry') ? -1 : JOB_PRIORITY.indexOf(t));
       const order = this.buildings.list
         .filter((b) => b.faction === f.id && b.built && BUILDING_DEFS[b.type].job)
-        .sort((a, b) => JOB_PRIORITY.indexOf(a.type) - JOB_PRIORITY.indexOf(b.type));
+        .sort((a, b) => rank(a.type) - rank(b.type));
+      if (plenty) {
+        // Spare farm hands go to wood and stone.
+        for (const b of order.filter((x) => x.type === 'lumberjack' || x.type === 'quarry')) {
+          const room = BUILDING_DEFS[b.type].job!.slots - this.population.workers(b.id).length;
+          const hands = this.population
+            .villagersOf(f.id)
+            .filter((n) => this.buildings.list.find((x) => x.id === n.jobId)?.type === 'farm')
+            .slice(0, room);
+          for (const n of hands) {
+            n.jobId = null;
+            this.population.assign(n, b);
+          }
+        }
+      }
       staffInOrder(this.population, order, f.id);
       this.supplyTown(f);
     }
@@ -2108,9 +2159,13 @@ export class WorldScene extends Phaser.Scene {
       const talking = this.talkingTo?.id === npc.data.id;
       npc.update(worldDt, this.npcWorld, talking, talking ? this.player.sprite.x : undefined);
       if (npc.data.role === 'wanderer' && !talking && this.clock.seconds >= npc.data.leavesAt) {
-        // Half the time, a rival town with a free bed takes them in.
-        const rival = this.factions.find((f) => !f.isPlayer && f.alive && this.population.houseWithBed(f.id));
-        const home = rival && Math.random() < 0.5 ? this.population.houseWithBed(rival.id) : undefined;
+        // A rival village with a free bed takes them in (the nearest one), if any.
+        const rival = this.factions
+          .filter((f) => !f.isPlayer && f.alive && this.population.houseWithBed(f.id))
+          .sort(
+            (a, b) => Math.hypot(a.center.x - npc.gx, a.center.y - npc.gy) - Math.hypot(b.center.x - npc.gx, b.center.y - npc.gy),
+          )[0];
+        const home = rival ? this.population.houseWithBed(rival.id) : undefined;
         if (rival && home) {
           npc.data.role = 'villager';
           npc.data.faction = rival.id;
