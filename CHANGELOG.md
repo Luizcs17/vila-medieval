@@ -2,6 +2,10 @@
 
 Each milestone from `docs/GDD.md` is a minor version.
 
+## 1.27.0: Milestone 37, quarries and mines reach twice as far
+
+- Quarry and mine workers now look for rock and iron up to 18 tiles away (was 9), and these buildings can be placed up to 12 tiles from rock or iron (was 6). Rock on another village's land is still off limits.
+
 ## 1.26.0: Milestone 36, recurring production at the smithy
 
 - In the smithy panel, clicking a recipe now turns on **recurring production**: the cell lights up and shows the stock, a box with the maximum (default 2) and an "x". Whenever the village stock has fewer than the maximum, the smith queues that item by itself, and stops when it's reached. Click the box and type a number (Enter confirms) to change the maximum; "x" turns it off.
