@@ -783,6 +783,39 @@ export function createPlaceholderTextures(scene: Phaser.Scene): void {
     field('crop', sprout, 0.35);
     field('crop_ripe', grain, 0.75);
   }
+  // Ruins: a broken stone wall chunk, and the treasure chest (full / looted).
+  // A ruined wall: pale brickwork with dark mortar and moss, broken at the top.
+  fromRows(
+    scene,
+    'ruin',
+    [
+      '..kk..........',
+      '.kbbk...kk....',
+      '.kbmbk.kbbk...',
+      'kbbbbkkbbbbk..',
+      'kmmmmmmmmmmmk.',
+      'kbbbmbbbmbbbbk',
+      'kbbbmbbbmbbbbk',
+      'kmmmmmmmmmmmmk',
+      'kbmbbbgbmbbbbk',
+      'kbmbbggbmbbgbk',
+      'kmmmmmmmmmmmmk',
+      'kbbbmbbbbmbbbk',
+      'kbbbmbbbbmbbbk',
+      'kkkkkkkkkkkkkk',
+    ],
+    { k: '#1c1916', b: '#9a9284', m: '#4a443c', g: '#4f6a34' },
+  );
+  fromRows(scene, 'chest', ['.kkkkkkk.', 'kbbbybbbk', 'kbbbybbbk', 'kkkkykkkk', 'kbbbybbbk', 'kbbbbbbbk', '.kkkkkkk.'], {
+    k: '#24160c',
+    b: '#7a4a24',
+    y: '#d8b24a',
+  });
+  fromRows(scene, 'chest_open', ['.kkkkkkk.', 'k.......k', 'kkkkkkkkk', 'kbbbybbbk', 'kbbbbbbbk', 'kbbbbbbbk', '.kkkkkkk.'], {
+    k: '#24160c',
+    b: '#5a3a1c',
+    y: '#8a7240',
+  });
   fromRows(scene, 'grass_tuft', ['........', '..k..k..', '.klk.lk.', '.kglkgk.', 'kgllglk.', '.kgggk..'], {
     k: '#1c2b14',
     l: '#8ad06a',

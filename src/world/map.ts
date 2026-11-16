@@ -29,10 +29,25 @@ export enum Obj {
   Field,
   Crop,
   CropRipe,
+  /** Broken stone wall of an abandoned ruin (a dungeon). Blocks. */
+  Ruin,
+  /** A ruin's treasure chest, full or already looted. Blocks. */
+  Chest,
+  ChestOpen,
+}
+
+/** Who guards a dungeon. */
+export type DungeonKind = 'wolves' | 'bears' | 'bandits';
+
+/** An abandoned ruin with a chest at (x, y), guarded by `kind`. */
+export interface DungeonSite {
+  x: number;
+  y: number;
+  kind: DungeonKind;
 }
 
 /** Objects that block movement. Anything not listed here can be walked over. */
-const BLOCKING = new Set<Obj>([Obj.Tree, Obj.Pine, Obj.Rock, Obj.Iron, Obj.Building]);
+const BLOCKING = new Set<Obj>([Obj.Tree, Obj.Pine, Obj.Rock, Obj.Iron, Obj.Building, Obj.Ruin, Obj.Chest, Obj.ChestOpen]);
 
 export interface WorldMap {
   w: number;
@@ -45,6 +60,8 @@ export interface WorldMap {
   spawn: { x: number; y: number };
   /** Village centre tiles: [0] is the player's, the rest are rival towns (same order as TOWN_SITES). */
   sites: { x: number; y: number }[];
+  /** Abandoned ruins (dungeons), far from every village. */
+  dungeons: DungeonSite[];
 }
 
 // ---------- deterministic noise ----------
@@ -140,7 +157,45 @@ export function generateMap(seed = MAP_SEED, w = MAP_W, h = MAP_H): WorldMap {
     }
   }
 
-  return { w, h, ground, objects, variant, spawn: { x: cx + 0.5, y: cy + 0.5 }, sites };
+  const map: WorldMap = { w, h, ground, objects, variant, spawn: { x: cx + 0.5, y: cy + 0.5 }, sites, dungeons: [] };
+  map.dungeons = pickDungeonSites(map, seed);
+  for (const d of map.dungeons) stampDungeon(map, d, seed);
+  return map;
+}
+
+/** How many ruins the map has, how far they keep from villages and from each other. */
+export const DUNGEON_COUNT = 5;
+const DUNGEON_FROM_TOWN = 24;
+const DUNGEON_SPACING = 25;
+const DUNGEON_KINDS: DungeonKind[] = ['wolves', 'bears', 'bandits', 'wolves', 'bandits'];
+
+/** Ruin sites: dry land far from villages, the map edge and each other (deterministic). */
+export function pickDungeonSites(map: WorldMap, seed: number): DungeonSite[] {
+  const out: DungeonSite[] = [];
+  for (let k = 0; k < 4000 && out.length < DUNGEON_COUNT; k++) {
+    const x = 12 + Math.floor(hash2(k, 7, seed + 77) * (map.w - 24));
+    const y = 12 + Math.floor(hash2(k, 13, seed + 77) * (map.h - 24));
+    if (map.sites.some((s) => Math.hypot(s.x - x, s.y - y) < DUNGEON_FROM_TOWN)) continue;
+    if (out.some((d) => Math.hypot(d.x - x, d.y - y) < DUNGEON_SPACING)) continue;
+    let dry = true;
+    for (let dy = -3; dy <= 3 && dry; dy++)
+      for (let dx = -3; dx <= 3 && dry; dx++) if (map.ground[(y + dy) * map.w + x + dx] === Ground.Water) dry = false;
+    if (dry) out.push({ x, y, kind: DUNGEON_KINDS[out.length % DUNGEON_KINDS.length] });
+  }
+  return out;
+}
+
+/** Lays a ruin: a broken 5×5 ring of walls (two open sides) on a dirt floor, the chest in the middle. */
+export function stampDungeon(map: WorldMap, d: DungeonSite, seed: number): void {
+  for (let dy = -3; dy <= 3; dy++)
+    for (let dx = -3; dx <= 3; dx++) {
+      const i = (d.y + dy) * map.w + d.x + dx;
+      const ring = Math.max(Math.abs(dx), Math.abs(dy)) === 2;
+      const gap = (dx === 0 && dy === 2) || (dx === 2 && dy === 0) || hash2(d.x + dx, d.y + dy, seed + 5) < 0.25;
+      map.ground[i] = Math.max(Math.abs(dx), Math.abs(dy)) <= 2 ? Ground.Dirt : map.ground[i];
+      map.objects[i] = ring && !gap ? Obj.Ruin : Obj.None;
+    }
+  map.objects[d.y * map.w + d.x] = Obj.Chest;
 }
 
 export function inBounds(map: WorldMap, tx: number, ty: number): boolean {
