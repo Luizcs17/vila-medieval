@@ -86,6 +86,8 @@ import {
   autoSupply,
   basicTool,
   grantStarterTools,
+  planRecurring,
+  QUEUE_MAX,
   recipeOf,
   smithyCanWork,
   tickSmithy,
@@ -876,6 +878,8 @@ export class WorldScene extends Phaser.Scene {
         if (npc?.isAt(b) && !this.clock.isNight) workforce += productivity(n, 'smithing');
       }
       const f = this.factions[b.faction];
+      // Recurring production tops the warehouse up to each item's maximum.
+      planRecurring(b, (t) => villageStorage(f).have(t));
       const e = tickSmithy(b, workforce, worldDt, villageStorage(f), villageStorage(f));
       if (e?.type === 'made' && f.isPlayer)
         this.toast(`Ferreiro: ${ITEM_DEFS[e.item].label} pronto(a), guardado(a) no estoque.`, '#a8ffa8');
@@ -890,7 +894,7 @@ export class WorldScene extends Phaser.Scene {
   /** Adds an item to a smithy's production queue. */
   queueCraft(b: Building, item: ToolId): void {
     b.queue ??= [];
-    if (b.queue.length < 8) b.queue.push(item);
+    if (b.queue.length < QUEUE_MAX) b.queue.push(item);
   }
 
   /** Removes queue entry `i` (refunding started work). */

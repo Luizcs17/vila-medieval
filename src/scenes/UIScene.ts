@@ -222,6 +222,7 @@ export class UIScene extends Phaser.Scene {
         return;
       }
       if (this.panel.isOpen) {
+        if (this.panel.typeKey(key)) return;
         if (key === 'escape' || key === 'e') this.panel.close();
         return;
       }

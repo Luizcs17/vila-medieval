@@ -139,3 +139,31 @@ describe('automatic tool supply', () => {
     expect(autoSupply(b, 3, villageStorage(f))).toEqual([]); // not while it's a building site
   });
 });
+
+describe('recurring smithy production', () => {
+  it('tops the stock up to each maximum, after manual orders', async () => {
+    const { planRecurring, setRecurring, RECURRING_DEFAULT } = await import('../src/game/gear');
+    const { Buildings } = await import('../src/game/buildings');
+    const { generateMap } = await import('../src/world/map');
+    const b = new Buildings(generateMap()).place('smithy', 5, 5, true, 0);
+    const stock: Record<string, number> = { stone_axe: 0, spear: 5 };
+    const have = (t: string) => stock[t] ?? 0;
+    expect(planRecurring(b, have)).toBeNull(); // nothing recurring yet
+    setRecurring(b, 'stone_axe', null);
+    setRecurring(b, 'spear', RECURRING_DEFAULT);
+    expect(planRecurring(b, have)).toBeNull(); // 5 spears ≥ 2
+    setRecurring(b, 'stone_axe', 3);
+    b.queue = ['iron_sword'];
+    expect(planRecurring(b, have)).toBeNull(); // manual orders first
+    b.queue = [];
+    expect(planRecurring(b, have)).toBe('stone_axe');
+    expect(b.queue).toEqual(['stone_axe']);
+    b.queue = [];
+    stock.stone_axe = 3;
+    expect(planRecurring(b, have)).toBeNull(); // at its maximum
+    setRecurring(b, 'spear', 150);
+    expect(b.recurring?.spear).toBe(99);
+    setRecurring(b, 'spear', null);
+    expect(b.recurring?.spear).toBeUndefined();
+  });
+});
