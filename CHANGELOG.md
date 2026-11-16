@@ -2,6 +2,12 @@
 
 Each milestone from `docs/GDD.md` is a minor version.
 
+## 1.28.0: Milestone 38, moving buildings
+
+- B menu: "⇄ Mover", next to Demolir. Point at one of your buildings and click, then pick the new spot like when building (green/red ghost, same rules, on that building's village land; it may overlap its old spot). Right click or Esc cancels.
+- It costs half the building's price (rounded up), from your bag and that village's stock; moving an unfinished site is free. The building becomes a construction site at the new spot: build it with E, and idle villagers and its own workers and residents help.
+- Residents, workers, its inventory and the smithy's queue and recurring production go along. A farm loses its planting area (define it again). Village halls can't be moved.
+
 ## 1.27.0: Milestone 37, quarries and mines reach twice as far
 
 - Quarry and mine workers now look for rock and iron up to 18 tiles away (was 9), and these buildings can be placed up to 12 tiles from rock or iron (was 6). Rock on another village's land is still off limits.

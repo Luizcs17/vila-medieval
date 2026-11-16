@@ -314,6 +314,17 @@ export function demolitionRefund(b: Pick<Building, 'type' | 'built'>): Partial<A
   return out;
 }
 
+/** Moving a finished building costs half its price (rounded up); moving an unfinished site is free. */
+export function relocationCost(b: Pick<Building, 'type' | 'built'>): Partial<Amounts> {
+  if (!b.built) return {};
+  const out: Partial<Amounts> = {};
+  for (const [r, n] of Object.entries(BUILDING_DEFS[b.type].cost) as [keyof Amounts, number][]) out[r] = Math.ceil(n / 2);
+  return out;
+}
+
+/** Buildings that can't be moved: village halls. */
+export const canRelocate = (b: Pick<Building, 'type'>) => b.type !== 'stockpile';
+
 export const BUILD_MENU: BuildingType[] = (Object.keys(BUILDING_DEFS) as BuildingType[]).filter(
   (t) => BUILDING_DEFS[t].buildable,
 );
@@ -377,15 +388,25 @@ export class Buildings {
     return out;
   }
 
-  /** Can `type` go with its north corner at (tx, ty)? `blocked(i)` lets the caller veto tiles (e.g. the player is there). */
-  check(type: BuildingType, tx: number, ty: number, blocked: (i: number) => boolean = () => false): PlaceCheck {
+  /**
+   * Can `type` go with its north corner at (tx, ty)? `blocked(i)` lets the caller veto tiles (e.g. the
+   * player is there); `ignore` is a building being moved, whose own tiles count as free.
+   */
+  check(
+    type: BuildingType,
+    tx: number,
+    ty: number,
+    blocked: (i: number) => boolean = () => false,
+    ignore?: Building,
+  ): PlaceCheck {
     const def = BUILDING_DEFS[type];
     for (let y = ty; y < ty + def.size; y++) {
       for (let x = tx; x < tx + def.size; x++) {
         if (!inBounds(this.map, x, y)) return { ok: false, reason: 'Fora do mapa' };
         const i = tileIndex(this.map, x, y);
         if (this.map.ground[i] === Ground.Water) return { ok: false, reason: 'Não dá para construir na água' };
-        if (!CLEARABLE.has(this.map.objects[i])) return { ok: false, reason: 'Local ocupado' };
+        if (!CLEARABLE.has(this.map.objects[i]) && !(ignore && this.byTile.get(i) === ignore))
+          return { ok: false, reason: 'Local ocupado' };
         if (blocked(i)) return { ok: false, reason: 'Saia de cima do local' };
       }
     }
@@ -446,6 +467,20 @@ export class Buildings {
     const before = b.hp;
     b.hp = Math.min(BUILDING_DEFS[b.type].maxHp, b.hp + amount);
     return b.hp - before;
+  }
+
+  /** Moves a building to (tx, ty): its old tiles become empty, the new ones are covered. */
+  move(b: Building, tx: number, ty: number): void {
+    for (const i of this.footprint(b.type, b.tx, b.ty)) {
+      this.map.objects[i] = Obj.None;
+      this.byTile.delete(i);
+    }
+    b.tx = tx;
+    b.ty = ty;
+    for (const i of this.footprint(b.type, tx, ty)) {
+      this.map.objects[i] = b.type === 'gate' ? Obj.Gate : Obj.Building;
+      this.byTile.set(i, b);
+    }
   }
 
   /** Removes a building (destroyed or demolished); its tiles become empty. */

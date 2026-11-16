@@ -84,3 +84,30 @@ describe('buildings', () => {
     expect(stock.items).toMatchObject({ wood: 80, stone: 90 });
   });
 });
+
+describe('moving buildings', () => {
+  it('costs half (rounded up) when built, nothing for a site; halls stay put', async () => {
+    const { relocationCost, canRelocate } = await import('../src/game/buildings');
+    expect(relocationCost({ type: 'house', built: true })).toEqual({ wood: 10, stone: 5 });
+    expect(relocationCost({ type: 'mine', built: true })).toEqual({ wood: 10, stone: 8 });
+    expect(relocationCost({ type: 'house', built: false })).toEqual({});
+    expect(canRelocate({ type: 'stockpile' })).toBe(false);
+    expect(canRelocate({ type: 'smithy' })).toBe(true);
+  });
+
+  it('frees the old tiles, covers the new ones, and may overlap its own old spot', async () => {
+    const { Buildings } = await import('../src/game/buildings');
+    const { generateMap, Obj, tileIndex } = await import('../src/world/map');
+    const map = generateMap();
+    const s = map.sites[0];
+    const bs = new Buildings(map);
+    const b = bs.place('house', s.x, s.y, true, 0);
+    b.storage.wood = 3;
+    expect(bs.check('house', s.x + 1, s.y).ok).toBe(false);
+    expect(bs.check('house', s.x + 1, s.y, () => false, b).ok).toBe(true);
+    bs.move(b, s.x + 1, s.y);
+    expect(map.objects[tileIndex(map, s.x, s.y)]).toBe(Obj.None);
+    expect(bs.at(tileIndex(map, s.x + 2, s.y))).toBe(b);
+    expect(b.storage.wood).toBe(3);
+  });
+});

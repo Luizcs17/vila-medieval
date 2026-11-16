@@ -821,9 +821,11 @@ export class Npc {
     return p !== null;
   }
 
+  /** Their workplace, if it's standing (one being moved or rebuilt doesn't count). */
   private workplace(world: NpcWorld): Building | undefined {
     if (this.data.jobId === null) return undefined;
-    return world.buildings.list.find((b) => b.id === this.data.jobId);
+    const b = world.buildings.list.find((x) => x.id === this.data.jobId);
+    return b?.built ? b : undefined;
   }
 
   private home(world: NpcWorld): Building | undefined {
