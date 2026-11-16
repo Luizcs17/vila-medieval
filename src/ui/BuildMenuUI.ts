@@ -32,12 +32,13 @@ export class BuildMenuUI {
     private readonly hint: () => string | null,
     private readonly onSelect: (type: BuildingType) => void,
     private readonly onDemolish: () => void,
+    private readonly onMove: () => void,
   ) {
     this.container = scene.add.container(12, 96).setDepth(90).setVisible(false);
   }
 
   private build(): void {
-    const { scene, onSelect, onDemolish } = this;
+    const { scene, onSelect, onDemolish, onMove } = this;
     this.container.removeAll(true);
     this.rows = [];
     const menu = this.available();
@@ -68,7 +69,16 @@ export class BuildMenuUI {
     const dText = scene.add
       .text(ROW_W * 2 + PAD * 2 - 75, PAD + 8, '⚒ Demolir (X)', { ...TEXT, fontSize: '13px' })
       .setOrigin(0.5);
-    this.container.add([panel, title, dBg, dText]);
+    // Move mode button, left of Demolish.
+    const mBg = scene.add
+      .rectangle(ROW_W * 2 + PAD * 2 - 260, PAD - 4, 104, 24, 0x2e3a4a, 1)
+      .setOrigin(0)
+      .setStrokeStyle(1, 0x8a6a3a);
+    mBg.setInteractive({ useHandCursor: true }).on('pointerdown', (p: Phaser.Input.Pointer) => {
+      if (p.leftButtonDown()) onMove();
+    });
+    const mText = scene.add.text(ROW_W * 2 + PAD * 2 - 208, PAD + 8, '⇄ Mover', { ...TEXT, fontSize: '13px' }).setOrigin(0.5);
+    this.container.add([panel, title, dBg, dText, mBg, mText]);
     if (note)
       this.container.add(
         scene.add.text(PAD, PAD + 22, note, { ...TEXT, fontSize: '12px', color: '#ffe08a', wordWrap: { width: ROW_W * 2 } }),

@@ -38,8 +38,10 @@ import {
   type Building,
   Buildings,
   type BuildingType,
+  canRelocate,
   demolitionRefund,
   type PlaceCheck,
+  relocationCost,
 } from '../game/buildings';
 import { type CraftCheck, craft } from '../game/crafting';
 import {
@@ -700,6 +702,7 @@ export class WorldScene extends Phaser.Scene {
     if (!frozen && Phaser.Input.Keyboard.JustDown(k.F)) this.eat();
     this.selection.clear();
     if (this.demolishing) this.updateDemolish();
+    else if (this.movePicking) this.updateMovePick();
     else if (this.plotFarm) this.updatePlot();
     else if (this.commandPick) this.updateCommandPick();
     else if (this.placement) this.updatePlacement();
@@ -1809,6 +1812,73 @@ export class WorldScene extends Phaser.Scene {
     }
   }
 
+  // ---------- moving buildings (driven by UIScene) ----------
+
+  /** "Mover" mode: pointing at the building to move. */
+  movePicking = false;
+  moveHint: { text: string; ok: boolean } | null = null;
+  private movePick: Building | null = null;
+  /** The building being moved (placement mode shows its ghost at the new spot). */
+  relocating: Building | null = null;
+
+  startMove(): void {
+    this.cancelPlacing();
+    this.movePicking = true;
+    this.interaction = null;
+  }
+
+  private updateMovePick(): void {
+    const t = this.pointerTile();
+    this.movePick = null;
+    this.moveHint = { text: 'Aponte para um prédio seu', ok: false };
+    if (!inBounds(this.map, t.x, t.y)) return;
+    const b = this.buildings.at(tileIndex(this.map, t.x, t.y));
+    if (!b) return;
+    const def = BUILDING_DEFS[b.type];
+    this.drawFootprint(b.tx, b.ty, def.size, 0xffe08a);
+    if (!this.isMine(b.faction)) this.moveHint = { text: 'Não é seu', ok: false };
+    else if (!canRelocate(b)) this.moveHint = { text: 'O Salão não pode ser mudado de lugar', ok: false };
+    else {
+      this.movePick = b;
+      const cost = summarizeCost(relocationCost(b));
+      this.moveHint = { text: `Mover ${def.name} (${cost ? `custa ${cost}` : 'obra: grátis'}) · clique`, ok: true };
+    }
+  }
+
+  /** The click that picks the building; then choose its new spot like when building. */
+  tryPickMove(): void {
+    const b = this.movePick;
+    if (!b) return;
+    this.movePicking = false;
+    this.moveHint = null;
+    this.relocating = b;
+    this.startPlacing(b.type);
+  }
+
+  /** Moves a building: it becomes a construction site at the new spot (people, inventory and orders go along). */
+  private relocate(b: Building, tx: number, ty: number): void {
+    const def = BUILDING_DEFS[b.type];
+    const old = this.buildings.footprint(b.type, b.tx, b.ty);
+    const lostPlot = (b.plot?.tiles.length ?? 0) > 0;
+    for (const i of clearPlot(this.map, b)) this.replaceObjectImage(i);
+    this.buildings.move(b, tx, ty);
+    b.built = false;
+    b.progress = 0;
+    b.hp = def.maxHp;
+    for (const i of [...old, ...this.buildings.footprint(b.type, tx, ty)]) this.replaceObjectImage(i);
+    const view = this.buildingViews.get(b.id);
+    view?.img.destroy();
+    view?.sign?.destroy();
+    this.buildingViews.delete(b.id);
+    this.addBuildingView(b);
+    this.territory.recompute(this.buildings.list);
+    sound.play('build');
+    this.toast(
+      `${def.name}: obra no novo lugar. Termine a construção (E), os desocupados ajudam.${lostPlot ? ' Defina a área de plantio de novo.' : ''}`,
+      '#ffe08a',
+    );
+  }
+
   /** What demolishing gives back: everything for an unfinished site, half for a finished building. */
   private refundFor(b: Building): Partial<Record<Resource, number>> {
     return demolitionRefund(b);
@@ -1906,7 +1976,10 @@ export class WorldScene extends Phaser.Scene {
   /** The nearest unfinished building of this villager's village, if they're an idle adult. */
   private buildSiteFor(npc: Npc): Building | null {
     const n = npc.data;
-    if (n.role !== 'villager' || n.jobId !== null || this.missions.has(n.id) || !isAdult(n, this.clock.seconds)) return null;
+    const job = n.jobId !== null ? this.buildings.list.find((b) => b.id === n.jobId) : undefined;
+    if (job?.built) return null; // busy at work (people whose workplace is being rebuilt help with it)
+    if (n.role !== 'villager' || this.missions.has(n.id) || !isAdult(n, this.clock.seconds)) return null;
+    if (job && !job.built) return job;
     let best: Building | null = null;
     let bestD = BUILDER_RANGE;
     for (const b of this.buildings.list) {
@@ -2425,7 +2498,7 @@ export class WorldScene extends Phaser.Scene {
   // ---------- build mode (driven by UIScene) ----------
 
   startPlacing(type: BuildingType): void {
-    if (!this.buildMenu().includes(type)) return;
+    if (!this.relocating && !this.buildMenu().includes(type)) return;
     this.placement = { type, check: { ok: false, reason: '' } };
     this.ghost.setTexture(BUILDING_KEY[type]).setVisible(true);
     this.interaction = null;
@@ -2433,6 +2506,10 @@ export class WorldScene extends Phaser.Scene {
 
   cancelPlacing(): void {
     if (this.demolishing) this.cancelDemolish();
+    this.movePicking = false;
+    this.moveHint = null;
+    this.movePick = null;
+    this.relocating = null;
     if (this.commandPick) this.cancelCommandPick();
     if (this.plotFarm) this.cancelPlot();
     this.placement = null;
@@ -2444,6 +2521,13 @@ export class WorldScene extends Phaser.Scene {
     if (!this.placement?.check.ok) return false;
     const { type } = this.placement;
     const def = BUILDING_DEFS[type];
+    if (this.relocating) {
+      const b = this.relocating;
+      if (!payFrom(relocationCost(b), this.inventory, this.factions[b.faction].stock)) return false;
+      this.relocate(b, this.placeTile.x, this.placeTile.y);
+      this.cancelPlacing();
+      return true;
+    }
     const fid = this.buildFaction(type, this.placeTile.x, this.placeTile.y, def.size);
     if (!payFrom(def.cost, this.inventory, this.factions[fid].stock)) return false;
     if (type === 'colony') {
@@ -2486,7 +2570,22 @@ export class WorldScene extends Phaser.Scene {
     const ty = Math.floor(g.y - (def.size - 1) / 2);
     this.placeTile = { x: tx, y: ty };
 
-    let check = this.buildings.check(p.type, tx, ty, (i) => this.playerOverlapsTile(i));
+    let check = this.buildings.check(p.type, tx, ty, (i) => this.playerOverlapsTile(i), this.relocating ?? undefined);
+    if (this.relocating) {
+      // Moving: same rules as building, on the land of the building's own village, for half the price.
+      const b = this.relocating;
+      const payer = this.factions[b.faction];
+      if (check.ok && !this.territory.canBuild(b.faction, tx, ty, def.size) && !(b.type === 'home' && !this.landNear(tx, ty, 0)))
+        check = { ok: false, reason: `Fora do território de ${payer.name}` };
+      if (check.ok && !this.canPay(relocationCost(b), payer))
+        check = { ok: false, reason: `Recursos insuficientes: ${summarizeCost(relocationCost(b))}` };
+      p.check = check;
+      const bottom = gridToScreen(tx + def.size, ty + def.size);
+      this.ghost.setPosition(bottom.x, bottom.y).setTint(check.ok ? 0xa8ffa8 : 0xff9090);
+      this.drawFootprint(tx, ty, def.size, check.ok ? 0x8aff8a : 0xff6060);
+      this.drawFootprint(b.tx, b.ty, def.size, 0xffe08a);
+      return;
+    }
     if (p.type === 'road') {
       // Roads may leave your land (to reach other villages), just not cross into theirs.
       const owner = this.territory.ownerAt(tx, ty);

@@ -148,6 +148,10 @@ export class UIScene extends Phaser.Scene {
         this.buildMenu.setOpen(false);
         this.world.startDemolish();
       },
+      () => {
+        this.buildMenu.setOpen(false);
+        this.world.startMove();
+      },
     );
     this.placeHint = this.add
       .text(0, 0, '', { ...TEXT, fontSize: '12px', backgroundColor: '#000000bb', padding: { x: 6, y: 3 } })
@@ -295,6 +299,7 @@ export class UIScene extends Phaser.Scene {
           this.world.placement !== null ||
           this.world.commandPick !== null ||
           this.world.plotFarm !== null ||
+          this.world.movePicking ||
           this.world.demolishing;
         if (!anyOpen) this.pause.open();
         if (this.inventory.isOpen) this.toggleInventory();
@@ -316,6 +321,11 @@ export class UIScene extends Phaser.Scene {
       if (this.world.commandPick) {
         if (p.rightButtonDown()) this.world.cancelCommandPick();
         else this.world.tryCommandPick();
+        return;
+      }
+      if (this.world.movePicking) {
+        if (p.rightButtonDown()) this.world.cancelPlacing();
+        else this.world.tryPickMove();
         return;
       }
       if (this.world.plotFarm) {
@@ -464,6 +474,15 @@ export class UIScene extends Phaser.Scene {
         .setVisible(true);
       return;
     }
+    const mh = this.world.moveHint;
+    if (this.world.movePicking && mh) {
+      this.placeHint
+        .setText(`${mh.text}   ·   Direito/Esc: sair`)
+        .setColor(mh.ok ? '#ffe08a' : '#a8977a')
+        .setPosition(Math.round(ptr0.x + 16), Math.round(ptr0.y + 16))
+        .setVisible(true);
+      return;
+    }
     const ph = this.world.plotHint;
     if (this.world.plotFarm && ph) {
       this.placeHint
@@ -488,7 +507,8 @@ export class UIScene extends Phaser.Scene {
       return;
     }
     const ptr = this.input.activePointer;
-    const text = pl.check.ok ? 'Clique: construir   Direito/Esc: cancelar' : pl.check.reason;
+    const verb = this.world.relocating ? 'mover para cá' : 'construir';
+    const text = pl.check.ok ? `Clique: ${verb}   Direito/Esc: cancelar` : pl.check.reason;
     this.placeHint
       .setText(text)
       .setColor(pl.check.ok ? '#c8ffc8' : '#ff9a8a')
