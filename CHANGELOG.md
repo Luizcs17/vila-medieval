@@ -2,6 +2,13 @@
 
 Each milestone from `docs/GDD.md` is a minor version.
 
+## 1.30.0: Milestone 40, rival villages feed themselves and grow; diplomats recruit
+
+- New rival villages start with a Fazenda (with a planting area picked automatically and seeds) and an Embaixada, and 60 meat. Jobs are filled one person per workplace in order of need (farm, hunter, lumberjack, quarry, embassy, barracks…), then the second slots.
+- Rival AI, twice a day: **food first**. When food runs short they move people from materials jobs to farms and hunting and build more farms (one per 6 people); then **protection** (barracks, soldiers, a tower); only with food to spare they build houses and something from their own random leaning (each village is different). In a 9-day test, no rival villager starved.
+- **Diplomats recruit wanderers**: a free diplomat walks to a wanderer near the village and brings them in if there's a free bed. Rival villages take anyone (when they have food). For your villages, the Embaixada panel has a choice: "Não recrutar" (default), "Só especiais" (skilled and masters) or "Todos". You can still recruit by hand.
+- Old saves: rival villages recruit too, and their AI builds farms when they get hungry.
+
 ## 1.29.0: Milestone 39, market fix, richer farms
 
 - Fix: E on the Mercado opened only the village stock, so merchants couldn't be hired. It now opens its panel (hire merchants), which has an "Estoque da vila" button.

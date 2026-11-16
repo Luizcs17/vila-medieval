@@ -6,6 +6,18 @@ import type { Good } from './trade';
 /** The player's faction id. Rival towns are 1..N in TOWN_SITES order. */
 export const PLAYER_FACTION = 0;
 
+/** Diplomats recruiting wanderers: nobody, only skilled and master ones, or anyone. */
+export type RecruitPolicy = 'none' | 'special' | 'all';
+export const RECRUIT_POLICY_LABEL: Record<RecruitPolicy, string> = {
+  none: 'Não recrutar',
+  special: 'Só especiais',
+  all: 'Todos',
+};
+
+/** Does `policy` take a wanderer of this tier? */
+export const policyAccepts = (policy: RecruitPolicy | undefined, tier: 'common' | 'skilled' | 'master') =>
+  policy === 'all' || (policy === 'special' && tier !== 'common');
+
 export interface Faction {
   id: number;
   name: string;
@@ -27,6 +39,8 @@ export interface Faction {
   tools: Partial<Record<ToolId, number>>;
   /** Colonies: the village that founded them (same realm: shared relations and wars). */
   parent?: number;
+  /** Which wanderers its diplomats go and bring in. */
+  recruitPolicy?: RecruitPolicy;
 }
 
 /** Player's standing orders for visiting merchants: sell what's above `sellAbove`, buy up to `buyUpTo`. */

@@ -1,6 +1,7 @@
 import type Phaser from 'phaser';
 import { BEDS_PER_HOUSE } from '../config';
 import { BUILDING_DEFS, type Building } from '../game/buildings';
+import { RECRUIT_POLICY_LABEL } from '../game/factions';
 import { isAdult } from '../game/families';
 import { ARMORS, RECURRING_DEFAULT, recipeOf, setRecurring, WEAPONS, workplaceTools } from '../game/gear';
 import { ALL_ITEMS, ITEM_DEFS, RECIPES, type ToolId } from '../game/items';
@@ -447,6 +448,44 @@ export class BuildingPanelUI {
         }),
       );
       y += 30;
+    }
+    if (b.type === 'embassy' && b.built) {
+      // Diplomats also go and invite wanderers to live here.
+      const f = this.world.factions[b.faction];
+      const policy = f.recruitPolicy ?? 'none';
+      items.push(
+        s.add.text(PAD, y, 'Diplomatas convidam andarilhos (precisa de cama livre):', {
+          ...TEXT,
+          fontSize: '12px',
+          color: '#cdb98e',
+        }),
+      );
+      y += 20;
+      const bw = (W - 2 * PAD - 12) / 3;
+      (['none', 'special', 'all'] as const).forEach((p, k) => {
+        const on = p === policy;
+        const bg = s.add
+          .rectangle(PAD + k * (bw + 6), y, bw, 26, on ? 0x4a3a1e : 0x2e3a4a, 1)
+          .setOrigin(0)
+          .setStrokeStyle(on ? 2 : 1, on ? 0xe0b860 : 0x8a6a3a);
+        bg.setInteractive({ useHandCursor: true }).on('pointerdown', () => {
+          f.recruitPolicy = p;
+          this.rebuild();
+        });
+        items.push(
+          bg,
+          s.add.text(PAD + k * (bw + 6) + bw / 2, y + 13, RECRUIT_POLICY_LABEL[p], { ...TEXT, fontSize: '12px' }).setOrigin(0.5),
+        );
+      });
+      y += 34;
+      items.push(
+        s.add.text(PAD, y, 'Especiais: habilidosos e mestres. Você continua podendo recrutar à mão.', {
+          ...TEXT,
+          fontSize: '10px',
+          color: '#a8977a',
+        }),
+      );
+      y += 20;
     }
     if (b.type === 'farm' && b.built) {
       const plot = b.plot;

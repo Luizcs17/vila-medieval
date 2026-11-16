@@ -64,11 +64,13 @@ import {
   createFactions,
   type Faction,
   PLAYER_FACTION,
+  policyAccepts,
   realmOf,
   type TradePolicy,
 } from '../game/factions';
 import { ageOf, Families, fullName, isAdult, PLAYER_ID } from '../game/families';
 import {
+  autoPlot,
   clearPlot,
   type FarmTask,
   FIELD_OBJS,
@@ -101,7 +103,7 @@ import {
 } from '../game/gear';
 import { Inventory, RESOURCE_LABEL, RESOURCES, type Resource } from '../game/inventory';
 import { ITEM_DEFS, type ItemId, maxDurability, RECIPES, type Recipe, type ToolId, type ToolType } from '../game/items';
-import { isStarving, updateNeeds, updateNeedsFrom } from '../game/needs';
+import { foodDays, isStarving, updateNeeds, updateNeedsFrom } from '../game/needs';
 import {
   compass,
   generateWanderer,
@@ -123,7 +125,7 @@ import { SlotInventory } from '../game/slots';
 import { buildingStorage, type Storage, villageStorage } from '../game/storage';
 import { Territory } from '../game/territory';
 import { GameClock } from '../game/time';
-import { buildRoadNetwork, findSpot, foundTown, populateTown } from '../game/towns';
+import { buildRoadNetwork, findSpot, foundTown, JOB_PRIORITY, populateTown, staffInOrder } from '../game/towns';
 import {
   executeTrade,
   GOODS,
@@ -223,8 +225,10 @@ export interface WorldInit {
 /** A diplomat's trip: going → talking → returning. */
 export interface Mission {
   diplomatId: number;
-  /** Diplomacy errand, or a trade caravan led by a merchant. */
-  kind: MissionKind | 'trade';
+  /** Diplomacy errand, a trade caravan led by a merchant, or fetching a wanderer to live in the village. */
+  kind: MissionKind | 'trade' | 'recruit';
+  /** Recruiting: the wanderer's id. */
+  wanderer?: number;
   target: number;
   phase: 'going' | 'talking' | 'returning';
   timer: number;
@@ -431,15 +435,19 @@ export class WorldScene extends Phaser.Scene {
       mission: (id) => this.missions.get(id) ?? null,
       missionArrived: (id) => {
         const m = this.missions.get(id);
-        if (m) {
+        if (m?.kind === 'recruit') this.recruitArrived(m);
+        else if (m) {
           m.phase = 'talking';
           m.timer = 6;
         }
       },
+      missionPoint: (id) => this.missionPoint(id),
       missionDone: (id) => this.finishMission(id),
       missionFailed: (id) => {
         const n = this.population.person(id);
+        const quiet = this.missions.get(id)?.kind === 'recruit';
         this.missions.delete(id);
+        if (quiet) return;
         this.toast(`${n?.name ?? 'O diplomata'} não encontrou caminho até a outra vila.`, '#ffb070');
       },
       factionCenter: (f) => this.factions[f].center,
@@ -525,7 +533,10 @@ export class WorldScene extends Phaser.Scene {
         if (f.isPlayer) continue;
         f.stock.add('wood', 40);
         f.stock.add('stone', 25);
-        f.stock.add('meat', 20);
+        f.stock.add('meat', 60);
+        // Farms need land claimed first (territory is computed by now): planting area and seeds.
+        for (const b of this.buildings.list) if (b.faction === f.id && b.type === 'farm') this.setupAiFarm(b);
+        f.recruitPolicy = 'all';
         for (const n of populateTown(this.population, this.buildings, f, Math.random, 10, this.clock.seconds))
           this.spawnVillagerEntity(n);
       }
@@ -585,6 +596,7 @@ export class WorldScene extends Phaser.Scene {
         coins: f.coins,
         tools: { ...f.tools },
         ...(f.parent !== undefined ? { name: f.name, parent: f.parent } : {}),
+        ...(f.recruitPolicy ? { recruitPolicy: f.recruitPolicy } : {}),
       })),
       inventory: this.inventory.slots.map((s) => (s ? { ...s } : null)),
       armor: this.inventory.armor ? { ...this.inventory.armor } : null,
@@ -658,6 +670,8 @@ export class WorldScene extends Phaser.Scene {
       f.rulerId = sf.rulerId;
       f.coins = sf.coins;
       f.tools = { ...sf.tools };
+      // Rival villages recruit everyone (saves from before diplomats recruited, too).
+      f.recruitPolicy = sf.recruitPolicy ?? (f.isPlayer ? undefined : 'all');
       f.center = sf.center;
     }
     this.territory.recompute(this.buildings.list);
@@ -1035,6 +1049,78 @@ export class WorldScene extends Phaser.Scene {
 
   // ---------- diplomacy & war ----------
 
+  // ---------- diplomats recruiting wanderers ----------
+
+  private recruitTimer = 0;
+
+  /** Where a diplomat on a mission walks to: the wanderer they're fetching, or the other village. */
+  private missionPoint(id: number): { x: number; y: number } | null {
+    const m = this.missions.get(id);
+    if (!m) return null;
+    if (m.kind !== 'recruit') return this.factions[m.target].center;
+    const w = m.wanderer !== undefined ? this.npcs.get(m.wanderer) : undefined;
+    return w && w.data.role === 'wanderer' ? { x: Math.floor(w.gx), y: Math.floor(w.gy) } : null;
+  }
+
+  /**
+   * Every few seconds, each village whose policy allows it sends a free diplomat to a wanderer near
+   * it (if there's a free bed and, for rival villages, food to spare).
+   */
+  private updateRecruiting(worldDt: number): void {
+    this.recruitTimer += worldDt;
+    if (this.recruitTimer < 8) return;
+    this.recruitTimer = 0;
+    const targeted = new Set([...this.missions.values()].filter((m) => m.kind === 'recruit').map((m) => m.wanderer));
+    for (const f of this.factions) {
+      if (!f.alive || !f.recruitPolicy || f.recruitPolicy === 'none') continue;
+      if (f.isPlayer && !this.settled) continue;
+      const pending = [...this.missions.values()].filter((m) => m.kind === 'recruit' && m.faction === f.id).length;
+      if (this.population.freeBedsOf(f.id) - pending <= 0) continue;
+      if (!f.isPlayer && foodDays(this.population.villagersOf(f.id), f.stock) < 2) continue;
+      const c = f.center;
+      const wanderer = [...this.npcs.values()]
+        .filter((w) => w.data.role === 'wanderer' && !targeted.has(w.data.id) && policyAccepts(f.recruitPolicy, w.data.tier))
+        .map((w) => ({ w, d: Math.hypot(w.gx - c.x, w.gy - c.y) }))
+        .filter((x) => x.d < 45)
+        .sort((a, b) => a.d - b.d)[0]?.w;
+      if (!wanderer) continue;
+      const diplomat = this.buildings.list
+        .filter((b) => b.faction === f.id && b.type === 'embassy' && b.built)
+        .flatMap((e) => this.population.workers(e.id))
+        .find((n) => !this.missions.has(n.id) && this.npcs.has(n.id) && isAdult(n, this.clock.seconds));
+      if (!diplomat) continue;
+      this.missions.set(diplomat.id, {
+        diplomatId: diplomat.id,
+        kind: 'recruit',
+        target: f.id,
+        faction: f.id,
+        wanderer: wanderer.data.id,
+        phase: 'going',
+        timer: 0,
+      });
+      targeted.add(wanderer.data.id);
+      if (f.isPlayer) this.toast(`${diplomat.name} foi convidar ${wanderer.data.name} para morar na vila.`, '#a8c8ff');
+    }
+  }
+
+  /** The diplomat reached the wanderer: they move into a free bed of the village, if there's still one. */
+  private recruitArrived(m: Mission): void {
+    m.phase = 'returning';
+    const npc = m.wanderer !== undefined ? this.npcs.get(m.wanderer) : undefined;
+    const f = this.factions[m.faction ?? m.target];
+    const home = this.population.houseWithBed(f.id);
+    if (!npc || npc.data.role !== 'wanderer' || !home) return;
+    if (this.talkingTo?.id === npc.data.id) this.talkingTo = null;
+    npc.data.role = 'villager';
+    npc.data.faction = f.id;
+    npc.data.homeId = home.id;
+    npc.becomeVillager(home);
+    if (f.isPlayer) {
+      sound.play('recruit');
+      this.toast(`${npc.data.name} aceitou o convite e vai morar em ${f.name}!`, '#a8ffa8');
+    }
+  }
+
   /** Diplomats (at your embassies) who are free for a mission, best Diplomacia rating first. */
   freeDiplomats(): NpcData[] {
     const embassies = this.buildings.list.filter((b) => b.faction === PLAYER_FACTION && b.type === 'embassy' && b.built);
@@ -1346,6 +1432,7 @@ export class WorldScene extends Phaser.Scene {
         this.tradeAt(m, d);
         continue;
       }
+      if (m.kind === 'recruit') continue; // recruiting has no talks
       const f = this.factions[m.target];
       const rel = this.diplomacy.get(PLAYER_FACTION, m.target);
       const rating = d.skills.diplomacy;
@@ -1564,38 +1651,78 @@ export class WorldScene extends Phaser.Scene {
   }
 
   /** Rival towns grow on their own: new houses when beds run short, jobs for the idle. */
+  /** Places a finished building for a rival village near its centre (paying from its stock). */
+  private aiBuild(f: Faction, type: BuildingType, minR: number, maxR: number): Building | null {
+    const def = BUILDING_DEFS[type];
+    if (!f.stock.canAfford(def.cost)) return null;
+    const spot = findSpot(this.buildings, type, f.center, minR, maxR, Math.random);
+    if (!spot || !this.territory.canBuild(f.id, spot.x, spot.y, def.size)) return null;
+    f.stock.pay(def.cost);
+    const b = this.buildings.place(type, spot.x, spot.y, true, f.id);
+    grantStarterTools(b);
+    if (type === 'farm') this.setupAiFarm(b);
+    this.addBuildingView(b);
+    this.territory.recompute(this.buildings.list);
+    return b;
+  }
+
+  /** A rival farm gets its planting area and some seeds. */
+  private setupAiFarm(b: Building): void {
+    const tiles = autoPlot(this.map, b, (i) => this.territory.owner[i]);
+    if (tiles) for (const i of setPlot(this.map, b, tiles)) this.replaceObjectImage(i);
+    b.storage.seed = (b.storage.seed ?? 0) + (tiles?.length ?? 0);
+  }
+
+  /** Each rival village's leaning when it has spare materials (random, fixed per game). */
+  private townBias = new Map<number, BuildingType[]>();
+
+  /**
+   * Rival villages grow on their own, twice a day: food first (staff farms and hunters, build a farm
+   * when food runs short), then protection (barracks, soldiers, a tower when threatened), then houses
+   * and production, each village with its own random leaning.
+   */
   private updateTowns(worldDt: number): void {
     this.townTimer += worldDt;
     if (this.townTimer < DAY_SECONDS / 2) return;
     this.townTimer = 0;
     for (const f of this.factions) {
       if (f.isPlayer || !f.alive) continue;
-      const cost = BUILDING_DEFS.house.cost;
-      if (this.population.freeBedsOf(f.id) < 2 && f.stock.canAfford(cost)) {
-        const spot = findSpot(this.buildings, 'house', f.center, 2, 10, Math.random);
-        if (spot && this.territory.canBuild(f.id, spot.x, spot.y, 2)) {
-          f.stock.pay(cost);
-          this.addBuildingView(this.buildings.place('house', spot.x, spot.y, true, f.id));
-          this.territory.recompute(this.buildings.list);
+      const people = this.population.villagersOf(f.id);
+      const days = foodDays(people, f.stock);
+      const mine = (t: BuildingType) => this.buildings.list.filter((b) => b.faction === f.id && b.type === t && b.built);
+
+      // 1. Food: put people on farms and hunting (taking them from other jobs if needed), and grow farms.
+      const foodJobs = [...mine('farm'), ...mine('hunter')];
+      if (days < 3) {
+        for (const b of foodJobs) {
+          const slots = BUILDING_DEFS[b.type].job!.slots - this.population.workers(b.id).length;
+          const spare = people
+            .filter((n) => isAdult(n, this.clock.seconds) && n.jobId !== null && !this.missions.has(n.id))
+            .filter((n) => {
+              const t = this.buildings.list.find((x) => x.id === n.jobId)?.type;
+              return t === 'lumberjack' || t === 'quarry' || t === 'market' || t === 'mine' || t === 'smithy';
+            });
+          for (let k = 0; k < slots && k < spare.length; k++) {
+            spare[k].jobId = null;
+            this.population.assign(spare[k], b);
+          }
         }
+        if (mine('farm').length < 1 + Math.floor(people.length / 6)) this.aiBuild(f, 'farm', 4, 12);
       }
+
+      // 2. Protection.
       const threatened = this.factions.some(
         (o) => o.id !== f.id && o.alive && (this.atWar(f.id, o.id) || this.diplomacy.get(f.id, o.id).score < -30),
       );
       const hasBarracks = this.buildings.list.some((b) => b.faction === f.id && b.type === 'barracks');
-      if (threatened && !hasBarracks && f.stock.canAfford(BUILDING_DEFS.barracks.cost)) {
-        const spot = findSpot(this.buildings, 'barracks', f.center, 3, 10, Math.random);
-        if (spot && this.territory.canBuild(f.id, spot.x, spot.y, 2)) {
-          f.stock.pay(BUILDING_DEFS.barracks.cost);
-          this.addBuildingView(this.buildings.place('barracks', spot.x, spot.y, true, f.id));
-          this.territory.recompute(this.buildings.list);
-        }
-      }
+      if (threatened && !hasBarracks) this.aiBuild(f, 'barracks', 3, 10);
       if (threatened && hasBarracks && this.soldiers(f.id).length < 2) {
         const barracks = this.buildings.list.find((b) => b.faction === f.id && b.type === 'barracks')!;
-        const pool = this.population
-          .villagersOf(f.id)
-          .filter((n) => isAdult(n, this.clock.seconds) && this.buildings.list.find((b) => b.id === n.jobId)?.type !== 'barracks')
+        const pool = people
+          .filter((n) => {
+            const t = this.buildings.list.find((b) => b.id === n.jobId)?.type;
+            return isAdult(n, this.clock.seconds) && t !== 'barracks' && t !== 'farm' && t !== 'hunter';
+          })
           .sort((a, b) => b.skills.combat - a.skills.combat);
         for (const n of pool) {
           if (this.soldiers(f.id).length >= 2) break;
@@ -1603,19 +1730,28 @@ export class WorldScene extends Phaser.Scene {
           this.population.assign(n, barracks);
         }
       }
-      const hasTower = this.buildings.list.some((b) => b.faction === f.id && b.type === 'tower');
-      if (!hasTower && f.stock.canAfford(BUILDING_DEFS.tower.cost)) {
-        const spot = findSpot(this.buildings, 'tower', f.center, 4, 9, Math.random);
-        if (spot && this.territory.canBuild(f.id, spot.x, spot.y, 1)) {
-          f.stock.pay(BUILDING_DEFS.tower.cost);
-          this.addBuildingView(this.buildings.place('tower', spot.x, spot.y, true, f.id));
-          this.territory.recompute(this.buildings.list);
+      if (mine('tower').length === 0) this.aiBuild(f, 'tower', 4, 9);
+
+      // 3. Growth, only with food to spare: beds, then the village's own leaning.
+      if (days >= 3) {
+        if (this.population.freeBedsOf(f.id) < 2) this.aiBuild(f, 'house', 2, 10);
+        let bias = this.townBias.get(f.id);
+        if (!bias) {
+          const all: BuildingType[] = ['lumberjack', 'quarry', 'hunter', 'farm', 'tower', 'smithy', 'mine'];
+          bias = all.sort(() => Math.random() - 0.5).slice(0, 3);
+          this.townBias.set(f.id, bias);
+        }
+        if (Math.random() < 0.35) {
+          const t = bias[Math.floor(Math.random() * bias.length)];
+          if (mine(t).length < 2) this.aiBuild(f, t, 4, 12);
         }
       }
-      for (const b of this.buildings.list) {
-        if (b.faction !== f.id || !BUILDING_DEFS[b.type].job) continue;
-        for (const n of this.population.unemployed(undefined, f.id)) if (!this.population.assign(n, b)) break;
-      }
+
+      // Jobs: food first, then the rest.
+      const order = this.buildings.list
+        .filter((b) => b.faction === f.id && b.built && BUILDING_DEFS[b.type].job)
+        .sort((a, b) => JOB_PRIORITY.indexOf(a.type) - JOB_PRIORITY.indexOf(b.type));
+      staffInOrder(this.population, order, f.id);
       this.supplyTown(f);
     }
   }
@@ -1660,6 +1796,7 @@ export class WorldScene extends Phaser.Scene {
     }
     this.houseHomeless(worldDt);
     this.updateTowns(worldDt);
+    this.updateRecruiting(worldDt);
     this.updateSmithies(worldDt);
     this.updateFamilies(worldDt);
     this.updateDiplomacy(worldDt);

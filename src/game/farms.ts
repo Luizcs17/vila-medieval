@@ -91,6 +91,31 @@ export function setPlot(map: WorldMap, farm: Building, tiles: number[]): number[
   return changed;
 }
 
+/**
+ * A planting area for a farm picked automatically (rival villages): the biggest square, 5×5 down to
+ * 3×3, of free grass near the farm, closest first. Returns its tiles, or null.
+ */
+export function autoPlot(map: WorldMap, farm: Building, ownerAt: (i: number) => number): number[] | null {
+  const def = BUILDING_DEFS[farm.type];
+  const cx = farm.tx + def.size / 2;
+  const cy = farm.ty + def.size / 2;
+  for (let size = FARM_MAX; size >= 3; size--) {
+    let best: number[] | null = null;
+    let bestD = Infinity;
+    for (let y = Math.floor(cy - FARM_REACH); y <= cy + FARM_REACH - size; y++)
+      for (let x = Math.floor(cx - FARM_REACH); x <= cx + FARM_REACH - size; x++) {
+        const d = Math.hypot(x + size / 2 - cx, y + size / 2 - cy);
+        if (d >= bestD) continue;
+        const tiles = rectTiles(map, { x0: x, y0: y, x1: x + size - 1, y1: y + size - 1 });
+        if (tiles.length !== size * size || tiles.some((i) => plotTileProblem(map, farm, i, ownerAt) !== null)) continue;
+        best = tiles;
+        bestD = d;
+      }
+    if (best) return best;
+  }
+  return null;
+}
+
 /** Removes a farm's fields (demolished or destroyed). Returns the tiles that changed. */
 export function clearPlot(map: WorldMap, farm: Building): number[] {
   const changed = farm.plot ? setPlot(map, farm, []) : [];

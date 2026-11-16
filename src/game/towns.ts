@@ -76,6 +76,33 @@ export function buildRoadNetwork(map: WorldMap, centers: { x: number; y: number 
   return laid;
 }
 
+/** The order rival villages staff their workplaces in: food, materials, then the rest. */
+export const JOB_PRIORITY: BuildingType[] = [
+  'farm',
+  'hunter',
+  'lumberjack',
+  'quarry',
+  'embassy',
+  'barracks',
+  'mine',
+  'smithy',
+  'market',
+];
+
+/**
+ * Gives jobs to a village's unemployed adults: first one person per workplace in the given
+ * (priority) order, then the remaining slots in the same order.
+ */
+export function staffInOrder(pop: Population, workplaces: Building[], faction: number): void {
+  for (const b of workplaces) {
+    if (pop.workers(b.id).length > 0) continue;
+    const n = pop.unemployed(undefined, faction)[0];
+    if (!n) return;
+    pop.assign(n, b);
+  }
+  for (const b of workplaces) for (const n of pop.unemployed(undefined, faction)) if (!pop.assign(n, b)) break;
+}
+
 /** Lays out a rival village: hall (stockpile), houses and a few workplaces, all finished. */
 export function foundTown(buildings: Buildings, faction: Faction, rng: Rng): Building[] {
   const placed: Building[] = [];
@@ -89,8 +116,10 @@ export function foundTown(buildings: Buildings, faction: Faction, rng: Rng): Bui
     ['lumberjack', 4, 10],
     ['quarry', 4, 12],
     ['hunter', 3, 8],
+    ['farm', 4, 9],
     ['barracks', 4, 10],
     ['market', 3, 10],
+    ['embassy', 4, 11],
   ];
   for (const [type, minR, maxR] of plan) {
     const spot = findSpot(buildings, type, site, minR, maxR, rng);
@@ -113,7 +142,10 @@ export function populateTown(
 ): NpcData[] {
   const mine = buildings.list.filter((b) => b.faction === faction.id);
   const houses = mine.filter((b) => b.type === 'house');
-  const work = mine.filter((b) => b.type !== 'house' && b.type !== 'stockpile' && b.type !== 'depot');
+  // Food first: farmers and hunters before everything else.
+  const work = mine
+    .filter((b) => b.type !== 'house' && b.type !== 'stockpile' && b.type !== 'depot')
+    .sort((a, b) => JOB_PRIORITY.indexOf(a.type) - JOB_PRIORITY.indexOf(b.type));
   const made: NpcData[] = [];
   for (let k = 0; k < count && houses.length > 0; k++) {
     const n = generateWanderer(rng, pop.newId(), Infinity, now);
@@ -123,12 +155,7 @@ export function populateTown(
     pop.npcs.push(n);
     made.push(n);
   }
-  // Jobs: fill each workplace's slots, best candidates first.
-  for (const b of work) {
-    for (const n of pop.unemployed(undefined, faction.id)) {
-      if (!pop.assign(n, b)) break;
-    }
-  }
+  staffInOrder(pop, work, faction.id);
   if (made.length > 0) faction.rulerId = made[0].id;
   return made;
 }
