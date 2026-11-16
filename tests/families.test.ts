@@ -76,8 +76,8 @@ describe('ages', () => {
 describe('relationships', () => {
   it('single adults living together bond and marry, then share a house', () => {
     const t = setup();
-    const a = t.person(25);
-    const b = t.person(27);
+    const a = t.person(25, { gender: 'f' });
+    const b = t.person(27, { gender: 'm' });
     const events = [];
     for (let h = 0; h < 24 * 5 && a.partnerId === null; h++) events.push(...t.fam.update(DAY_SECONDS / 24, t.ctx()));
     expect(a.partnerId).toBe(b.id);
@@ -147,7 +147,7 @@ describe('children', () => {
 describe('the player', () => {
   it('builds affinity by chatting once a day and can propose at the threshold', () => {
     const t = setup();
-    const n = t.person(30);
+    const n = t.person(30, { gender: 'f' }); // the player is a man by default
     let day = 1;
     while (t.fam.getAffinity(PLAYER_ID, n.id) < PROPOSE_AT) {
       expect(t.fam.canPropose(n, t.now)).toBe(false);
@@ -191,20 +191,66 @@ describe('death and memory', () => {
 describe('marriage between dynasties', () => {
   it('weds you if single, else your oldest single adult child, to the ruler’s family first', () => {
     const { pop, fam, person, now } = setup();
-    const ruler = person(40, { faction: 2 });
-    const stranger = person(25, { faction: 2 });
-    const princess = person(20, { faction: 2, parents: [ruler.id] });
+    const ruler = person(40, { faction: 2, gender: 'm' });
+    const stranger = person(25, { faction: 2, gender: 'm' });
+    const princess = person(20, { faction: 2, parents: [ruler.id], gender: 'f' });
     expect(fam.dynasticMatch(2, ruler.id, now)).toEqual({ ours: PLAYER_ID, theirs: princess });
     fam.wed(PLAYER_ID, princess);
     expect(pop.playerPartnerId).toBe(princess.id);
     expect(princess.partnerId).toBe(PLAYER_ID);
     // Now married: your heir marries (the ruler's family has nobody single left, so anyone else).
     expect(fam.dynasticMatch(2, ruler.id, now)).toBeNull(); // no heir yet
-    const heir = person(18, { parents: [PLAYER_ID, princess.id] });
+    const heir = person(18, { parents: [PLAYER_ID, princess.id], gender: 'f' });
     person(10, { parents: [PLAYER_ID, princess.id] }); // a child doesn't marry
     expect(fam.dynasticMatch(2, ruler.id, now)).toEqual({ ours: heir.id, theirs: stranger });
     fam.wed(heir.id, stranger);
     expect(heir.partnerId).toBe(stranger.id);
     expect(fam.dynasticMatch(2, ruler.id, now)).toBeNull(); // only the ruler is left single
+  });
+});
+
+describe('marriages are between a man and a woman', () => {
+  it('for villagers, for you and between dynasties', () => {
+    const t = setup();
+    const ctx = t.ctx();
+    const a = t.person(25, { gender: 'f' });
+    const b = t.person(26, { gender: 'f' });
+    for (let k = 0; k < 2000 && a.partnerId === null; k++) t.fam.update(DAY_SECONDS, ctx);
+    expect(a.partnerId).toBeNull();
+    expect(b.partnerId).toBeNull();
+    for (let day = 1; t.fam.getAffinity(PLAYER_ID, a.id) < PROPOSE_AT; day++) t.fam.chat(a, day);
+    t.fam.playerGender = 'f';
+    expect(t.fam.canPropose(a, t.now)).toBe(false);
+    t.fam.playerGender = 'm';
+    expect(t.fam.canPropose(a, t.now)).toBe(true);
+    const lord = t.person(30, { faction: 3, gender: 'm' });
+    const lady = t.person(22, { faction: 3, gender: 'f' });
+    t.fam.playerGender = 'f';
+    expect(t.fam.dynasticMatch(3, null, t.now)?.theirs).toBe(lord);
+    t.fam.playerGender = 'm';
+    expect(t.fam.dynasticMatch(3, null, t.now)?.theirs).toBe(lady);
+  });
+
+  it('names follow sex', () => {
+    for (let k = 0; k < 200; k++) {
+      const n = generateWanderer(seeded(k + 1), k, 0);
+      const female = [
+        'Ana',
+        'Beatriz',
+        'Brites',
+        'Catarina',
+        'Clara',
+        'Constança',
+        'Filipa',
+        'Inês',
+        'Isabel',
+        'Joana',
+        'Leonor',
+        'Margarida',
+        'Maria',
+        'Teresa',
+      ];
+      expect(female.includes(n.name)).toBe(n.gender === 'f');
+    }
   });
 });

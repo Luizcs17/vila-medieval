@@ -2,6 +2,11 @@
 
 Each milestone from `docs/GDD.md` is a minor version.
 
+## 1.35.0: Milestone 45, man and woman
+
+- "Novo jogo" on the title screen now asks "Homem" or "Mulher" for your character. Old saves: the opposite of your spouse's, or a man.
+- Marriages are only between a man and a woman: villagers bonding, your own proposals (the button appears only for the other sex) and marriages between dynasties (the spouse picked is of the other sex from your side's). Names already follow each person's sex; a test now checks it.
+
 ## 1.34.0: Milestone 44, steadier E, scarcer wood, thanks for bandits
 
 - While you hold E on something (building, gathering, repairing, digging), people, items and carcasses passing by can't take over the key: a companion walking past no longer opens their card.

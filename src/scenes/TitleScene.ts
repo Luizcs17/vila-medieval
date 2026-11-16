@@ -29,6 +29,7 @@ export class TitleScene extends Phaser.Scene {
     sound.setMood('title');
     this.mode = 'main';
     this.armed = null;
+    this.choosingSex = false;
     this.drawBackdrop();
     this.build();
     const onResize = () => {
@@ -52,9 +53,12 @@ export class TitleScene extends Phaser.Scene {
     sound.update(Math.min(deltaMs, 100) / 1000);
   }
 
-  /** Starts the world from a slot (or fresh). */
-  private play(slot: SlotId | null): void {
-    const data: WorldInit = slot === null ? { fresh: true } : { save: readSave(slot), slot };
+  /** "Novo jogo" was clicked: the button turns into the choice of sex. */
+  private choosingSex = false;
+
+  /** Starts the world from a slot (or fresh, as a man or a woman). */
+  play(slot: SlotId | null, gender: 'f' | 'm' = 'm'): void {
+    const data: WorldInit = slot === null ? { fresh: true, gender } : { save: readSave(slot), slot };
     if (slot !== null && !data.save) return;
     this.scene.start('World', data);
   }
@@ -166,7 +170,16 @@ export class TitleScene extends Phaser.Scene {
         );
       }
       y += 74;
-      this.button(cx - w / 2, y, w, 'Novo jogo', () => this.play(null));
+      // A new game asks who you are: man or woman (marriages are between a man and a woman).
+      if (this.choosingSex) {
+        const half = (w - 8) / 2;
+        this.button(cx - w / 2, y, half, 'Homem', () => this.play(null, 'm'));
+        this.button(cx - w / 2 + half + 8, y, half, 'Mulher', () => this.play(null, 'f'));
+      } else
+        this.button(cx - w / 2, y, w, 'Novo jogo', () => {
+          this.choosingSex = true;
+          this.build();
+        });
       y += 48;
       this.button(cx - w / 2, y, w, 'Carregar jogo', () => {
         this.mode = 'load';
