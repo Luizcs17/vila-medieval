@@ -2,6 +2,7 @@ import { BEDS_PER_HOUSE, DAY_SECONDS } from '../config';
 import { childLook } from './looks';
 import {
   ageOf,
+  type Gender,
   generateWanderer,
   isAdult,
   type NpcData,
@@ -78,6 +79,8 @@ export class Families {
   affinity: Record<string, number> = {};
   /** Last game day the player chatted with each villager (one affinity boost per day). */
   chattedOn: Record<number, number> = {};
+  /** The player's sex (marriages are between a man and a woman). */
+  playerGender: Gender = 'm';
   private acc = 0;
 
   constructor(private readonly pop: Population) {}
@@ -114,7 +117,8 @@ export class Families {
       ours = heir?.id ?? null;
     }
     if (ours === null) return null;
-    const pool = this.pop.villagersOf(faction).filter((n) => single(n) && n.id !== ruler);
+    const oursGender = ours === PLAYER_ID ? this.playerGender : this.pop.npcs.find((n) => n.id === ours)?.gender;
+    const pool = this.pop.villagersOf(faction).filter((n) => single(n) && n.id !== ruler && n.gender !== oursGender);
     const theirs = pool.find((n) => ruler !== null && n.parents.includes(ruler)) ?? pool[0];
     return theirs ? { ours, theirs } : null;
   }
@@ -135,6 +139,7 @@ export class Families {
       npc.role === 'villager' &&
       npc.faction === 0 &&
       npc.partnerId === null &&
+      npc.gender !== this.playerGender &&
       this.pop.playerPartnerId === null &&
       isAdult(npc, now) &&
       this.getAffinity(PLAYER_ID, npc.id) >= PROPOSE_AT
@@ -176,6 +181,7 @@ export class Families {
         const a = singles[i];
         const b = singles[j];
         if (a.faction !== b.faction || a.partnerId !== null || b.partnerId !== null) continue;
+        if (a.gender === b.gender) continue; // marriages are between a man and a woman
         if (a.parents.includes(b.id) || b.parents.includes(a.id) || siblings(a, b)) continue;
         if (!ctx.together(a, b)) continue;
         const v = this.addAffinity(a.id, b.id, 3 * compatibility(a, b));

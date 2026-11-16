@@ -234,6 +234,8 @@ export interface WorldInit {
   save?: SaveData | null;
   fresh?: boolean;
   slot?: SlotId;
+  /** New games: the protagonist's sex. */
+  gender?: 'f' | 'm';
 }
 
 /** A diplomat's trip: going → talking → returning. */
@@ -412,6 +414,7 @@ export class WorldScene extends Phaser.Scene {
     this.population = new Population(this.buildings);
     this.population.now = () => this.clock.seconds;
     this.families = new Families(this.population);
+    this.families.playerGender = this.initData.gender ?? 'm';
     this.diplomacy = new Diplomacy();
     this.missions = new Map();
     this.raidTimers = new Map();
@@ -641,7 +644,7 @@ export class WorldScene extends Phaser.Scene {
       inventory: this.inventory.slots.map((s) => (s ? { ...s } : null)),
       armor: this.inventory.armor ? { ...this.inventory.armor } : null,
       selectedHotbar: this.selectedHotbar,
-      player: { gx: this.player.gx, gy: this.player.gy, ...this.stats.snapshot() },
+      player: { gx: this.player.gx, gy: this.player.gy, ...this.stats.snapshot(), gender: this.families.playerGender },
       population: this.population.snapshot(),
       families: { affinity: { ...this.families.affinity }, chattedOn: { ...this.families.chattedOn } },
       diplomacy: this.diplomacy.snapshot(),
@@ -689,6 +692,9 @@ export class WorldScene extends Phaser.Scene {
     else this.equipBestArmor(); // saves from before the armour slot
     this.selectedHotbar = save.selectedHotbar;
     this.stats.restore(save.player);
+    // Saves from before the player had a sex: the opposite of their spouse's, or a man.
+    const spouse = save.population.npcs.find((n) => n.id === save.population.playerPartnerId);
+    this.families.playerGender = save.player.gender ?? (spouse?.gender === 'm' ? 'f' : 'm');
     this.inventory.maxWeight = this.stats.carryWeight;
     this.player.gx = save.player.gx;
     this.player.gy = save.player.gy;

@@ -45,7 +45,7 @@ export interface SaveData {
   /** Worn armour (missing in saves from before the armour slot). */
   armor?: Stack | null;
   selectedHotbar: number;
-  player: { gx: number; gy: number; hp: number; maxHp: number; level: number; xp: number; food?: number };
+  player: { gx: number; gy: number; hp: number; maxHp: number; level: number; xp: number; food?: number; gender?: 'f' | 'm' };
   population: PopulationSnapshot;
   families: { affinity: Record<string, number>; chattedOn: Record<number, number> };
   diplomacy: { rel: Record<string, Relation>; pending: Proposal[] };
