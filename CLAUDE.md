@@ -29,7 +29,8 @@ Tooling notes:
 - With each change, bump `package.json` (each milestone is a minor version) and add a `CHANGELOG.md` entry.
 - After merging a finished milestone into `main`, run `npm run prod:update` so the user's playable build moves forward.
 - Pending requests live in `docs/BACKLOG.md`. Don't start backlog items until the user explicitly allows it.
-- There is no git remote yet. `.github/workflows/ci.yml` runs `npm run check` and the build once one exists.
+- The repository is public at https://github.com/Luizcs17/vila-medieval (`origin`). `.github/workflows/ci.yml` runs `npm run check` and the build; `.github/workflows/pages.yml` publishes every push to `main` at https://luizcs17.github.io/vila-medieval/. Push `main` only after a milestone is merged and checked (as with `prod:update`).
+- Commits use the GitHub noreply address (`git config user.email`); keep it that way so the personal e-mail doesn't go public.
 
 ## Architecture
 
