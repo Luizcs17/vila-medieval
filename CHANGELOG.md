@@ -2,6 +2,11 @@
 
 Each milestone from `docs/GDD.md` is a minor version.
 
+## 1.25.0: Milestone 35, a stronger bear
+
+- The bear now has 18 HP (was 10) and bites for 5 every 1.2 s (was 3 every 1.8 s). One person with a spear loses to it; two with spears kill it, usually losing one of them. A tuning test checks this for you and for soldiers of any Combate rating. Players with higher levels or armour can still take one on alone.
+- It gives more for the risk: 10 meat and 5 leather (was 8 and 4).
+
 ## 1.24.0: Milestone 34, tools go to workplaces by themselves
 
 - When a worker of yours has no tool (just hired, or theirs wore out), the best accepted tool in that village's stock goes to the workplace on its own within a couple of seconds, with a toast ("Cabana do lenhador recebeu do estoque: machado de pedra."). One tool per worker; spares stay in the stock. "Trazer do estoque" still fills every slot at once.
