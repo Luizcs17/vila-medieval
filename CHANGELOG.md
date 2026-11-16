@@ -2,6 +2,11 @@
 
 Each milestone from `docs/GDD.md` is a minor version.
 
+## 1.36.0: Milestone 46, ruins come and go
+
+- A looted ruin no longer fills up again. Three days after you open its chest (once you're away from it) it collapses and disappears, and a new guarded ruin appears somewhere else free on the map: nobody's land, dry, away from villages, other ruins (including the old spot) and you. Its guardians are picked at random (wolves, bears or bandits).
+- Where ruins are is now saved (they move over time).
+
 ## 1.35.0: Milestone 45, man and woman
 
 - "Novo jogo" on the title screen now asks "Homem" or "Mulher" for your character. Old saves: the opposite of your spouse's, or a man.

@@ -63,7 +63,17 @@ import {
   type Proposal,
 } from '../game/diplomacy';
 import { DROP_LIFETIME, type Drop, Drops, takeFromSlot } from '../game/drops';
-import { DUNGEON_LABEL, DUNGEON_REFILL, type DungeonState, freshDungeon, GUARDS, rollLoot } from '../game/dungeons';
+import {
+  DUNGEON_COLLAPSE,
+  DUNGEON_LABEL,
+  type DungeonState,
+  freshDungeon,
+  GUARDS,
+  pickRuinSite,
+  placeRuin,
+  removeRuin,
+  rollLoot,
+} from '../game/dungeons';
 import {
   BANDITS,
   COLONY_MIN_DISTANCE,
@@ -563,7 +573,10 @@ export class WorldScene extends Phaser.Scene {
       popup: (x, y, text, color) => this.popup(x, y, text, color),
     });
     if (save) this.applySave(save);
-    this.dungeons = this.map.dungeons.map((_, k) => save?.dungeons?.[k] ?? freshDungeon());
+    // Ruins move around the map over time, so where they are is saved (older saves: the map's own).
+    this.dungeons = save?.dungeons
+      ? save.dungeons.map((d, k) => ({ ...freshDungeon(this.map.dungeons[k]), ...d, collapseAt: d.collapseAt ?? 0 }))
+      : this.map.dungeons.map((d) => freshDungeon(d));
     for (let k = 0; k < this.dungeons.length; k++) if (!save?.dungeons) this.spawnGuardians(k);
     if (!save) {
       this.wildlife.populate();
@@ -976,8 +989,8 @@ export class WorldScene extends Phaser.Scene {
 
   /** Puts a ruin's guardians around it: wolves, bears or bandits who stay near. */
   private spawnGuardians(k: number): void {
-    const d = this.map.dungeons[k];
-    const st = this.dungeons[k];
+    const d = this.dungeons[k];
+    const st = d;
     st.guardians = [];
     for (let g = 0; g < GUARDS[d.kind]; g++) {
       const a = (g / GUARDS[d.kind]) * Math.PI * 2;
@@ -1007,8 +1020,8 @@ export class WorldScene extends Phaser.Scene {
 
   /** Guardians of ruin `k` still alive (and near it). */
   guardiansAlive(k: number): number {
-    const d = this.map.dungeons[k];
-    const st = this.dungeons[k];
+    const d = this.dungeons[k];
+    const st = d;
     return st.guardians.filter((id) => {
       if (d.kind === 'bandits') {
         const n = this.npcs.get(id);
@@ -1019,32 +1032,39 @@ export class WorldScene extends Phaser.Scene {
     }).length;
   }
 
-  /** Once a second: discovering ruins, forgetting dead guardians, refilling looted chests while you're away. */
+  /**
+   * Once a second: discovering ruins; a looted ruin collapses after DUNGEON_COLLAPSE (while you're
+   * away from it) and a new, guarded one appears somewhere else free on the map.
+   */
   private updateDungeons(worldDt: number): void {
     this.dungeonTimer += worldDt;
     if (this.dungeonTimer < 1) return;
     this.dungeonTimer = 0;
-    this.map.dungeons.forEach((d, k) => {
-      const st = this.dungeons[k];
+    this.dungeons.forEach((d, k) => {
       const far = Math.hypot(this.player.gx - d.x, this.player.gy - d.y);
-      if (!st.discovered && far < 12) {
-        st.discovered = true;
+      if (!d.discovered && far < 12) {
+        d.discovered = true;
         this.toast(`Você encontrou: ${DUNGEON_LABEL[d.kind]}. Derrote os guardiões para abrir o baú.`, '#e0b860');
       }
-      if (st.looted && this.clock.seconds >= st.refillAt && far > 25) {
-        st.looted = false;
-        const i = tileIndex(this.map, d.x, d.y);
-        this.map.objects[i] = Obj.Chest;
-        this.replaceObjectImage(i);
-        if (this.guardiansAlive(k) === 0) this.spawnGuardians(k);
-      }
+      if (!d.looted || this.clock.seconds < d.collapseAt || far < 20) return;
+      const site = pickRuinSite(this.map, Math.random, (i) => this.territory.owner[i], [
+        ...this.factions.filter((f) => f.alive).map((f) => ({ x: f.center.x, y: f.center.y, r: 24 })),
+        ...this.dungeons.map((o) => ({ x: o.x, y: o.y, r: 25 })), // including this one: somewhere else
+        { x: this.player.gx, y: this.player.gy, r: 20 },
+      ]);
+      if (!site) return; // no room right now: try again later
+      for (const i of removeRuin(this.map, d)) this.replaceObjectImage(i);
+      for (const i of placeRuin(this.map, site, Math.random)) this.replaceObjectImage(i);
+      this.dungeons[k] = freshDungeon(site);
+      this.spawnGuardians(k);
+      if (d.discovered) this.toast(`${DUNGEON_LABEL[d.kind]} desabou. Dizem que outra ruína apareceu longe daqui.`, '#cdb98e');
     });
   }
 
   /** Opens a ruin's chest: coins to your purse, items to your bag (what doesn't fit drops at your feet). */
   private openChest(k: number): void {
-    const d = this.map.dungeons[k];
-    const st = this.dungeons[k];
+    const d = this.dungeons[k];
+    const st = d;
     const loot = rollLoot(Math.random, d.kind);
     this.factions[PLAYER_FACTION].coins += loot.coins;
     const got: string[] = [`${loot.coins} moedas`];
@@ -1062,7 +1082,7 @@ export class WorldScene extends Phaser.Scene {
       got.push(`${count} ${ITEM_DEFS[item].label.toLowerCase()}`);
     }
     st.looted = true;
-    st.refillAt = this.clock.seconds + DUNGEON_REFILL;
+    st.collapseAt = this.clock.seconds + DUNGEON_COLLAPSE;
     const i = tileIndex(this.map, d.x, d.y);
     this.map.objects[i] = Obj.ChestOpen;
     this.replaceObjectImage(i);
@@ -3139,12 +3159,11 @@ export class WorldScene extends Phaser.Scene {
     const anchorY = img ? img.y - img.height - 2 : 0;
     if (obj === Obj.Chest || obj === Obj.ChestOpen) {
       this.gatherer.tick(dt, null, false, 1);
-      const k = this.map.dungeons.findIndex((d) => d.x === tx && d.y === ty);
+      const k = this.dungeons.findIndex((d) => d.x === tx && d.y === ty);
       const st = this.dungeons[k];
       let text = 'Baú';
       if (!st) text = 'Baú vazio';
-      else if (st.looted)
-        text = `Baú vazio (enche de novo em ${Math.max(1, Math.ceil((st.refillAt - this.clock.seconds) / DAY_SECONDS))} dia(s))`;
+      else if (st.looted) text = 'Baú vazio: esta ruína vai desabar';
       else if (this.guardiansAlive(k) > 0) text = `Baú guardado: derrote os guardiões (${this.guardiansAlive(k)})`;
       else {
         text = '[E] Abrir baú';
