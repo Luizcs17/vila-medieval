@@ -2,7 +2,7 @@ import type { AnimalData } from './animals';
 import type { Building } from './buildings';
 import type { MissionKind, Proposal, Relation } from './diplomacy';
 import type { Drop } from './drops';
-import type { TradePolicy } from './factions';
+import type { RecruitPolicy, TradePolicy } from './factions';
 import type { NodesSnapshot } from './gathering';
 import type { Amounts } from './inventory';
 import type { ToolId } from './items';
@@ -37,6 +37,7 @@ export interface SaveData {
     /** Colonies only. */
     name?: string;
     parent?: number;
+    recruitPolicy?: RecruitPolicy;
   }[];
   tradePolicy: TradePolicy;
   inventory: (Stack | null)[];
@@ -49,7 +50,8 @@ export interface SaveData {
   diplomacy: { rel: Record<string, Relation>; pending: Proposal[] };
   missions: {
     diplomatId: number;
-    kind: MissionKind | 'trade';
+    kind: MissionKind | 'trade' | 'recruit';
+    wanderer?: number;
     target: number;
     phase: 'going' | 'talking' | 'returning';
     timer: number;

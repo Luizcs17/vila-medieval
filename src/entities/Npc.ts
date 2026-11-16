@@ -49,6 +49,8 @@ export interface NpcWorld {
   attackBuilding(npc: Npc, b: Building, damage: number): void;
   /** Diplomatic mission of this diplomat, if any. */
   mission(id: number): { phase: 'going' | 'talking' | 'returning'; target: number; kind: string } | null;
+  /** Where a diplomat on a mission is heading (null: the goal is gone). */
+  missionPoint(id: number): { x: number; y: number } | null;
   missionArrived(id: number): void;
   missionDone(id: number): void;
   missionFailed(id: number): void;
@@ -639,14 +641,22 @@ export class Npc {
       return;
     }
     if (m.phase === 'going') {
-      this.status = m.kind === 'trade' ? 'Levando a caravana' : 'Viajando em missão';
-      const c = world.factionCenter(m.target);
-      if (Math.hypot(c.x + 0.5 - this.gx, c.y + 0.5 - this.gy) < 3.5) {
+      const recruiting = m.kind === 'recruit';
+      this.status = m.kind === 'trade' ? 'Levando a caravana' : recruiting ? 'Indo convidar um andarilho' : 'Viajando em missão';
+      const c = world.missionPoint(this.data.id);
+      if (!c) {
+        world.missionFailed(this.data.id);
+        return;
+      }
+      if (Math.hypot(c.x + 0.5 - this.gx, c.y + 0.5 - this.gy) < (recruiting ? 1.8 : 3.5)) {
         this.path = [];
         world.missionArrived(this.data.id);
         return;
       }
-      if (this.path.length === 0 && !this.goNear(c.x, c.y, 2, 40000)) {
+      // A wanderer moves about: re-plan when they've walked away from where the path ends.
+      const end = this.path.at(-1);
+      if (recruiting && end && Math.hypot(end.x - c.x, end.y - c.y) > 3) this.path = [];
+      if (this.path.length === 0 && !this.goNear(c.x, c.y, recruiting ? 1 : 2, 40000)) {
         world.missionFailed(this.data.id);
         return;
       }
