@@ -2859,11 +2859,12 @@ export class WorldScene extends Phaser.Scene {
         text: `[segure E] Reparar ${def.name} (${b.hp}/${def.maxHp}) · 1 madeira a cada 10`,
         progress: active ? b.hp / def.maxHp : null,
       };
-      if (!def.deposit || !Phaser.Input.Keyboard.JustDown(this.keys.E)) return;
+      if (!def.deposit || def.job || !Phaser.Input.Keyboard.JustDown(this.keys.E)) return;
     }
 
-    if (def.deposit) {
-      // The village's stock (stockpile resources + tool warehouse) is reachable from any deposit building.
+    if (def.deposit && !def.job) {
+      // The village's stock (stockpile resources + tool warehouse) is reachable from any deposit building
+      // (the market has jobs: its panel opens instead, with a button for the stock).
       if (Phaser.Input.Keyboard.JustDown(this.keys.E))
         this.openStorage(`Estoque · ${this.factions[b.faction].name}`, villageStorage(this.factions[b.faction]));
       this.interaction = { x, y, text: `[E] Estoque da vila`, progress: null };

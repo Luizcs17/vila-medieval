@@ -2,6 +2,11 @@
 
 Each milestone from `docs/GDD.md` is a minor version.
 
+## 1.29.0: Milestone 39, market fix, richer farms
+
+- Fix: E on the Mercado opened only the village stock, so merchants couldn't be hired. It now opens its panel (hire merchants), which has an "Estoque da vila" button.
+- Each ripe crop now gives 2 food (was 1), still every 3 days.
+
 ## 1.28.0: Milestone 38, moving buildings
 
 - B menu: "⇄ Mover", next to Demolir. Point at one of your buildings and click, then pick the new spot like when building (green/red ghost, same rules, on that building's village land; it may overlap its old spot). Right click or Esc cancels.

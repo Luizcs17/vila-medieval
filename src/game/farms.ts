@@ -8,6 +8,8 @@ export const FARM_MAX = 5;
 export const FARM_REACH = 8;
 /** Days from planting to harvest. */
 export const GROW_SECONDS = 3 * DAY_SECONDS;
+/** Food each ripe crop gives. */
+export const FOOD_PER_CROP = 2;
 /** Chance a harvest gives two seeds instead of one. */
 export const DOUBLE_SEED_CHANCE = 0.15;
 
@@ -133,12 +135,12 @@ export function ripen(map: WorldMap, plot: Plot | undefined, now: number): numbe
   return changed;
 }
 
-/** Harvests a ripe crop: the field is tilled again. Returns what it gave (one food, one or two seeds), or null. */
+/** Harvests a ripe crop: the field is tilled again. Returns what it gave (FOOD_PER_CROP food, one or two seeds), or null. */
 export function harvestCrop(map: WorldMap, plot: Plot, i: number, rng: () => number): { food: number; seeds: number } | null {
   if (map.objects[i] !== Obj.CropRipe) return null;
   map.objects[i] = Obj.Field;
   delete plot.planted[i];
-  return { food: 1, seeds: rng() < DOUBLE_SEED_CHANCE ? 2 : 1 };
+  return { food: FOOD_PER_CROP, seeds: rng() < DOUBLE_SEED_CHANCE ? 2 : 1 };
 }
 
 /** How far along a crop is, 0–1 (for the UI). */

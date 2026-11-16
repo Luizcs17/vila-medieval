@@ -494,6 +494,17 @@ export class BuildingPanelUI {
       this.close();
       this.world.openStorage(`${def.name} · inventário`, this.world.storageOf(target));
     });
+    if (def.deposit) {
+      // The market is also a deposit: its panel reaches the village stock too.
+      const st = s.add.rectangle(PAD, y, 170, 28, 0x3a3228, 1).setOrigin(0).setStrokeStyle(1, 0x8a6a3a);
+      st.setInteractive({ useHandCursor: true }).on('pointerdown', () => {
+        const f = this.world.factions[b.faction];
+        this.close();
+        this.world.openStorage(`Estoque · ${f.name}`, villageStorage(f));
+      });
+      items.push(st, s.add.text(PAD + 85, y + 14, 'Estoque da vila', { ...TEXT, fontSize: '12px' }).setOrigin(0.5));
+      y += 34;
+    }
     const store = this.world.storageOf(b);
     const stored = ALL_ITEMS.reduce((a, i) => a + store.have(i), 0);
     items.push(inv, s.add.text(PAD + 85, y + 14, `Inventário (${stored})`, { ...TEXT, fontSize: '12px' }).setOrigin(0.5));
