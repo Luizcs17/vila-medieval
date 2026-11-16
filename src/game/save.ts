@@ -96,18 +96,37 @@ export function isSaveData(x: unknown): x is SaveData {
   );
 }
 
-export function writeSave(data: SaveData, store: Store | undefined = defaultStore()): boolean {
+// ---------- slots ----------
+
+/** Ten manual slots plus the autosave one. */
+export const SLOT_COUNT = 10;
+export type SlotId = 'auto' | number;
+export const SLOT_IDS: SlotId[] = ['auto', ...Array.from({ length: SLOT_COUNT }, (_, k) => k + 1)];
+export const slotKey = (slot: SlotId) => `${SAVE_KEY}-slot-${slot}`;
+export const slotName = (slot: SlotId) => (slot === 'auto' ? 'Autosave' : `Espaço ${slot}`);
+
+/** What the slot lists show about a save. */
+export interface SlotInfo {
+  slot: SlotId;
+  savedAt: string;
+  day: number;
+  /** Your villagers (0 before you have a village). */
+  people: number;
+  settled: boolean;
+}
+
+export function writeSave(data: SaveData, slot: SlotId = 'auto', store: Store | undefined = defaultStore()): boolean {
   try {
-    store?.setItem(SAVE_KEY, JSON.stringify(data));
+    store?.setItem(slotKey(slot), JSON.stringify(data));
     return store !== undefined;
   } catch {
     return false; // quota or blocked storage
   }
 }
 
-export function readSave(store: Store | undefined = defaultStore()): SaveData | null {
+export function readSave(slot: SlotId = 'auto', store: Store | undefined = defaultStore()): SaveData | null {
   try {
-    const raw = store?.getItem(SAVE_KEY);
+    const raw = store?.getItem(slotKey(slot));
     if (!raw) return null;
     const data: unknown = JSON.parse(raw);
     return isSaveData(data) ? data : null;
@@ -116,8 +135,48 @@ export function readSave(store: Store | undefined = defaultStore()): SaveData | 
   }
 }
 
-export function clearSave(store: Store | undefined = defaultStore()): void {
+export function deleteSave(slot: SlotId, store: Store | undefined = defaultStore()): void {
   try {
+    store?.removeItem(slotKey(slot));
+  } catch {
+    // nothing to do
+  }
+}
+
+export function slotInfo(slot: SlotId, data: SaveData, dayLength: number): SlotInfo {
+  return {
+    slot,
+    savedAt: data.savedAt,
+    day: Math.floor(data.clock / dayLength) + 1,
+    people: data.population.npcs.filter((n) => n.role === 'villager' && n.faction === 0).length,
+    settled: data.buildings.list.some((b) => b.type === 'stockpile' && b.faction === 0),
+  };
+}
+
+/** Every slot, with its info or null when empty. */
+export function listSlots(
+  dayLength: number,
+  store: Store | undefined = defaultStore(),
+): { slot: SlotId; info: SlotInfo | null }[] {
+  return SLOT_IDS.map((slot) => {
+    const d = readSave(slot, store);
+    return { slot, info: d ? slotInfo(slot, d, dayLength) : null };
+  });
+}
+
+/** The most recently saved slot (what "Continuar" loads), or null. */
+export function latestSlot(dayLength: number, store: Store | undefined = defaultStore()): SlotId | null {
+  let best: SlotInfo | null = null;
+  for (const { info } of listSlots(dayLength, store)) if (info && (!best || info.savedAt > best.savedAt)) best = info;
+  return best?.slot ?? null;
+}
+
+/** Games saved before slots existed (one key) become the autosave slot. */
+export function migrateLegacySave(store: Store | undefined = defaultStore()): void {
+  try {
+    const raw = store?.getItem(SAVE_KEY);
+    if (!raw) return;
+    if (!store?.getItem(slotKey('auto'))) store?.setItem(slotKey('auto'), raw);
     store?.removeItem(SAVE_KEY);
   } catch {
     // nothing to do

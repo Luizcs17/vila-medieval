@@ -117,7 +117,7 @@ export const HUNTER_RANGE = 6;
 export const HUNTER_DAMAGE = 2;
 
 /** Real seconds between autosaves (also saves at each new day and when the page closes). */
-export const AUTOSAVE_SECONDS = 120;
+export const AUTOSAVE_SECONDS = 600;
 
 /** Length of one in-game day, in real seconds at normal speed. */
 export const DAY_SECONDS = 480;

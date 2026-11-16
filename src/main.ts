@@ -2,6 +2,7 @@ import '@fontsource/alegreya/400.css';
 import '@fontsource/alegreya/700.css';
 import '@fontsource/medievalsharp/400.css';
 import Phaser from 'phaser';
+import { TitleScene } from './scenes/TitleScene';
 import { UIScene } from './scenes/UIScene';
 import { WorldScene } from './scenes/WorldScene';
 
@@ -20,7 +21,7 @@ const game = new Phaser.Game({
     width: Math.max(window.innerWidth, 640),
     height: Math.max(window.innerHeight, 360),
   },
-  scene: [WorldScene, UIScene],
+  scene: [TitleScene, WorldScene, UIScene],
 });
 
 // Dev-only handle for debugging from the browser console, e.g.

@@ -205,7 +205,7 @@ export class UIScene extends Phaser.Scene {
     kb.on('keydown', (e: KeyboardEvent) => {
       const key = e.key.toLowerCase();
       if (this.pause.isOpen) {
-        if (key === 'escape') this.pause.close();
+        if (key === 'escape' && !this.pause.back()) this.pause.close();
         return;
       }
       if (this.peddle.isOpen) {
