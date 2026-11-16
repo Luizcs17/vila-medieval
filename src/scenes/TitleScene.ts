@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { sound } from '../audio/sound';
 import { DAY_SECONDS } from '../config';
 import { deleteSave, latestSlot, migrateLegacySave, readSave, type SlotId } from '../game/save';
 import { createPlaceholderTextures } from '../gfx/textures';
@@ -25,6 +26,7 @@ export class TitleScene extends Phaser.Scene {
   create(): void {
     createPlaceholderTextures(this);
     migrateLegacySave();
+    sound.setMood('title');
     this.mode = 'main';
     this.armed = null;
     this.drawBackdrop();
@@ -44,6 +46,10 @@ export class TitleScene extends Phaser.Scene {
         if (slot !== null) this.play(slot);
       }
     });
+  }
+
+  update(_t: number, deltaMs: number): void {
+    sound.update(Math.min(deltaMs, 100) / 1000);
   }
 
   /** Starts the world from a slot (or fresh). */
@@ -111,7 +117,10 @@ export class TitleScene extends Phaser.Scene {
       bg.setInteractive({ useHandCursor: true })
         .on('pointerover', () => bg.setStrokeStyle(2, 0xe0b860))
         .on('pointerout', () => bg.setStrokeStyle(1, 0x8a6a3a))
-        .on('pointerdown', onClick);
+        .on('pointerdown', () => {
+          sound.play('click');
+          onClick();
+        });
     const text = this.add
       .text(x + w / 2, y + 19, label, { ...TEXT, fontSize: '16px', color: enabled ? '#e8d8b0' : '#6a604e' })
       .setOrigin(0.5);

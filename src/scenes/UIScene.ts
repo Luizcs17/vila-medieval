@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { sound } from '../audio/sound';
 import type { Building } from '../game/buildings';
 import { RESOURCE_LABEL, RESOURCES, type Resource } from '../game/inventory';
 import { foodDays } from '../game/needs';
@@ -164,6 +165,7 @@ export class UIScene extends Phaser.Scene {
 
     this.dialog = new RecruitDialogUI(this, this.world, () => this.world.stopTalking());
     this.world.events.on('talk', (npc: NpcData) => {
+      sound.play('open');
       if (this.inventory.isOpen) this.toggleInventory();
       this.closeBuildMode();
       this.dialog.open(npc);
@@ -178,12 +180,14 @@ export class UIScene extends Phaser.Scene {
       this.peddle.open(faction);
     });
     this.world.events.on('storage', (e: { title: string; storage: Storage }) => {
+      sound.play('open');
       if (this.inventory.isOpen) this.toggleInventory();
       this.closeBuildMode();
       this.storagePanel.open(e.title, e.storage);
     });
     this.panel = new BuildingPanelUI(this, this.world, () => this.world.closeBuildingPanel());
     this.world.events.on('building', (b: Building) => {
+      sound.play('open');
       if (this.inventory.isOpen) this.toggleInventory();
       this.closeBuildMode();
       this.panel.open(b);
