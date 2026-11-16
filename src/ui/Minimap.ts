@@ -107,6 +107,7 @@ export class Minimap {
     for (const n of w.npcList()) {
       if (n.indoors) continue;
       if (n.data.role === 'wanderer') dot(n.gx, n.gy, 0xffe060, 2);
+      else if (n.data.role === 'bandit') dot(n.gx, n.gy, 0xff3020, 2);
       else if (n.data.faction === 0) dot(n.gx, n.gy, 0x6ab0ff, 2);
     }
     dot(w.player.gx, w.player.gy, 0xffffff, 3);

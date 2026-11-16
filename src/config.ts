@@ -74,6 +74,12 @@ export const QUICK_ORDER_RADIUS = 15;
 export const BUILDER_RATE = 0.4;
 /** …at construction sites of their village up to this far away. */
 export const BUILDER_RANGE = 40;
+/** Bandit hordes: one every BANDIT_EVERY_MIN–MAX game days, of BANDIT_MIN–MAX bandits; they leave after BANDIT_STAY. */
+export const BANDIT_EVERY_MIN = 3;
+export const BANDIT_EVERY_MAX = 5;
+export const BANDIT_MIN = 2;
+export const BANDIT_MAX = 4;
+export const BANDIT_STAY = 2;
 /** Chance a grass tuft gives a seed when gathered. */
 export const SEED_CHANCE = 0.12;
 

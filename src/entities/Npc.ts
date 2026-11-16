@@ -181,6 +181,17 @@ export class Npc {
       return;
     }
 
+    // Bandits march on a village and fight anyone in their way.
+    if (this.data.role === 'bandit') {
+      if (this.indoors) this.setIndoors(false);
+      this.attackCd -= dt;
+      this.holding = this.data.weapon ?? null;
+      if (this.data.order) this.raid(dt, world);
+      else this.live(dt, world);
+      this.sync();
+      return;
+    }
+
     // Companions travel with the player: no house, no job, no night indoors.
     if (this.data.role === 'companion') {
       if (this.indoors) this.setIndoors(false);

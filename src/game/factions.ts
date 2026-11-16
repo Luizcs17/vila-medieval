@@ -5,6 +5,8 @@ import type { Good } from './trade';
 
 /** The player's faction id. Rival towns are 1..N in TOWN_SITES order. */
 export const PLAYER_FACTION = 0;
+/** Bandits belong to no village and are hostile to everyone. */
+export const BANDITS = -1;
 
 /** Diplomats recruiting wanderers: nobody, only skilled and master ones, or anyone. */
 export type RecruitPolicy = 'none' | 'special' | 'all';

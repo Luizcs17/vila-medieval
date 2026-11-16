@@ -38,9 +38,13 @@ export const roleLabel = (role: NpcData['role'], g: Gender) =>
       ? g === 'f'
         ? 'Companheira'
         : 'Companheiro'
-      : g === 'f'
-        ? 'Aldeã'
-        : 'Aldeão';
+      : role === 'bandit'
+        ? g === 'f'
+          ? 'Bandida'
+          : 'Bandido'
+        : g === 'f'
+          ? 'Aldeã'
+          : 'Aldeão';
 
 export type TraitId = 'axe' | 'stone' | 'iron' | 'aim' | 'tireless' | 'frugal' | 'appetite' | 'slow';
 
@@ -190,7 +194,7 @@ export interface NpcData {
   request: Partial<Amounts>;
   variant: number;
   /** Companions travel with the player before there's a village (they become villagers when it's founded). */
-  role: 'wanderer' | 'villager' | 'companion';
+  role: 'wanderer' | 'villager' | 'companion' | 'bandit';
   homeId: number | null;
   /** Workplace building id, or null when unemployed. */
   jobId: number | null;
@@ -442,7 +446,7 @@ export class Population {
     const i = this.npcs.findIndex((n) => n.id === id);
     if (i < 0) return;
     const [n] = this.npcs.splice(i, 1);
-    if (n.role === 'wanderer') return;
+    if (n.role === 'wanderer' || n.role === 'bandit') return;
     const { name, surname, gender, parents, partnerId, born, faction, variant } = n;
     this.deceased.push({ id, name, surname, gender, parents, partnerId, born, faction, variant, diedAt: this.now() });
     for (const o of this.npcs) if (o.partnerId === id) o.partnerId = null;
@@ -479,6 +483,19 @@ export class Population {
     npc.jobId = null;
     npc.command = null;
   }
+}
+
+/** A bandit for a horde (armed, tougher than a villager), marching on village `target`. */
+export function generateBandit(rng: Rng, id: number, target: number, leavesAt: number, now: number): NpcData {
+  const n = generateWanderer(rng, id, leavesAt, now);
+  n.role = 'bandit';
+  n.faction = -1;
+  n.skills.combat = 1 + Math.floor(rng() * 3);
+  n.weapon = rng() < 0.15 ? 'iron_sword' : 'spear';
+  n.armor = rng() < 0.25 ? 'leather_armor' : null;
+  n.hp = VILLAGER_HP + 2;
+  n.order = { kind: 'raid', target };
+  return n;
 }
 
 /** Melee damage of a soldier: 1 + half their Combate rating (1–3), halved while starving. */
