@@ -71,11 +71,11 @@ describe('farm plots', () => {
     expect(ripen(map, farm.plot, 100 + GROW_SECONDS - 1)).toEqual([]);
     expect(ripen(map, farm.plot, 100 + GROW_SECONDS)).toEqual([task.tile]);
     expect(nextFarmTask(map, farm.plot, false)).toEqual({ kind: 'harvest', tile: task.tile });
-    expect(harvestCrop(map, farm.plot!, task.tile, () => 0.99)).toEqual({ food: 1, seeds: 1 });
+    expect(harvestCrop(map, farm.plot!, task.tile, () => 0.99)).toEqual({ food: 2, seeds: 1 });
     expect(map.objects[task.tile]).toBe(Obj.Field);
     plant(map, farm.plot!, task.tile, 0);
     ripen(map, farm.plot, GROW_SECONDS);
-    expect(harvestCrop(map, farm.plot!, task.tile, () => 0)).toEqual({ food: 1, seeds: 2 });
+    expect(harvestCrop(map, farm.plot!, task.tile, () => 0)).toEqual({ food: 2, seeds: 2 });
 
     // Shrinking the plot (or losing the farm) turns fields back into plain ground.
     setPlot(map, farm, tiles.slice(0, 1));
