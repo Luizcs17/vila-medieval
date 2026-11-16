@@ -118,3 +118,24 @@ describe('weapons and armour', () => {
     expect(takeLeather(deer, 5)).toBe(0);
   });
 });
+
+describe('automatic tool supply', () => {
+  it('sends the best accepted tools from the stock, one per worker that lacks one', async () => {
+    const { autoSupply } = await import('../src/game/gear');
+    const { Buildings } = await import('../src/game/buildings');
+    const { createFactions } = await import('../src/game/factions');
+    const { Inventory } = await import('../src/game/inventory');
+    const { villageStorage } = await import('../src/game/storage');
+    const { generateMap } = await import('../src/world/map');
+    const map = generateMap();
+    const f = createFactions(map.sites, new Inventory())[0];
+    f.tools = { stone_axe: 3, iron_axe: 1 };
+    const b = new Buildings(map).place('lumberjack', 5, 5, true, 0);
+    expect(autoSupply(b, 2, villageStorage(f))).toEqual(['iron_axe', 'stone_axe']);
+    expect(b.storage).toEqual({ iron_axe: 1, stone_axe: 1 });
+    expect(f.tools).toEqual({ stone_axe: 2, iron_axe: 0 });
+    expect(autoSupply(b, 2, villageStorage(f))).toEqual([]); // nobody lacks one
+    b.built = false;
+    expect(autoSupply(b, 3, villageStorage(f))).toEqual([]); // not while it's a building site
+  });
+});

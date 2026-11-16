@@ -2,6 +2,10 @@
 
 Each milestone from `docs/GDD.md` is a minor version.
 
+## 1.24.0: Milestone 34, tools go to workplaces by themselves
+
+- When a worker of yours has no tool (just hired, or theirs wore out), the best accepted tool in that village's stock goes to the workplace on its own within a couple of seconds, with a toast ("Cabana do lenhador recebeu do estoque: machado de pedra."). One tool per worker; spares stay in the stock. "Trazer do estoque" still fills every slot at once.
+
 ## 1.23.0: Milestone 33, companions don't stand frozen
 
 - Companions (and soldiers under orders) standing by you, or holding a spot, now shift about: every few seconds they either turn to look the other way or walk slowly a step or two. Following you, they stay within about 2 tiles; holding a spot, within the tiles around it. Fighting and following you work as before.

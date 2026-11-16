@@ -83,6 +83,7 @@ import { Gatherer, NODE_DEFS, nearestTile, ResourceNodes } from '../game/gatheri
 import {
   ARMORS,
   absorb,
+  autoSupply,
   basicTool,
   grantStarterTools,
   recipeOf,
@@ -1612,8 +1613,29 @@ export class WorldScene extends Phaser.Scene {
     }
   }
 
+  /** Every few seconds, workplaces of yours whose workers lack tools get them from the village stock. */
+  private supplyTimer = 0;
+  private autoSupplyTools(worldDt: number): void {
+    this.supplyTimer += worldDt;
+    if (this.supplyTimer < 2) return;
+    this.supplyTimer = 0;
+    for (const b of this.buildings.list) {
+      if (!this.isMine(b.faction)) continue;
+      const workers = this.population.workers(b.id).length;
+      if (workers === 0) continue;
+      const moved = autoSupply(b, workers, villageStorage(this.factions[b.faction]));
+      if (moved.length === 0) continue;
+      const names = [...new Set(moved)].map((t) => ITEM_DEFS[t].label.toLowerCase()).join(', ');
+      this.toast(
+        `${BUILDING_DEFS[b.type].name} recebeu do estoque: ${moved.length > 1 ? `${moved.length}× ` : ''}${names}.`,
+        '#a8c8ff',
+      );
+    }
+  }
+
   private updateNpcs(worldDt: number): void {
     if (this.spawner.update(worldDt, this.population.wanderers.length)) this.spawnWanderer();
+    this.autoSupplyTools(worldDt);
 
     for (const f of this.factions) {
       const childFactor = (n: NpcData) => (ageOf(n, this.clock.seconds) < ADULT_AGE ? 0.5 : 1);

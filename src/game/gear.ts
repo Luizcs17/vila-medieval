@@ -37,6 +37,25 @@ export function wearWorkplaceTool(b: Building, tool: ToolId): boolean {
   return true;
 }
 
+/**
+ * Tools go from the village's stock to a workplace whose workers lack one: one tool per worker,
+ * the best accepted kind first. Returns the tools moved (empty when nothing was needed or available).
+ */
+export function autoSupply(b: Building, workers: number, village: Storage): ToolId[] {
+  const moved: ToolId[] = [];
+  if (!b.built || !needsTools(b)) return moved;
+  const accepted = BUILDING_DEFS[b.type].job?.tools ?? [];
+  let missing = workers - workplaceTools(b).length;
+  for (const t of accepted) {
+    while (missing > 0 && village.have(t) > 0 && village.remove(t, 1) === 1) {
+      b.storage[t] = (b.storage[t] ?? 0) + 1;
+      moved.push(t);
+      missing--;
+    }
+  }
+  return moved;
+}
+
 // ---------- armour ----------
 
 /** Damage after armour: the share it absorbs, with the fraction rounded at random. */
