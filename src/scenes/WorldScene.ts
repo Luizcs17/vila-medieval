@@ -388,6 +388,7 @@ export class WorldScene extends Phaser.Scene {
     this.banditTimer = this.nextBandits();
     this.drops = new Drops();
     this.townBias = new Map();
+    this.claimAcc = 0;
     this.holdLock = false;
     this.farmReserved = new Map();
     this.plotFarm = null;
@@ -500,6 +501,18 @@ export class WorldScene extends Phaser.Scene {
       factionCenter: (f) => this.factions[f].center,
       playerAt: () => ({ x: this.player.gx, y: this.player.gy }),
       mayTake: (f, x, y) => this.mayTake(f, x, y),
+      patrolPoint: (f) => this.patrolPoint(f),
+      nearLand: (f, x, y) => {
+        for (const [dx, dy] of [
+          [0, 0],
+          [2, 0],
+          [-2, 0],
+          [0, 2],
+          [0, -2],
+        ])
+          if (this.territory.ownerAt(Math.floor(x) + dx, Math.floor(y) + dy) === f) return true;
+        return false;
+      },
       buildSite: (npc) => this.buildSiteFor(npc),
       farmTask: (npc, farm) => this.farmTaskFor(npc, farm),
       farmDo: (npc, farm, task) => this.farmDo(npc, farm, task),
@@ -891,12 +904,79 @@ export class WorldScene extends Phaser.Scene {
       );
       return;
     }
+    if (!hit) {
+      const target = this.enemyBuildingInReach(reach, (bx, by) => inAimCone(ax, ay, bx - p.x, by - p.y));
+      if (target) {
+        sound.play('hit');
+        this.battleTimer = Math.max(this.battleTimer, 8);
+        if (held?.durability !== undefined) this.wearTool(this.selectedHotbar);
+        const name = BUILDING_DEFS[target.type].name;
+        this.damageBuilding(target, this.playerDamage() * 2);
+        const v = this.buildingViews.get(target.id);
+        if (v)
+          this.popup(
+            v.img.x,
+            v.img.y - v.img.height,
+            this.buildings.list.includes(target) ? `-${this.playerDamage() * 2}` : `${name} destruída!`,
+            '#ff8a7a',
+          );
+        return;
+      }
+    }
     sound.play(hit ? 'hit' : 'swing');
     if (hit) {
       if (hit.def.temper !== 'skittish') this.battleTimer = Math.max(this.battleTimer, 8);
       if (held?.durability !== undefined) this.wearTool(this.selectedHotbar);
       if (!hit.alive) this.gainXp(hit.def.hp * XP.killPerHp);
     }
+  }
+
+  /** A building of a village at war with you within melee reach and the aim (not halls: those are claimed). */
+  private enemyBuildingInReach(reachBonus: number, aim: (sx: number, sy: number) => boolean): Building | null {
+    const r = ATTACK_REACH + reachBonus + 0.5;
+    let best: Building | null = null;
+    let bestD = r;
+    for (let y = Math.floor(this.player.gy - r); y <= this.player.gy + r; y++)
+      for (let x = Math.floor(this.player.gx - r); x <= this.player.gx + r; x++) {
+        if (!inBounds(this.map, x, y)) continue;
+        const b = this.buildings.at(tileIndex(this.map, x, y));
+        if (!b || b.type === 'stockpile' || !this.atWar(PLAYER_FACTION, b.faction)) continue;
+        const edge = Math.hypot(
+          Math.max(x - this.player.gx, 0, this.player.gx - (x + 1)),
+          Math.max(y - this.player.gy, 0, this.player.gy - (y + 1)),
+        );
+        const c = gridToScreen(x + 0.5, y + 0.5);
+        if (edge <= bestD && aim(c.x, c.y)) {
+          bestD = edge;
+          best = b;
+        }
+      }
+    return best;
+  }
+
+  /** A random tile of `faction`'s land near one of its buildings, for soldiers to patrol to. */
+  private patrolPoint(faction: number): { x: number; y: number } | null {
+    const mine = this.buildings.list.filter((b) => b.faction === faction && b.built);
+    for (let k = 0; k < 12 && mine.length > 0; k++) {
+      const b = mine[Math.floor(Math.random() * mine.length)];
+      const size = BUILDING_DEFS[b.type].size;
+      const x = b.tx + Math.floor(Math.random() * (size + 8)) - 4;
+      const y = b.ty + Math.floor(Math.random() * (size + 8)) - 4;
+      if (this.territory.ownerAt(x, y) === faction && isWalkable(this.map, x, y)) return { x, y };
+    }
+    return null;
+  }
+
+  /** Claiming a village: holding E on its hall while it's at war with you and has no soldiers left. */
+  private claimAcc = 0;
+
+  /** Why you can't claim village `f` now (null: you can). */
+  claimBlock(f: number): string | null {
+    if (!this.settled) return 'Você precisa ter uma vila.';
+    if (!this.atWar(PLAYER_FACTION, f)) return 'Só vilas em guerra com você.';
+    const n = this.soldiers(f).length;
+    if (n > 0) return `Ainda há ${n} soldado(s) defendendo.`;
+    return null;
   }
 
   /** The nearest person hostile to you (bandits, enemies at war) within melee reach and the aim. */
@@ -2199,7 +2279,13 @@ export class WorldScene extends Phaser.Scene {
     let best: Npc | null = null;
     let bestD = NPC_REACH;
     for (const npc of this.npcs.values()) {
-      if (npc.indoors || npc.data.role === 'bandit') continue;
+      // No talking to bandits or to people of villages at war with you.
+      if (
+        npc.indoors ||
+        npc.data.role === 'bandit' ||
+        (npc.data.role === 'villager' && this.atWar(PLAYER_FACTION, npc.data.faction))
+      )
+        continue;
       const d = Math.hypot(npc.gx - this.player.gx, npc.gy - this.player.gy);
       if (d <= bestD) {
         bestD = d;
@@ -3326,7 +3412,29 @@ export class WorldScene extends Phaser.Scene {
     const y = view.img.y - view.img.height - 2;
     if (!this.isMine(b.faction)) {
       this.drawFootprint(b.tx, b.ty, def.size, this.factions[b.faction].color);
-      this.interaction = { x, y, text: `${this.factions[b.faction].name} · ${def.name}`, progress: null };
+      const fa = this.factions[b.faction];
+      let text = `${fa.name} · ${def.name}`;
+      let progress: number | null = null;
+      if (b.type === 'stockpile' && b.faction >= 0 && this.atWar(PLAYER_FACTION, b.faction)) {
+        // Claiming an undefended village takes as long as building your house.
+        const why = this.claimBlock(b.faction);
+        const need = BUILDING_DEFS.home.buildSeconds;
+        const active = !why && this.keys.E.isDown && !moving;
+        this.lockHold(active);
+        if (active) {
+          this.player.face(x);
+          this.claimAcc += dt;
+          if (this.claimAcc >= need) {
+            this.claimAcc = 0;
+            this.conquer(b.faction, PLAYER_FACTION);
+            sound.play('levelup');
+            return;
+          }
+        } else if (!this.keys.E.isDown) this.claimAcc = 0;
+        text = why ? `${fa.name}: ${why}` : `[segure E] Reivindicar ${fa.name} (${Math.floor((this.claimAcc / need) * 100)}%)`;
+        progress = active ? this.claimAcc / need : null;
+      } else if (this.atWar(PLAYER_FACTION, b.faction) && b.type !== 'stockpile') text += ' · clique para atacar';
+      this.interaction = { x, y, text, progress };
       return;
     }
     this.drawFootprint(b.tx, b.ty, def.size, 0xffe08a);
