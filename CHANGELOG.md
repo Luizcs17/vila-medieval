@@ -2,6 +2,13 @@
 
 Each milestone from `docs/GDD.md` is a minor version.
 
+## 1.38.0: Milestone 48, patrols, sieges and claiming villages
+
+- Soldiers guarding a village (yours and the rivals') now patrol its whole land, walking between random spots near its buildings, and fight anything hostile on or right next to that land (not only around the barracks).
+- Your clicks now damage buildings of villages at war with you (twice your weapon's damage per blow). Halls can't be knocked down: they are claimed.
+- **Claiming a village**: when a village at war with you has no soldiers left, hold E on its hall for as long as building your house (25 s). It becomes yours, with its buildings, people and stock.
+- E no longer starts a conversation with people of villages at war with you.
+
 ## 1.37.0: Milestone 47, smarter rival villages, guarded markets
 
 - **Rival village AI is now a utility planner** (`src/game/townAI.ts`): twice a day each village scores every building it could make by need (food, free beds, threats, wood and stone, tools, reach) times its own random personality (food, defence, growth, industry), builds the best it can afford (up to two), or saves up when the most urgent option is still too expensive. Farms are capped (one per 5 people, per 4 when hungry); lumberjacks and quarries grow with the village; a smithy comes once it's big and fed, then a mine. With food to spare, farm hands move to wood and stone. In a 10-day test one village grew from 10 to 24 people with a smithy and a mine, another to 13; growth differs by personality and land.

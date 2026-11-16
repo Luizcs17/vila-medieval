@@ -57,6 +57,10 @@ export interface NpcWorld {
   factionCenter(faction: number): { x: number; y: number };
   /** Where the player is (companions follow them). */
   playerAt(): { x: number; y: number };
+  /** A random spot to patrol on `faction`'s land (near its buildings), or null. */
+  patrolPoint(faction: number): { x: number; y: number } | null;
+  /** Is (x, y) on `faction`'s land (or just next to it)? */
+  nearLand(faction: number, x: number, y: number): boolean;
   /** May people of `faction` take resources on tile (x, y)? (Not on another village's land.) */
   mayTake(faction: number, x: number, y: number): boolean;
   /** An unfinished building an idle villager should help build, or null. */
@@ -428,20 +432,15 @@ export class Npc {
       this.commanded(dt, world, true);
       return;
     }
-    const f = footprintOf(barracks);
-    const cx = f.x + f.s / 2;
-    const cy = f.y + f.s / 2;
     const e = engagement(stanceOf(this.data), true);
+    // Soldiers defend the whole village: anything hostile on (or right next to) its land.
     const target = world.findHostile(this.data.faction, this.gx, this.gy, e.range, e.anyAnimal);
-    const inLeash = target && Math.hypot(target.gx - cx, target.gy - cy) < e.leash;
-    if (target && inLeash) {
+    if (target && world.nearLand(this.data.faction, target.gx, target.gy)) {
       this.fight(dt, world, target);
       return;
     }
-    this.status = null;
-    // Patrol: stroll around the barracks.
-    this.anchor = { x: Math.floor(cx), y: f.y + f.s };
-    this.roam = 5;
+    this.status = 'Patrulhando';
+    // Patrol: walk between random spots of the village's land, pausing at each.
     if (this.path.length > 0) {
       this.walk(dt);
       return;
@@ -449,8 +448,15 @@ export class Npc {
     this.stopWalking();
     this.idle -= dt;
     if (this.idle <= 0) {
-      this.idle = 2 + Math.random() * 3;
-      this.path = this.planStroll() ?? [];
+      this.idle = 3 + Math.random() * 4;
+      const p = world.patrolPoint(this.data.faction);
+      if (p && !this.goNear(p.x, p.y, 1, 6000)) this.path = [];
+      if (!p) {
+        const f = footprintOf(barracks);
+        this.anchor = { x: Math.floor(f.x + f.s / 2), y: f.y + f.s };
+        this.roam = 5;
+        this.path = this.planStroll() ?? [];
+      }
     }
   }
 
