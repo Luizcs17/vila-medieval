@@ -18,7 +18,7 @@ const BOX_H = 38;
 const ROW_H = 64;
 const MAX_DEPTH = 5;
 
-/** Which tree is shown: the player's dynasty, a rival ruler's, or a family of your village. */
+/** Which tree is shown: the player's dynasty or a rival ruler's. */
 let rootId: number = PLAYER_ID;
 
 /**
@@ -72,19 +72,10 @@ export function renderDynasty(ui: ManagementUI, x: number, y: number, w: number,
     return cur;
   };
 
-  // Tree selector: you, each rival ruler, and founding families of your village.
+  // Tree selector: only the leaders' dynasties: yours and each rival ruler's.
   const options: [string, number][] = [['Sua dinastia', PLAYER_ID]];
   for (const f of world.factions)
-    if (!f.isPlayer && f.rulerId !== null && person(f.rulerId)) options.push([`${f.name}`, founder(f.rulerId)]);
-  const roots = new Set<number>();
-  for (const n of pop.villagers) {
-    if (n.parents.length > 0 || n.partnerId === PLAYER_ID) continue;
-    if (n.partnerId !== null || childrenOf([n.id]).length > 0) {
-      const partnerRoot = n.partnerId !== null && roots.has(n.partnerId);
-      if (!partnerRoot) roots.add(n.id);
-    }
-  }
-  for (const r of [...roots].slice(0, 4)) options.push([`Família ${person(r)?.surname}`, r]);
+    if (!f.isPlayer && f.alive && f.rulerId !== null && person(f.rulerId)) options.push([`${f.name}`, founder(f.rulerId)]);
   if (!options.some(([, id]) => id === rootId)) rootId = PLAYER_ID;
   options.forEach(([label, id], k) => {
     ui.button(

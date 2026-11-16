@@ -1,4 +1,4 @@
-import { ALLIANCE_MIN, GIFT_COST, missionChance } from '../game/diplomacy';
+import { ALLIANCE_MIN, GIFT_COST, MARRIAGE_MIN, missionChance } from '../game/diplomacy';
 import { RESOURCE_LABEL, RESOURCES } from '../game/inventory';
 import type { ManagementUI } from './ManagementUI';
 
@@ -84,6 +84,15 @@ export function renderDiplomacy(ui: ManagementUI, x: number, y: number, w: numbe
           () => world.sendMission('alliance', f.id),
           rel.score >= ALLIANCE_MIN ? 0x2c4a6a : 0x2a2420,
         );
+      // Marriage between dynasties: from +MARRIAGE_MIN, as costly as founding a colony; it makes you allies.
+      const wed = world.marriageCheck(f.id);
+      if (rel.score >= MARRIAGE_MIN || rel.status === 'alliance')
+        btn(
+          wed.theirs && !wed.why ? `Casamento ♥ (${wed.theirs.name})` : 'Casamento ♥',
+          150,
+          () => world.proposeMarriage(f.id),
+          wed.why ? 0x2a2420 : 0x6a2a4a,
+        );
       btn(
         'Declarar guerra',
         130,
@@ -149,7 +158,13 @@ export function renderDiplomacy(ui: ManagementUI, x: number, y: number, w: numbe
   ui.text(
     x,
     yy + 14,
-    'Alianças: aliados não atacam você e entram nas suas guerras. Na guerra, tomar o Salão (estoque) de uma vila a conquista.',
+    `Alianças: aliados não atacam você e entram nas suas guerras. Na guerra, tomar o Salão (estoque) de uma vila a conquista. Casamento entre dinastias (relação +${MARRIAGE_MIN}): custa ${RESOURCES.filter(
+      (r) => world.marriageCost[r],
+    )
+      .map((r) => `${world.marriageCost[r]} ${RESOURCE_LABEL[r].toLowerCase()}`)
+      .join(
+        ', ',
+      )}; você (ou um filho solteiro) se casa com alguém da família governante, que vem morar na sua vila, e as vilas viram aliadas.`,
     10,
     MUTED,
   ).setWordWrapWidth(w);
