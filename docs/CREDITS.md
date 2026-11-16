@@ -2,7 +2,7 @@
 
 Efeitos sonoros: sintetizados pelo próprio jogo (`src/audio/sound.ts`), sem arquivos de terceiros.
 
-Músicas escolhidas (ainda **não incluídas**: o download precisa da sua permissão). Todas de OpenGameArt.org:
+Músicas (incluídas em `public/audio/music/`, baixadas em 16/11/2026). Todas de OpenGameArt.org:
 
 | Arquivo em `public/audio/music/` | Faixa                            | Autor             | Licença                   | Página                                                   | Tamanho |
 | -------------------------------- | -------------------------------- | ----------------- | ------------------------- | -------------------------------------------------------- | ------- |

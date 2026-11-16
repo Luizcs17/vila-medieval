@@ -2,6 +2,10 @@
 
 Each milestone from `docs/GDD.md` is a minor version.
 
+## 1.22.1: the music is in
+
+- The six music tracks listed in `docs/CREDITS.md` are now included (title, two for the day, two for the night, battle), so the game has music. Each mood plays its tracks in turn.
+
 ## 1.22.0: Milestone 32, sound
 
 - **Sound effects** for actions, synthesized in the browser (no files): chopping, mining, pulling grass, digging, hammering while you build, building finished, swing and hit, getting hurt, eating, picking up and dropping, coins when trading, recruiting, level up, and panels opening.
