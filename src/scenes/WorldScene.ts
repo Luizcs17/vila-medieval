@@ -390,10 +390,10 @@ export class WorldScene extends Phaser.Scene {
       harvest: (i) => this.workerHarvest(i),
       deposit: (f, r, n) => this.factions[f]?.stock.add(r, n),
       threat: (gx, gy) => this.wildlife.threat(gx, gy),
-      findPrey: (cx, cy, r) => this.wildlife.findPrey(cx, cy, r),
+      findPrey: (cx, cy, r, f) => this.wildlife.findPrey(cx, cy, r, (x, y) => this.mayTake(f, x, y)),
       prey: (id) => this.wildlife.prey(id),
       shoot: (from, id, dmg) => this.wildlife.shoot(from, id, dmg),
-      findCarcass: (cx, cy, r) => this.wildlife.findCarcass(cx, cy, r),
+      findCarcass: (cx, cy, r, f) => this.wildlife.findCarcass(cx, cy, r, (x, y) => this.mayTake(f, x, y)),
       takeMeat: (id, max, faction) => {
         const n = this.wildlife.takeMeat(id, max);
         // Hunters skin their prey: the leather goes straight to their village's stock.
@@ -436,6 +436,7 @@ export class WorldScene extends Phaser.Scene {
       },
       factionCenter: (f) => this.factions[f].center,
       playerAt: () => ({ x: this.player.gx, y: this.player.gy }),
+      mayTake: (f, x, y) => this.mayTake(f, x, y),
       buildSite: (npc) => this.buildSiteFor(npc),
       farmTask: (npc, farm) => this.farmTaskFor(npc, farm),
       farmDo: (npc, farm, task) => this.farmDo(npc, farm, task),
@@ -576,6 +577,7 @@ export class WorldScene extends Phaser.Scene {
         ...(f.parent !== undefined ? { name: f.name, parent: f.parent } : {}),
       })),
       inventory: this.inventory.slots.map((s) => (s ? { ...s } : null)),
+      armor: this.inventory.armor ? { ...this.inventory.armor } : null,
       selectedHotbar: this.selectedHotbar,
       player: { gx: this.player.gx, gy: this.player.gy, ...this.stats.snapshot() },
       population: this.population.snapshot(),
@@ -611,6 +613,8 @@ export class WorldScene extends Phaser.Scene {
     save.inventory.forEach((s, i) => {
       if (i < this.inventory.slots.length) this.inventory.slots[i] = s ? { ...s } : null;
     });
+    if (save.armor !== undefined) this.inventory.armor = save.armor ? { ...save.armor } : null;
+    else this.equipBestArmor(); // saves from before the armour slot
     this.selectedHotbar = save.selectedHotbar;
     this.stats.restore(save.player);
     this.inventory.maxWeight = this.stats.carryWeight;
@@ -772,10 +776,10 @@ export class WorldScene extends Phaser.Scene {
   private hurtHuman(target: Human, damage: number, source: string): void {
     if (target.kind === 'player') {
       const p = this.player.sprite;
-      const armor = this.wornArmor();
-      if (armor !== null) {
-        damage = absorb(damage, this.inventory.slots[armor]!.item as ToolId, Math.random);
-        if (this.inventory.wear(armor)) this.toast('Sua armadura se desfez!', '#ffb070');
+      const armor = this.inventory.armor;
+      if (armor) {
+        damage = absorb(damage, armor.item as ToolId, Math.random);
+        if (this.inventory.wearArmor()) this.toast('Sua armadura se desfez!', '#ffb070');
       }
       this.popup(p.x, p.y - p.height, `-${damage}`, '#ff6a5a');
       p.setTint(0xff7060);
@@ -797,14 +801,29 @@ export class WorldScene extends Phaser.Scene {
     }
   }
 
-  /** Slot of the best armour the player carries (worn automatically), or null. */
-  wornArmor(): number | null {
-    let best: number | null = null;
+  /** Puts on the best armour in the bag (old saves, where carrying armour was enough). */
+  private equipBestArmor(): void {
+    let best = -1;
     this.inventory.slots.forEach((s, i) => {
       const a = s ? ITEM_DEFS[s.item].armor : undefined;
-      if (a && (best === null || a.reduction > ITEM_DEFS[this.inventory.slots[best]!.item].armor!.reduction)) best = i;
+      if (a && (best < 0 || a.reduction > ITEM_DEFS[this.inventory.slots[best]!.item].armor!.reduction)) best = i;
     });
-    return best;
+    if (best >= 0) this.inventory.equipFrom(best);
+  }
+
+  /**
+   * May people of `faction` take resources (trees, rocks, game, grass…) on tile (x, y)? Not on
+   * another village's land; your colonies count as yours.
+   */
+  mayTake(faction: number, x: number, y: number): boolean {
+    const o = this.territory.ownerAt(Math.floor(x), Math.floor(y));
+    return o === -1 || o === faction || (this.isMine(o) && this.isMine(faction));
+  }
+
+  /** Whose land a resource stands on, when you may not take it (for the hint), else null. */
+  private forbiddenLand(x: number, y: number): string | null {
+    if (this.mayTake(PLAYER_FACTION, x, y)) return null;
+    return this.factions[this.territory.ownerAt(Math.floor(x), Math.floor(y))]?.name ?? 'outra vila';
   }
 
   // ---------- gear: smithies, workplace tools, soldiers ----------
@@ -2480,9 +2499,14 @@ export class WorldScene extends Phaser.Scene {
       const room = (meat > 0 ? this.inventory.space('meat') : 0) + (leather > 0 ? this.inventory.space('leather') : 0);
       const name = carcass.def.name.toLowerCase();
       const what = [meat > 0 ? `${meat} carne` : '', leather > 0 ? `${leather} couro` : ''].filter(Boolean).join(', ');
-      const text = room > 0 ? `[E] Esfolar ${name} (${what})` : 'Peso máximo! Leve ao estoque';
+      const land = this.forbiddenLand(carcass.data.gx, carcass.data.gy);
+      const text = land
+        ? `Terras de ${land}: não é seu`
+        : room > 0
+          ? `[E] Esfolar ${name} (${what})`
+          : 'Peso máximo! Leve ao estoque';
       this.interaction = { x: s.x, y: s.y - 14, text, progress: null };
-      if (room > 0 && Phaser.Input.Keyboard.JustDown(this.keys.E)) {
+      if (!land && room > 0 && Phaser.Input.Keyboard.JustDown(this.keys.E)) {
         const id = carcass.data.id;
         const m = meat > 0 ? this.inventory.add('meat', this.wildlife.takeMeat(id, this.inventory.space('meat'))) : 0;
         const l = leather > 0 ? this.inventory.add('leather', this.wildlife.takeLeather(id, this.inventory.space('leather'))) : 0;
@@ -2491,9 +2515,10 @@ export class WorldScene extends Phaser.Scene {
       return;
     }
 
-    const target = this.inventoryOpen
-      ? null
-      : nearestTile(this.map, this.player.gx, this.player.gy, INTERACT_REACH, isInteractable);
+    // With a shovel in hand, stumps and saplings can be dug out too.
+    const digging = this.selectedTool('shovel') !== null;
+    const accept = (o: Obj) => isInteractable(o) || (digging && (o === Obj.Stump || o === Obj.Sapling));
+    const target = this.inventoryOpen ? null : nearestTile(this.map, this.player.gx, this.player.gy, INTERACT_REACH, accept);
 
     if (target === null) {
       this.gatherer.tick(dt, null, false, 1);
@@ -2515,6 +2540,27 @@ export class WorldScene extends Phaser.Scene {
     const img = this.objectImages.get(target);
     const anchorX = img?.x ?? 0;
     const anchorY = img ? img.y - img.height - 2 : 0;
+    if (obj === Obj.Stump || obj === Obj.Sapling) {
+      const shovel = this.selectedTool('shovel')!;
+      const land = this.forbiddenLand(tx, ty);
+      const active = this.keys.E.isDown && !moving && !land;
+      if (active) this.player.face(anchorX);
+      const seconds = 1.2 / this.stats.gatherSpeed;
+      if (this.gatherer.tick(dt, target, active, seconds) && this.nodes.dig(target)) {
+        this.wearTool(shovel.slot);
+        this.replaceObjectImage(target);
+        this.gainXp(XP.gather);
+        this.popup(anchorX, anchorY, 'Arrancado', '#cdb98e');
+      }
+      const what = obj === Obj.Stump ? 'toco' : 'muda';
+      this.interaction = {
+        x: anchorX,
+        y: anchorY,
+        text: land ? `Terras de ${land}: não é seu` : `[segure E] Arrancar ${what} (não cresce mais)`,
+        progress: active ? this.gatherer.progress / seconds : null,
+      };
+      return;
+    }
     if (obj === Obj.CropRipe) {
       this.gatherer.tick(dt, null, false, 1);
       this.interaction = { x: anchorX, y: anchorY + img!.height - 8, text: '[E] Colher', progress: null };
@@ -2525,7 +2571,8 @@ export class WorldScene extends Phaser.Scene {
     const tool = def.tool ? this.selectedTool(def.tool) : null;
     const full = this.inventory.space(def.resource) <= 0;
     const missingTool = def.needsTool && !tool;
-    const active = this.keys.E.isDown && !moving && !full && !missingTool;
+    const land = this.forbiddenLand(tx, ty);
+    const active = this.keys.E.isDown && !moving && !full && !missingTool && !land;
     if (active) this.player.face(anchorX);
 
     const seconds = def.secondsPerUnit / (this.stats.gatherSpeed * (tool ? ITEM_DEFS[tool.item].tool!.speed : 1));
@@ -2536,6 +2583,7 @@ export class WorldScene extends Phaser.Scene {
     let text = `[segure E] ${def.verb} ${def.name} (${left})${toolName}`;
     if (full) text = 'Peso máximo! Leve ao estoque';
     if (missingTool) text = `Precisa de uma picareta na hotbar (C: criar)`;
+    if (land) text = `Terras de ${land}: não é seu`;
     this.interaction = { x: anchorX, y: anchorY, text, progress: active ? this.gatherer.progress / seconds : null };
   }
 

@@ -168,8 +168,14 @@ export class Wildlife {
 
   // ---------- hunters ----------
 
-  findPrey(cx: number, cy: number, r: number): Prey | null {
-    const a = this.nearest(cx, cy, r, (x) => x.alive && SPECIES[x.data.species].temper === 'skittish');
+  /** Nearest live skittish animal within `r`; `ok` can rule out spots (another village's land). */
+  findPrey(cx: number, cy: number, r: number, ok: (gx: number, gy: number) => boolean = () => true): Prey | null {
+    const a = this.nearest(
+      cx,
+      cy,
+      r,
+      (x) => x.alive && SPECIES[x.data.species].temper === 'skittish' && ok(x.data.gx, x.data.gy),
+    );
     return a ? this.asPrey(a) : null;
   }
 
@@ -178,8 +184,8 @@ export class Wildlife {
     return a?.alive ? this.asPrey(a) : null;
   }
 
-  findCarcass(cx: number, cy: number, r: number): Prey | null {
-    const a = this.nearestCarcass(cx, cy, r);
+  findCarcass(cx: number, cy: number, r: number, ok: (gx: number, gy: number) => boolean = () => true): Prey | null {
+    const a = this.nearest(cx, cy, r, (x) => !x.alive && x.data.meat > 0 && ok(x.data.gx, x.data.gy));
     return a ? this.asPrey(a) : null;
   }
 

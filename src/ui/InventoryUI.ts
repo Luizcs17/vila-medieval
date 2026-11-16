@@ -1,5 +1,5 @@
 import type Phaser from 'phaser';
-import { ITEM_DEFS } from '../game/items';
+import { ITEM_DEFS, maxDurability } from '../game/items';
 import { ITEM_LABEL, ITEM_WEIGHT, type SlotInventory, type Stack } from '../game/slots';
 
 const SLOT = 44;
@@ -46,7 +46,7 @@ class SlotView {
     if (stack) this.icon.setTexture(`icon_${stack.item}`);
     this.count.setVisible(visible).setText(stack && stack.count > 1 ? String(stack.count) : '');
     // Durability bar for tools.
-    const max = stack ? ITEM_DEFS[stack.item].tool?.durability : undefined;
+    const max = stack ? maxDurability(stack.item) : undefined;
     const showDur = visible && stack?.durability !== undefined && max !== undefined;
     this.dur.setVisible(showDur);
     if (showDur) {
@@ -77,6 +77,9 @@ export class InventoryUI {
 
   private readonly hotbar: SlotView[] = [];
   private readonly panelSlots: SlotView[] = [];
+  /** The worn-armour slot, at the panel's top right. */
+  private readonly armorSlot: SlotView;
+  private readonly armorLabel: Phaser.GameObjects.Text;
   private readonly panelBg: Phaser.GameObjects.Rectangle;
   private readonly title: Phaser.GameObjects.Text;
   private readonly hint: Phaser.GameObjects.Text;
@@ -129,6 +132,22 @@ export class InventoryUI {
       this.panelSlots.push(v);
     }
 
+    this.armorSlot = new SlotView(scene, -1);
+    this.armorSlot.setDepth(102);
+    this.armorSlot.bg
+      .setInteractive()
+      .on('pointerdown', () => {
+        this.held = this.inv.armorClick(this.held);
+      })
+      .on('pointerover', () => (this.hovered = -1))
+      .on('pointerout', () => {
+        if (this.hovered === -1) this.hovered = null;
+      });
+    this.armorLabel = scene.add
+      .text(0, 0, 'Armadura', { fontFamily: '"Alegreya", Georgia, serif', fontSize: '11px', color: '#a8977a' })
+      .setOrigin(1, 0.5)
+      .setDepth(101);
+
     this.heldIcon = scene.add.image(0, 0, 'icon_wood').setScale(3).setDepth(200).setVisible(false);
     this.heldCount = scene.add.text(0, 0, '', COUNT_STYLE).setOrigin(1, 1).setDepth(201);
     this.tooltip = scene.add
@@ -172,7 +191,8 @@ export class InventoryUI {
     const cols = this.inv.hotbarSize;
     const bagRows = Math.ceil((this.inv.slots.length - cols) / cols);
     const panelW = hotbarW + PAD * 2;
-    const panelH = PAD + 22 + bagRows * (SLOT + GAP) + 12 + SLOT + 22 + PAD;
+    const panelH = PAD + 22 + SLOT + 8 + bagRows * (SLOT + GAP) + 12 + SLOT + 22 + PAD;
+    const top = SLOT + 8; // room for the armour slot row
     const px = Math.round((width - panelW) / 2);
     const py = Math.round((height - panelH) / 2);
     this.panelBg.setPosition(px, py).setSize(panelW, panelH);
@@ -182,9 +202,11 @@ export class InventoryUI {
       const isHotbar = k >= this.panelSlots.length - cols;
       const row = isHotbar ? 0 : Math.floor(k / cols);
       const col = isHotbar ? k - (this.panelSlots.length - cols) : k % cols;
-      const y = isHotbar ? py + PAD + 22 + bagRows * (SLOT + GAP) + 12 : py + PAD + 22 + row * (SLOT + GAP);
+      const y = isHotbar ? py + PAD + 22 + top + bagRows * (SLOT + GAP) + 12 : py + PAD + 22 + top + row * (SLOT + GAP);
       v.setPosition(px + PAD + col * (SLOT + GAP), y);
     });
+    this.armorSlot.setPosition(px + panelW - PAD - SLOT, py + PAD + 22);
+    this.armorLabel.setPosition(px + panelW - PAD - SLOT - 8, py + PAD + 22 + SLOT / 2);
     this.hint.setPosition(px + PAD, py + panelH - PAD - 10);
     this.panelWeightPos = { x: px + panelW - PAD, y: py + PAD + 12 };
   }
@@ -217,6 +239,8 @@ export class InventoryUI {
       v.render(this.inv.slots[i], i === selected, !this.isOpen);
     });
     for (const v of this.panelSlots) v.render(this.inv.slots[v.index], false, this.isOpen);
+    this.armorSlot.render(this.inv.armor, false, this.isOpen);
+    this.armorLabel.setVisible(this.isOpen);
 
     const h = this.held;
     this.heldIcon.setVisible(this.isOpen && h !== null);
@@ -226,13 +250,18 @@ export class InventoryUI {
       this.heldCount.setText(h.count > 1 ? String(h.count) : '').setPosition(pointer.x + SLOT / 2 - 3, pointer.y + SLOT / 2 - 1);
     }
 
-    const hoveredStack = this.hovered !== null ? this.inv.slots[this.hovered] : null;
+    const hoveredStack = this.hovered === -1 ? this.inv.armor : this.hovered !== null ? this.inv.slots[this.hovered] : null;
     const showTip = this.isOpen && !h && hoveredStack !== null;
     this.tooltip.setVisible(showTip);
     if (showTip && hoveredStack) {
       const unit = ITEM_WEIGHT[hoveredStack.item];
       const tool = ITEM_DEFS[hoveredStack.item].tool;
-      const extra = tool ? `  ·  ${hoveredStack.durability}/${tool.durability} usos  ·  dano ${tool.damage}` : '';
+      const armor = ITEM_DEFS[hoveredStack.item].armor;
+      const extra = tool
+        ? `  ·  ${hoveredStack.durability}/${tool.durability} usos  ·  dano ${tool.damage}`
+        : armor
+          ? `  ·  ${hoveredStack.durability}/${armor.durability}  ·  absorve ${Math.round(armor.reduction * 100)}%${this.hovered === -1 ? '' : ' (Shift+clique veste)'}`
+          : '';
       this.tooltip
         .setText(
           `${ITEM_LABEL[hoveredStack.item]}  ${unit} kg${hoveredStack.count > 1 ? ` cada (${unit * hoveredStack.count} kg)` : ''}${extra}`,
@@ -244,7 +273,10 @@ export class InventoryUI {
 
   private onSlotClick(i: number, p: Phaser.Input.Pointer): void {
     const ev = p.event as MouseEvent;
-    if (ev.shiftKey && !this.held) this.inv.quickMove(i);
+    const s = this.inv.slots[i];
+    // Shift+click on armour wears it.
+    if (ev.shiftKey && !this.held && s && ITEM_DEFS[s.item].armor) this.inv.equipFrom(i);
+    else if (ev.shiftKey && !this.held) this.inv.quickMove(i);
     else if (p.rightButtonDown()) this.held = this.inv.rightClick(i, this.held);
     else this.held = this.inv.leftClick(i, this.held);
   }
@@ -253,6 +285,7 @@ export class InventoryUI {
     this.panelBg.setVisible(v);
     this.title.setVisible(v);
     this.hint.setVisible(v);
+    this.armorLabel?.setVisible(v);
     if (v) this.panelBg.setInteractive();
     else this.panelBg.disableInteractive();
   }

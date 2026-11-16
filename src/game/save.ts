@@ -40,6 +40,8 @@ export interface SaveData {
   }[];
   tradePolicy: TradePolicy;
   inventory: (Stack | null)[];
+  /** Worn armour (missing in saves from before the armour slot). */
+  armor?: Stack | null;
   selectedHotbar: number;
   player: { gx: number; gy: number; hp: number; maxHp: number; level: number; xp: number; food?: number };
   population: PopulationSnapshot;

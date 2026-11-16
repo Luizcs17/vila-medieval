@@ -2,6 +2,12 @@
 
 Each milestone from `docs/GDD.md` is a minor version.
 
+## 1.20.0: Milestone 30, shovel, armour slot, protected land
+
+- New tool **Pá** (Shovel; 3 wood, 1 stone, in the C menu or at the Ferreiro). With it selected, hold E on a stump or a sapling to dig it out: the ground is cleared and the tree never grows back.
+- The inventory (I) has an **armour slot** at the top right. Only the armour you wear protects you (before, the best one carried counted). Put it on by clicking with the armour held, or Shift+click it in the bag. Its wear shows on the slot. Old saves put on the best armour you were carrying.
+- **Resources on claimed land belong to that land's village.** You can't cut, mine, pull grass or skin carcasses on another village's land ("Terras de …: não é seu"), and other villages' workers and hunters don't take from yours. Land nobody owns is free for all. Your colonies count as yours.
+
 ## 1.19.0: Milestone 29, farms, grass and seeds
 
 - Grass tufts are spread over the map (old saves get them too). Pulling one with E rarely gives a **seed** (12%), a new resource, and the tuft grows back in a day.

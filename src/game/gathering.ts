@@ -154,6 +154,15 @@ export class ResourceNodes {
     return changed;
   }
 
+  /** Digs out a stump or sapling (shovel): the tile is cleared for good, nothing grows back. */
+  dig(i: number): boolean {
+    const o = this.map.objects[i];
+    if (o !== Obj.Stump && o !== Obj.Sapling) return false;
+    this.map.objects[i] = Obj.None;
+    this.regrowing = this.regrowing.filter((r) => r.i !== i);
+    return true;
+  }
+
   get regrowingCount(): number {
     return this.regrowing.length;
   }

@@ -6,6 +6,7 @@ export type ToolId =
   | 'iron_axe'
   | 'stone_pick'
   | 'iron_pick'
+  | 'shovel'
   | 'spear'
   | 'iron_sword'
   | 'leather_armor'
@@ -13,7 +14,7 @@ export type ToolId =
 /** Anything that can sit in an inventory slot. */
 export type ItemId = Resource | ToolId;
 
-export type ToolType = 'axe' | 'pick' | 'weapon';
+export type ToolType = 'axe' | 'pick' | 'weapon' | 'shovel';
 
 export interface ItemDef {
   label: string;
@@ -62,6 +63,7 @@ export const ITEM_DEFS: Record<ItemId, ItemDef> = {
     maxStack: 1,
     tool: { type: 'pick', speed: 2.4, damage: 2, durability: 200 },
   },
+  shovel: { label: 'Pá', weight: 2, maxStack: 1, tool: { type: 'shovel', speed: 1, damage: 1, durability: 60 } },
   spear: { label: 'Lança', weight: 2, maxStack: 1, tool: { type: 'weapon', speed: 1, damage: 3, durability: 60, reach: 0.4 } },
   iron_sword: {
     label: 'Espada de ferro',
@@ -97,6 +99,7 @@ export const RECIPES: Recipe[] = [
     seconds: 40,
     description: 'Arma e ferramenta do caçador. Dano 3, alcance maior.',
   },
+  { item: 'shovel', cost: { wood: 3, stone: 1 }, seconds: 30, description: 'Arranca tocos e mudas: a árvore não volta mais.' },
   { item: 'iron_axe', cost: { wood: 2, iron: 3 }, seconds: 70, description: 'Corta árvores 2,4× mais rápido. Dano 3.' },
   { item: 'iron_pick', cost: { wood: 2, iron: 3 }, seconds: 70, description: 'Pedra e ferro 2,4× mais rápido.' },
   { item: 'iron_sword', cost: { wood: 2, iron: 4 }, seconds: 90, description: 'Arma. Dano 5.' },
