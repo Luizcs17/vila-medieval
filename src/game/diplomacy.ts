@@ -11,6 +11,9 @@ export interface Relation {
 
 export type MissionKind = 'gift' | 'alliance' | 'peace';
 
+/** Relation needed to propose a marriage between dynasties. */
+export const MARRIAGE_MIN = 30;
+
 export const MISSION_LABEL: Record<MissionKind, string> = {
   gift: 'Levar presente',
   alliance: 'Propor aliança',

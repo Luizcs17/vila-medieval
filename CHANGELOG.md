@@ -2,6 +2,11 @@
 
 Each milestone from `docs/GDD.md` is a minor version.
 
+## 1.33.0: Milestone 43, leaders' dynasties and marriages between them
+
+- V → Dinastia now shows only the leaders' family trees: yours and each rival ruler's (no more trees for every family of your village).
+- V → Diplomacia: "Casamento ♥" for villages with a relation of +30 or more (not at war). It costs as much as founding a colony (100 wood, 80 stone, 10 iron, 10 meat). You marry, if single; otherwise your oldest unmarried adult child does. The spouse comes from the ruler's family (their unmarried children first, never the ruler), moves to your village (your heir's house, a free bed, or your own house), and the two villages become **allies** at once (+25 relation).
+
 ## 1.32.0: Milestone 42, dungeons
 
 - Five **ruins** stand on the map, far from every village: broken brick walls around a treasure chest, guarded by a wolf pack (3), two bears, or a bandit hideout (3 bandits who attack whoever comes close). Old saves get them too.

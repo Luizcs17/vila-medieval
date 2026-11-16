@@ -55,6 +55,7 @@ import {
   Diplomacy,
   GIFT_COST,
   giftValue,
+  MARRIAGE_MIN,
   MISSION_LABEL,
   type MissionKind,
   missionChance,
@@ -3338,6 +3339,57 @@ export class WorldScene extends Phaser.Scene {
         this.removeVillager(e.npc.id, mine ? `${fullName(e.npc)} morreu de velhice aos ${e.age} anos.` : null);
       }
     }
+  }
+
+  /** What a marriage between dynasties costs: as much as founding a colony. */
+  readonly marriageCost = BUILDING_DEFS.colony.cost;
+
+  /** Why a dynastic marriage with village `f` can't happen now (or null), and who would marry. */
+  marriageCheck(f: number): { why: string | null; ours?: number; theirs?: NpcData } {
+    const fa = this.factions[f];
+    if (!this.settled) return { why: 'Precisa ter uma vila.' };
+    if (!fa?.alive || fa.isPlayer) return { why: 'Vila inválida.' };
+    const rel = this.diplomacy.get(PLAYER_FACTION, f);
+    if (rel.status === 'war') return { why: 'Estão em guerra.' };
+    if (rel.score < MARRIAGE_MIN) return { why: `Relação precisa ser +${MARRIAGE_MIN}.` };
+    const match = this.families.dynasticMatch(f, fa.rulerId, this.clock.seconds);
+    if (!match) return { why: 'Ninguém para casar (você e seus filhos já casados, ou ninguém solteiro lá).' };
+    if (!this.canPay(this.marriageCost, this.factions[PLAYER_FACTION]))
+      return { why: `Faltam recursos: ${summarizeCost(this.marriageCost)}.`, ...match };
+    return { why: null, ...match };
+  }
+
+  /**
+   * Marriage between dynasties: pays the price, the bride or groom moves to your village (a free
+   * bed, your spouse's house or your own house), and the two villages become allies.
+   */
+  proposeMarriage(f: number): string {
+    const c = this.marriageCheck(f);
+    if (c.why || c.ours === undefined || !c.theirs) return c.why ?? 'Não foi possível.';
+    const theirs = c.theirs;
+    const fa = this.factions[f];
+    payFrom(this.marriageCost, this.inventory, this.stockpile);
+    // Where they'll live: with your heir if there's room, a free bed, or your house.
+    const heir = c.ours === PLAYER_ID ? undefined : this.population.npcs.find((n) => n.id === c.ours);
+    const heirHome = heir?.homeId != null ? this.buildings.list.find((b) => b.id === heir.homeId) : undefined;
+    const home =
+      (heirHome && this.population.residents(heirHome.id).length < BEDS_PER_HOUSE ? heirHome : undefined) ??
+      this.population.houseWithBed(PLAYER_FACTION) ??
+      this.myHome();
+    this.population.unassign(theirs);
+    this.missions.delete(theirs.id);
+    theirs.order = null;
+    theirs.faction = PLAYER_FACTION;
+    theirs.homeId = home?.id ?? null;
+    if (home) this.npcs.get(theirs.id)?.moveTo(home);
+    this.families.wed(c.ours, theirs);
+    this.diplomacy.makeAlliance(PLAYER_FACTION, f);
+    this.diplomacy.adjust(PLAYER_FACTION, f, 25);
+    sound.play('recruit');
+    const who = c.ours === PLAYER_ID ? 'Você' : (heir?.name ?? 'Seu herdeiro');
+    const msg = `${who} se casou com ${fullName(theirs)}, de ${fa.name}. As duas casas agora são aliadas!`;
+    this.toast(msg, '#ffb0d0');
+    return msg;
   }
 
   /** Player marriage proposal (from the villager card). */

@@ -99,6 +99,36 @@ export class Families {
     return this.addAffinity(PLAYER_ID, npc.id, 12);
   }
 
+  /**
+   * A marriage between dynasties: who of yours marries (you if single, else your oldest unmarried
+   * adult child) and who of village `faction` (the ruler's unmarried adult children first, then any
+   * unmarried adult who isn't the ruler). Null when either side has nobody.
+   */
+  dynasticMatch(faction: number, ruler: number | null, now: number): { ours: number; theirs: NpcData } | null {
+    const single = (n: NpcData) => n.role === 'villager' && n.partnerId === null && isAdult(n, now);
+    let ours: number | null = this.pop.playerPartnerId === null ? PLAYER_ID : null;
+    if (ours === null) {
+      const heir = this.pop.npcs
+        .filter((n) => single(n) && n.faction === 0 && n.parents.includes(PLAYER_ID))
+        .sort((a, b) => a.born - b.born)[0];
+      ours = heir?.id ?? null;
+    }
+    if (ours === null) return null;
+    const pool = this.pop.villagersOf(faction).filter((n) => single(n) && n.id !== ruler);
+    const theirs = pool.find((n) => ruler !== null && n.parents.includes(ruler)) ?? pool[0];
+    return theirs ? { ours, theirs } : null;
+  }
+
+  /** Marries `ours` (PLAYER_ID or one of your villagers) and `theirs`. */
+  wed(ours: number, theirs: NpcData): void {
+    theirs.partnerId = ours;
+    if (ours === PLAYER_ID) this.pop.playerPartnerId = theirs.id;
+    else {
+      const o = this.pop.npcs.find((n) => n.id === ours);
+      if (o) o.partnerId = theirs.id;
+    }
+  }
+
   /** Can the player propose to this villager right now? */
   canPropose(npc: NpcData, now: number): boolean {
     return (

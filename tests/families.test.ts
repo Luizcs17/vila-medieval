@@ -187,3 +187,24 @@ describe('death and memory', () => {
     expect(t.pop.person(a.id)).toMatchObject({ name: a.name, diedAt: t.now });
   });
 });
+
+describe('marriage between dynasties', () => {
+  it('weds you if single, else your oldest single adult child, to the ruler’s family first', () => {
+    const { pop, fam, person, now } = setup();
+    const ruler = person(40, { faction: 2 });
+    const stranger = person(25, { faction: 2 });
+    const princess = person(20, { faction: 2, parents: [ruler.id] });
+    expect(fam.dynasticMatch(2, ruler.id, now)).toEqual({ ours: PLAYER_ID, theirs: princess });
+    fam.wed(PLAYER_ID, princess);
+    expect(pop.playerPartnerId).toBe(princess.id);
+    expect(princess.partnerId).toBe(PLAYER_ID);
+    // Now married: your heir marries (the ruler's family has nobody single left, so anyone else).
+    expect(fam.dynasticMatch(2, ruler.id, now)).toBeNull(); // no heir yet
+    const heir = person(18, { parents: [PLAYER_ID, princess.id] });
+    person(10, { parents: [PLAYER_ID, princess.id] }); // a child doesn't marry
+    expect(fam.dynasticMatch(2, ruler.id, now)).toEqual({ ours: heir.id, theirs: stranger });
+    fam.wed(heir.id, stranger);
+    expect(heir.partnerId).toBe(stranger.id);
+    expect(fam.dynasticMatch(2, ruler.id, now)).toBeNull(); // only the ruler is left single
+  });
+});
