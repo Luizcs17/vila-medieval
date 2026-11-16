@@ -72,7 +72,8 @@ export class FullMapUI {
     for (const n of w.npcList()) {
       if (n.indoors) continue;
       const p = this.project(n.gx, n.gy);
-      const color = n.data.role === 'wanderer' ? 0xffe060 : w.factions[n.data.faction].color;
+      const color =
+        n.data.role === 'wanderer' ? 0xffe060 : n.data.role === 'bandit' ? 0xff3020 : w.factions[n.data.faction].color;
       g.fillStyle(color, 1).fillRect(Math.round(p.x) - 1, Math.round(p.y) - 1, 2, 2);
     }
     const p = this.project(w.player.gx, w.player.gy);

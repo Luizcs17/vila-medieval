@@ -3,7 +3,13 @@ import { sound } from '../audio/sound';
 import {
   ADULT_AGE,
   ATTACK_COOLDOWN,
+  ATTACK_REACH,
   AUTOSAVE_SECONDS,
+  BANDIT_EVERY_MAX,
+  BANDIT_EVERY_MIN,
+  BANDIT_MAX,
+  BANDIT_MIN,
+  BANDIT_STAY,
   BEDS_PER_HOUSE,
   BUILDER_RANGE,
   BUILDER_RATE,
@@ -56,6 +62,7 @@ import {
 } from '../game/diplomacy';
 import { DROP_LIFETIME, type Drop, Drops, takeFromSlot } from '../game/drops';
 import {
+  BANDITS,
   COLONY_MIN_DISTANCE,
   COLONY_NAMES,
   COLONY_START,
@@ -106,6 +113,7 @@ import { ITEM_DEFS, type ItemId, maxDurability, RECIPES, type Recipe, type ToolI
 import { foodDays, isStarving, updateNeeds, updateNeedsFrom } from '../game/needs';
 import {
   compass,
+  generateBandit,
   generateWanderer,
   jobTitle,
   maxHpOf,
@@ -352,6 +360,7 @@ export class WorldScene extends Phaser.Scene {
     this.villagerRegen = 0;
     this.autosaveTimer = 0;
     this.battleTimer = 0;
+    this.banditTimer = this.nextBandits();
     this.drops = new Drops();
     this.farmReserved = new Map();
     this.plotFarm = null;
@@ -401,7 +410,7 @@ export class WorldScene extends Phaser.Scene {
       isNight: () => this.clock.isNight,
       harvest: (i) => this.workerHarvest(i),
       deposit: (f, r, n) => this.factions[f]?.stock.add(r, n),
-      threat: (gx, gy) => this.wildlife.threat(gx, gy),
+      threat: (gx, gy) => this.wildlife.threat(gx, gy) ?? this.banditNear(gx, gy),
       findPrey: (cx, cy, r, f) => this.wildlife.findPrey(cx, cy, r, (x, y) => this.mayTake(f, x, y)),
       prey: (id) => this.wildlife.prey(id),
       shoot: (from, id, dmg) => this.wildlife.shoot(from, id, dmg),
@@ -431,7 +440,9 @@ export class WorldScene extends Phaser.Scene {
       findHostile: (f, gx, gy, r, any) => this.findHostile(f, gx, gy, r, any),
       atWar: (a, b) => this.atWar(a, b),
       raidTarget: (npc, target) => this.raidTarget(npc, target),
-      attackBuilding: (npc, b, dmg) => this.damageBuilding(b, dmg, npc.data.faction),
+      // Bandits plunder more than they demolish: half damage to buildings.
+      attackBuilding: (npc, b, dmg) =>
+        npc.data.role === 'bandit' ? this.damageBuilding(b, Math.ceil(dmg / 2)) : this.damageBuilding(b, dmg, npc.data.faction),
       mission: (id) => this.missions.get(id) ?? null,
       missionArrived: (id) => {
         const m = this.missions.get(id);
@@ -463,12 +474,17 @@ export class WorldScene extends Phaser.Scene {
           this.toast(`${BUILDING_DEFS[b.type].name} pronta (${npc.data.name} terminou a obra).`, '#ffe08a');
       },
       strike: (from, target, dmg) =>
-        this.strikeTarget(target, dmg, `um soldado de ${this.factions[from.data.faction].name}`, {
-          kind: 'npc',
-          id: from.data.id,
-          gx: from.gx,
-          gy: from.gy,
-        }),
+        this.strikeTarget(
+          target,
+          dmg,
+          from.data.role === 'bandit' ? 'um bandido' : `um soldado de ${this.factions[from.data.faction].name}`,
+          {
+            kind: 'npc',
+            id: from.data.id,
+            gx: from.gx,
+            gy: from.gy,
+          },
+        ),
     };
 
     if (save) {
@@ -539,6 +555,7 @@ export class WorldScene extends Phaser.Scene {
         f.recruitPolicy = 'all';
         for (const n of populateTown(this.population, this.buildings, f, Math.random, 10, this.clock.seconds))
           this.spawnVillagerEntity(n);
+        this.supplyTown(f); // soldiers start armed
       }
     }
 
@@ -815,12 +832,119 @@ export class WorldScene extends Phaser.Scene {
     const hit = this.wildlife.playerAttack(this.player.gx, this.player.gy, this.playerDamage(), this.humans()[0], reach, (a) =>
       inAimCone(ax, ay, a.sprite.x - p.x, a.sprite.y - p.y),
     );
+    const person = hit ? null : this.hostileInReach(reach, (n) => inAimCone(ax, ay, n.sprite.x - p.x, n.sprite.y - p.y));
+    if (person) {
+      sound.play('hit');
+      this.battleTimer = Math.max(this.battleTimer, 8);
+      if (held?.durability !== undefined) this.wearTool(this.selectedHotbar);
+      this.hurtHuman({ kind: 'npc', id: person.data.id, gx: person.gx, gy: person.gy }, this.playerDamage(), 'você');
+      return;
+    }
     sound.play(hit ? 'hit' : 'swing');
     if (hit) {
       if (hit.def.temper !== 'skittish') this.battleTimer = Math.max(this.battleTimer, 8);
       if (held?.durability !== undefined) this.wearTool(this.selectedHotbar);
       if (!hit.alive) this.gainXp(hit.def.hp * XP.killPerHp);
     }
+  }
+
+  /** The nearest person hostile to you (bandits, enemies at war) within melee reach and the aim. */
+  private hostileInReach(reachBonus: number, aim: (n: Npc) => boolean): Npc | null {
+    let best: Npc | null = null;
+    let bestD = ATTACK_REACH + reachBonus;
+    for (const n of this.npcs.values()) {
+      if (n.indoors || n.data.role === 'wanderer' || !this.atWar(PLAYER_FACTION, n.data.faction) || !aim(n)) continue;
+      const d = Math.hypot(n.gx - this.player.gx, n.gy - this.player.gy);
+      if (d <= bestD) {
+        bestD = d;
+        best = n;
+      }
+    }
+    return best;
+  }
+
+  // ---------- bandits ----------
+
+  private banditTimer = 0;
+
+  /** Days until the next horde (random between BANDIT_EVERY_MIN and MAX). */
+  private nextBandits(): number {
+    return DAY_SECONDS * (BANDIT_EVERY_MIN + Math.random() * (BANDIT_EVERY_MAX - BANDIT_EVERY_MIN));
+  }
+
+  /** Now and then a horde of bandits appears at the edge of the map and marches on a village. */
+  private updateBandits(worldDt: number): void {
+    this.banditTimer -= worldDt;
+    // Bandits whose time is up (and who aren't fighting) go away.
+    for (const npc of [...this.npcs.values()]) {
+      const n = npc.data;
+      if (n.role !== 'bandit' || this.clock.seconds < n.leavesAt) continue;
+      if (this.findHostile(BANDITS, npc.gx, npc.gy, 6)) continue;
+      this.npcs.delete(n.id);
+      this.population.remove(n.id);
+      npc.leave(() => {});
+    }
+    if (this.banditTimer > 0) return;
+    this.banditTimer = this.nextBandits();
+    const villages = this.factions.filter((f) => f.alive && (!f.isPlayer || this.settled));
+    if (villages.length === 0) return;
+    this.spawnHorde(villages[Math.floor(Math.random() * villages.length)].id);
+  }
+
+  /** A walkable tile near the map's edge (on a random side), or null. */
+  private edgeTile(): { x: number; y: number } | null {
+    const { w, h } = this.map;
+    for (let k = 0; k < 40; k++) {
+      const side = Math.floor(Math.random() * 4);
+      const along = 8 + Math.floor(Math.random() * (w - 16));
+      for (let depth = 3; depth < 22; depth++) {
+        const x = side === 0 ? depth : side === 1 ? w - 1 - depth : along;
+        const y = side === 2 ? depth : side === 3 ? h - 1 - depth : along;
+        if (isWalkable(this.map, x, y)) return { x, y };
+      }
+    }
+    return null;
+  }
+
+  /** Spawns a horde at the map edge marching on village `target`. Returns the bandits. */
+  spawnHorde(target: number, count = BANDIT_MIN + Math.floor(Math.random() * (BANDIT_MAX - BANDIT_MIN + 1))): NpcData[] {
+    const at = this.edgeTile();
+    if (!at) return [];
+    const made: NpcData[] = [];
+    for (let k = 0; k < count; k++) {
+      const n = generateBandit(
+        Math.random,
+        this.population.newId(),
+        target,
+        this.clock.seconds + BANDIT_STAY * DAY_SECONDS,
+        this.clock.seconds,
+      );
+      this.population.npcs.push(n);
+      const tile = { x: at.x + (k % 3) - 1, y: at.y + Math.floor(k / 3) };
+      const npc = new Npc(this, this.map, n, isWalkable(this.map, tile.x, tile.y) ? tile : at);
+      this.npcs.set(n.id, npc);
+      made.push(n);
+    }
+    const f = this.factions[target];
+    const c = f.center;
+    if (this.isMine(target))
+      this.toast(`Um bando de ${count} bandidos vem ${compass(at.x - c.x, at.y - c.y)} em direção a ${f.name}!`, '#ff6a5a');
+    else this.toast(`Bandidos marcham contra ${f.name}.`, '#ffb070');
+    return made;
+  }
+
+  /** A bandit within 7 tiles of (gx, gy), for villagers to run from (early enough to reach home). */
+  private banditNear(gx: number, gy: number): { x: number; y: number } | null {
+    for (const n of this.npcs.values())
+      if (n.data.role === 'bandit' && Math.hypot(n.gx - gx, n.gy - gy) < 7) return { x: n.gx, y: n.gy };
+    return null;
+  }
+
+  /** A bandit falls: their weapon stays on the ground. */
+  private banditFalls(npc: Npc): void {
+    const w = npc.data.weapon;
+    if (w)
+      this.addDropView(this.drops.add({ item: w, count: 1, durability: maxDurability(w) }, npc.gx, npc.gy, this.clock.seconds));
   }
 
   private onHumanHit(target: Human, damage: number, animal: Animal): void {
@@ -853,6 +977,7 @@ export class WorldScene extends Phaser.Scene {
     this.time.delayedCall(150, () => npc.sprite.clearTint());
     this.popup(npc.sprite.x, npc.sprite.y - npc.sprite.height, `-${damage}`, '#ff6a5a');
     if (npc.data.hp <= 0) {
+      if (npc.data.role === 'bandit') this.banditFalls(npc);
       const mine = this.isMine(npc.data.faction);
       this.removeVillager(npc.data.id, mine ? `${npc.data.name} foi morto por ${source}.` : null);
     }
@@ -1044,6 +1169,7 @@ export class WorldScene extends Phaser.Scene {
 
   /** Are two factions at war? (Diplomacy arrives in milestone 15.) */
   atWar(a: number, b: number): boolean {
+    if (a === BANDITS || b === BANDITS) return a !== b; // bandits fight everyone (but each other)
     return this.diplomacy.atWar(a, b);
   }
 
@@ -1361,6 +1487,7 @@ export class WorldScene extends Phaser.Scene {
     let bestD = Infinity;
     for (const b of this.buildings.list) {
       if (b.faction !== target) continue;
+      if (npc.data.role === 'bandit' && b.type === 'stockpile') continue; // bandits burn houses, not halls
       const tower = BUILDING_DEFS[b.type].defense !== undefined;
       const d = Math.hypot(b.tx - npc.gx, b.ty - npc.gy) - (tower && Math.hypot(b.tx - npc.gx, b.ty - npc.gy) < 12 ? 100 : 0);
       if (d < bestD) {
@@ -1795,6 +1922,7 @@ export class WorldScene extends Phaser.Scene {
       else this.removeVillager(e.npc.id, `${e.npc.name} morreu de fome.`);
     }
     this.houseHomeless(worldDt);
+    this.updateBandits(worldDt);
     this.updateTowns(worldDt);
     this.updateRecruiting(worldDt);
     this.updateSmithies(worldDt);
@@ -1847,7 +1975,7 @@ export class WorldScene extends Phaser.Scene {
     let best: Npc | null = null;
     let bestD = NPC_REACH;
     for (const npc of this.npcs.values()) {
-      if (npc.indoors) continue;
+      if (npc.indoors || npc.data.role === 'bandit') continue;
       const d = Math.hypot(npc.gx - this.player.gx, npc.gy - this.player.gy);
       if (d <= bestD) {
         bestD = d;

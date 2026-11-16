@@ -118,6 +118,7 @@ export function foundTown(buildings: Buildings, faction: Faction, rng: Rng): Bui
     ['hunter', 3, 8],
     ['farm', 4, 9],
     ['barracks', 4, 10],
+    ['tower', 4, 9],
     ['market', 3, 10],
     ['embassy', 4, 11],
   ];

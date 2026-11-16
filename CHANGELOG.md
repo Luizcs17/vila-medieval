@@ -2,6 +2,14 @@
 
 Each milestone from `docs/GDD.md` is a minor version.
 
+## 1.31.0: Milestone 41, bandit hordes
+
+- Every 3 to 5 days a band of 2 to 4 **bandits** appears near the edge of the map and marches on a village picked at random: yours (once you have one) or a rival's. You get a warning when it's yours, from which direction.
+- Bandits belong to no village and fight everyone: people on their way (you included) and the target's buildings (at half the damage of soldiers, and never the hall). They leave after 2 days.
+- Towers and soldiers of every village fight them; villagers run home and shelter from bandits within 7 tiles. A fallen bandit drops their weapon (pick it up with E).
+- You can now hit hostile people in melee (bandits, soldiers of villages at war with you), not only animals.
+- Rival villages now start with a tower, and their first soldiers already carry spears. In tests (3–4 bandits against each rival), villages lost 0–3 people and usually killed the band.
+
 ## 1.30.0: Milestone 40, rival villages feed themselves and grow; diplomats recruit
 
 - New rival villages start with a Fazenda (with a planting area picked automatically and seeds) and an Embaixada, and 60 meat. Jobs are filled one person per workplace in order of need (farm, hunter, lumberjack, quarry, embassy, barracks…), then the second slots.
