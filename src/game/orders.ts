@@ -48,6 +48,29 @@ export function takesOrders(n: NpcData, mine: boolean, isSoldier: boolean): bool
   return mine && (n.role === 'companion' || (n.role === 'villager' && isSoldier));
 }
 
+/**
+ * A tile for an idle fidget step: walkable, between `minD` and `maxD` tiles (centre to centre) from
+ * the anchor (ax, ay). Null when none is found in a few tries.
+ */
+export function pickFidgetTile(
+  rng: () => number,
+  ax: number,
+  ay: number,
+  minD: number,
+  maxD: number,
+  walkable: (x: number, y: number) => boolean,
+): { x: number; y: number } | null {
+  for (let k = 0; k < 10; k++) {
+    const a = rng() * Math.PI * 2;
+    const r = minD + rng() * (maxD - minD);
+    const x = Math.floor(ax + Math.cos(a) * r);
+    const y = Math.floor(ay + Math.sin(a) * r);
+    const d = Math.hypot(x + 0.5 - ax, y + 0.5 - ay);
+    if (d >= minD && d <= maxD && walkable(x, y)) return { x, y };
+  }
+  return null;
+}
+
 /** Short description of what someone is doing under orders, for cards. */
 export function commandLabel(c: Command | null | undefined, companion: boolean): string {
   if (!c) return companion ? 'Seguindo você (padrão)' : 'Guardando o quartel (padrão)';

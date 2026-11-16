@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { COMPANION_LEASH, COMPANION_RANGE, GUARD_RANGE } from '../src/config';
 import { generateWanderer } from '../src/game/npcs';
-import { commandLabel, engagement, stanceOf, takesOrders } from '../src/game/orders';
+import { commandLabel, engagement, pickFidgetTile, stanceOf, takesOrders } from '../src/game/orders';
 
 const person = () => generateWanderer(() => 0.4, 1, 1e9);
 
@@ -40,5 +40,23 @@ describe('orders and stances', () => {
     expect(commandLabel(null, true)).toMatch(/Seguindo/);
     expect(commandLabel(null, false)).toMatch(/quartel/);
     expect(commandLabel({ kind: 'hold', x: 1, y: 2 }, false)).toMatch(/posição/);
+  });
+});
+
+describe('idle fidgeting', () => {
+  it('picks a walkable tile at the right distance from the anchor', () => {
+    let seed = 3;
+    const rng = () => {
+      seed = (seed * 9301 + 49297) % 233280;
+      return seed / 233280;
+    };
+    for (let k = 0; k < 30; k++) {
+      const t = pickFidgetTile(rng, 10, 10, 1, 2.2, () => true);
+      expect(t).not.toBeNull();
+      const d = Math.hypot(t!.x + 0.5 - 10, t!.y + 0.5 - 10);
+      expect(d).toBeGreaterThanOrEqual(1);
+      expect(d).toBeLessThanOrEqual(2.2);
+    }
+    expect(pickFidgetTile(rng, 10, 10, 1, 2.2, () => false)).toBeNull();
   });
 });
