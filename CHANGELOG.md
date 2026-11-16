@@ -2,6 +2,12 @@
 
 Each milestone from `docs/GDD.md` is a minor version.
 
+## 1.22.0: Milestone 32, sound
+
+- **Sound effects** for actions, synthesized in the browser (no files): chopping, mining, pulling grass, digging, hammering while you build, building finished, swing and hit, getting hurt, eating, picking up and dropping, coins when trading, recruiting, level up, and panels opening.
+- **Music** follows the mood with slow crossfades: title screen, day, night and battle (while you fight, get hurt, or enemies at war are within 10 tiles). The chosen tracks (calm, majestic, medieval: orchestral CC0 and CC-BY pieces from OpenGameArt) are listed in `docs/CREDITS.md`. They aren't included yet; until the files are in `public/audio/music/`, there's no music.
+- Esc menu: music and effects volume (− / +), remembered in the browser.
+
 ## 1.21.0: Milestone 31, title screen, save slots, autosave
 
 - The game opens on a **title screen**: "Continuar" (Enter) loads the most recent save, "Novo jogo" starts from nothing, "Carregar jogo" lists every slot (with day, village and date) and can delete them (two clicks).

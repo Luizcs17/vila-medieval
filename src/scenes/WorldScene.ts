@@ -1,4 +1,5 @@
 import Phaser from 'phaser';
+import { sound } from '../audio/sound';
 import {
   ADULT_AGE,
   ATTACK_COOLDOWN,
@@ -341,6 +342,7 @@ export class WorldScene extends Phaser.Scene {
     this.attackCd = 0;
     this.villagerRegen = 0;
     this.autosaveTimer = 0;
+    this.battleTimer = 0;
     this.drops = new Drops();
     this.farmReserved = new Map();
     this.plotFarm = null;
@@ -706,6 +708,27 @@ export class WorldScene extends Phaser.Scene {
     this.sortBuildingsAroundPlayer();
     this.fadeObjectsInFrontOfPlayer();
     this.autosave(dt);
+    this.updateMusic(dt);
+  }
+
+  /** Time to the next hammer blow while you build. */
+  private hammer = 0;
+
+  /** Seconds left of "battle" mood (set by fighting; enemies nearby keep it up). */
+  private battleTimer = 0;
+  private battleCheck = 0;
+
+  /** Battle music while you fight or enemies at war are near; otherwise day or night. */
+  private updateMusic(dt: number): void {
+    this.battleTimer = Math.max(0, this.battleTimer - dt);
+    this.battleCheck -= dt;
+    if (this.battleCheck <= 0) {
+      this.battleCheck = 1;
+      const t = this.findHostile(PLAYER_FACTION, this.player.gx, this.player.gy, 10);
+      if (t && t.kind !== 'animal') this.battleTimer = Math.max(this.battleTimer, 6);
+    }
+    sound.setMood(this.battleTimer > 0 ? 'battle' : this.clock.isNight ? 'night' : 'day');
+    sound.update(dt);
   }
 
   // ---------- combat ----------
@@ -772,7 +795,9 @@ export class WorldScene extends Phaser.Scene {
     const hit = this.wildlife.playerAttack(this.player.gx, this.player.gy, this.playerDamage(), this.humans()[0], reach, (a) =>
       inAimCone(ax, ay, a.sprite.x - p.x, a.sprite.y - p.y),
     );
+    sound.play(hit ? 'hit' : 'swing');
     if (hit) {
+      if (hit.def.temper !== 'skittish') this.battleTimer = Math.max(this.battleTimer, 8);
       if (held?.durability !== undefined) this.wearTool(this.selectedHotbar);
       if (!hit.alive) this.gainXp(hit.def.hp * XP.killPerHp);
     }
@@ -792,6 +817,8 @@ export class WorldScene extends Phaser.Scene {
         if (this.inventory.wearArmor()) this.toast('Sua armadura se desfez!', '#ffb070');
       }
       this.popup(p.x, p.y - p.height, `-${damage}`, '#ff6a5a');
+      sound.play('hurt');
+      this.battleTimer = Math.max(this.battleTimer, 10);
       p.setTint(0xff7060);
       this.time.delayedCall(150, () => p.clearTint());
       this.cameras.main.shake(80, 0.004);
@@ -944,6 +971,7 @@ export class WorldScene extends Phaser.Scene {
       return;
     }
     this.stats.eat(MEAT_HEAL);
+    sound.play('eat');
     this.popup(p.x, p.y - p.height, `Comeu · +${MEAT_HEAL} ♥`, '#a8ffa8');
   }
 
@@ -1671,6 +1699,7 @@ export class WorldScene extends Phaser.Scene {
     const home = this.population.recruit(npc.data, this.inventory, this.stockpile);
     if (!home) return false;
     this.gainXp(XP.recruit);
+    sound.play('recruit');
     npc.becomeVillager(home);
     this.toast(`${npc.data.name} entrou para a vila!`, '#a8ffa8');
     return true;
@@ -1920,6 +1949,7 @@ export class WorldScene extends Phaser.Scene {
     if (!got) return;
     this.inventory.add('meat', got.food);
     const seeds = this.inventory.add('seed', got.seeds);
+    sound.play('pull');
     this.replaceObjectImage(i);
     this.gainXp(XP.gather);
     if (img) this.popup(img.x, img.y - 10, `+${got.food} Comida  +${seeds} Semente`);
@@ -2048,6 +2078,7 @@ export class WorldScene extends Phaser.Scene {
     const npc = this.npcs.get(id);
     if (!npc || !this.population.recruitCompanion(npc.data, this.inventory, this.currentVillage().stock)) return false;
     this.gainXp(XP.recruit);
+    sound.play('recruit');
     npc.becomeCompanion();
     this.toast(`${npc.data.name} agora viaja com você. Leve carne: companheiros comem da sua mochila.`, '#a8ffa8');
     return true;
@@ -2099,6 +2130,7 @@ export class WorldScene extends Phaser.Scene {
       market.remove(g, 1);
       market.coins += q.price;
       me.coins -= q.price;
+      sound.play('coins');
       return null;
     }
     const slot = this.sellSlot(g);
@@ -2111,6 +2143,7 @@ export class WorldScene extends Phaser.Scene {
     market.add(g, 1);
     market.coins -= q.price;
     me.coins += q.price;
+    sound.play('coins');
     return null;
   }
 
@@ -2245,6 +2278,7 @@ export class WorldScene extends Phaser.Scene {
       here.expiresAt = this.clock.seconds + DROP_LIFETIME;
     } else this.addDropView(this.drops.add(stack, this.player.gx, this.player.gy + 0.3, this.clock.seconds));
     this.popup(p.x, p.y - p.height, `Largou ${stack.count} ${ITEM_DEFS[stack.item].label}`, '#cdb98e');
+    sound.play('drop');
   }
 
   private addDropView(d: Drop): void {
@@ -2492,6 +2526,7 @@ export class WorldScene extends Phaser.Scene {
       this.interaction = { x: view?.x ?? 0, y: (view?.y ?? 0) - 12, text, progress: null };
       if (Phaser.Input.Keyboard.JustDown(this.keys.E)) {
         const n = this.drops.take(drop, this.inventory);
+        if (n > 0) sound.play('pickup');
         if (n === 0) this.popup(view?.x ?? 0, (view?.y ?? 0) - 12, 'Não cabe na mochila', '#ffb070');
         else this.popup(view?.x ?? 0, (view?.y ?? 0) - 12, `+${n} ${label}`);
         if (drop.count <= 0) this.removeDropView(drop);
@@ -2521,6 +2556,7 @@ export class WorldScene extends Phaser.Scene {
         const m = meat > 0 ? this.inventory.add('meat', this.wildlife.takeMeat(id, this.inventory.space('meat'))) : 0;
         const l = leather > 0 ? this.inventory.add('leather', this.wildlife.takeLeather(id, this.inventory.space('leather'))) : 0;
         this.popup(s.x, s.y - 14, [m ? `+${m} Carne` : '', l ? `+${l} Couro` : ''].filter(Boolean).join('  '));
+        sound.play('pull');
       }
       return;
     }
@@ -2557,6 +2593,7 @@ export class WorldScene extends Phaser.Scene {
       if (active) this.player.face(anchorX);
       const seconds = 1.2 / this.stats.gatherSpeed;
       if (this.gatherer.tick(dt, target, active, seconds) && this.nodes.dig(target)) {
+        sound.play('dig');
         this.wearTool(shovel.slot);
         this.replaceObjectImage(target);
         this.gainXp(XP.gather);
@@ -2617,6 +2654,7 @@ export class WorldScene extends Phaser.Scene {
     const levels = this.stats.addXp(amount);
     this.inventory.maxWeight = this.stats.carryWeight;
     if (levels > 0) {
+      sound.play('levelup');
       this.toast(
         `Nível ${this.stats.level}! +${PER_LEVEL.hp} de vida máxima, +${PER_LEVEL.carry} kg de carga, coleta mais rápida.`,
         '#ffe08a',
@@ -2630,6 +2668,7 @@ export class WorldScene extends Phaser.Scene {
     const p = this.player.sprite;
     if (result === 'ok') {
       this.popup(p.x, p.y - p.height, `+ ${ITEM_DEFS[recipe.item].label}`, '#ffe08a');
+      sound.play('build');
       this.gainXp(XP.craft);
     } else {
       this.popup(p.x, p.y - p.height, result === 'cost' ? 'Faltam materiais' : 'Sem espaço no inventário', '#ff8a7a');
@@ -2653,7 +2692,13 @@ export class WorldScene extends Phaser.Scene {
       const active = this.keys.E.isDown && !moving;
       if (active) {
         this.player.face(x);
+        this.hammer -= dt;
+        if (this.hammer <= 0) {
+          this.hammer = 0.45;
+          sound.play('build');
+        }
         if (this.buildings.work(b, dt)) {
+          sound.play('complete');
           this.gainXp(XP.build);
           this.refreshBuildingView(b);
           this.events.emit('popup', { x, y, text: `${def.name} construída!`, color: '#ffe08a' } satisfies PopupEvent);
@@ -2822,9 +2867,11 @@ export class WorldScene extends Phaser.Scene {
   }
 
   private harvest(i: number, toolSlot?: number): void {
+    const kind = NODE_DEFS[this.map.objects[i]]?.resource;
     const result = this.nodes.harvest(i);
     if (!result) return;
     if (result.resource) this.inventory.add(result.resource);
+    sound.play(kind === 'wood' ? 'chop' : kind === 'seed' ? 'pull' : 'mine');
     if (toolSlot !== undefined) this.wearTool(toolSlot);
     this.gainXp(XP.gather);
 

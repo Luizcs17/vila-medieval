@@ -1,4 +1,5 @@
 import type Phaser from 'phaser';
+import { sound } from '../audio/sound';
 import { type SlotId, slotName } from '../game/save';
 import type { WorldScene } from '../scenes/WorldScene';
 import { drawSlotList } from './SlotList';
@@ -155,6 +156,24 @@ export class PauseMenuUI {
       true,
       this.confirmTitle ? 0x6a4a24 : 0x3a3228,
     );
+
+    // Volume: music and effects, − / + in steps of 10%.
+    for (const kind of ['music', 'sfx'] as const) {
+      const label = kind === 'music' ? 'Música' : 'Efeitos';
+      items.push(s.add.text(PAD, y + 6, `${label}  ${Math.round(sound.settings[kind] * 100)}%`, { ...TEXT, fontSize: '13px' }));
+      const step = (d: number, x: number, t: string) => {
+        const b = s.add.rectangle(x, y, 32, 26, 0x3a3228, 1).setOrigin(0).setStrokeStyle(1, 0x8a6a3a);
+        b.setInteractive({ useHandCursor: true }).on('pointerdown', () => {
+          sound.setVolume(kind, sound.settings[kind] + d);
+          if (kind === 'sfx') sound.play('click');
+          this.build();
+        });
+        items.push(b, s.add.text(x + 16, y + 13, t, { ...TEXT, fontSize: '15px' }).setOrigin(0.5));
+      };
+      step(-0.1, W - PAD - 70, '−');
+      step(0.1, W - PAD - 32, '+');
+      y += 32;
+    }
 
     y += 6;
     items.push(s.add.text(PAD, y, 'Controles', { ...TEXT, fontSize: '13px', color: '#cdb98e' }));
