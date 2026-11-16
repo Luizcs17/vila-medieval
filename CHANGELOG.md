@@ -2,6 +2,11 @@
 
 Each milestone from `docs/GDD.md` is a minor version.
 
+## 1.38.1: credits and publishing
+
+- Title screen: a "Créditos" screen with the music authors and licences (the CC-BY tracks require it once the game is shared), fonts and engine.
+- `.github/workflows/pages.yml` builds the game and publishes it on GitHub Pages on every push to `main`.
+
 ## 1.38.0: Milestone 48, patrols, sieges and claiming villages
 
 - Soldiers guarding a village (yours and the rivals') now patrol its whole land, walking between random spots near its buildings, and fight anything hostile on or right next to that land (not only around the barracks).

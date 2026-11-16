@@ -16,7 +16,7 @@ const TITLE_FONT = '"MedievalSharp", "Alegreya", Georgia, serif';
 export class TitleScene extends Phaser.Scene {
   private items: Phaser.GameObjects.GameObject[] = [];
   private backdrop: Phaser.GameObjects.GameObject[] = [];
-  private mode: 'main' | 'load' = 'main';
+  private mode: 'main' | 'load' | 'credits' = 'main';
   private armed: SlotId | null = null;
 
   constructor() {
@@ -39,7 +39,7 @@ export class TitleScene extends Phaser.Scene {
     this.scale.on('resize', onResize);
     this.events.once('shutdown', () => this.scale.off('resize', onResize));
     this.input.keyboard?.on('keydown', (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && this.mode === 'load') {
+      if (e.key === 'Escape' && this.mode !== 'main') {
         this.mode = 'main';
         this.build();
       } else if (e.key === 'Enter' && this.mode === 'main') {
@@ -186,6 +186,11 @@ export class TitleScene extends Phaser.Scene {
         this.armed = null;
         this.build();
       });
+      y += 48;
+      this.button(cx - w / 2, y, w, 'Créditos', () => {
+        this.mode = 'credits';
+        this.build();
+      });
       y += 60;
       this.items.push(
         this.add
@@ -198,6 +203,45 @@ export class TitleScene extends Phaser.Scene {
           })
           .setOrigin(0.5, 0),
       );
+      return;
+    }
+
+    if (this.mode === 'credits') {
+      const w = Math.min(620, width - 40);
+      const x = cx - w / 2;
+      const y0 = height * 0.3;
+      const lines = [
+        'Música',
+        '"Fantasy Orchestral Theme" — Joth (CC0)',
+        '"Majesty" — Kistol (CC0)',
+        '"Тема королевства", "Легенда 1", "СДП (средневековая тема 1)" — Alexandr Zhelanov',
+        '    soundcloud.com/alexandr-zhelanov · licença CC-BY 3.0 (creativecommons.org/licenses/by/3.0)',
+        '"Medieval: Battle" — RandomMind (CC0)',
+        'Todas via OpenGameArt.org',
+        '',
+        'Fontes: MedievalSharp e Alegreya (SIL Open Font License)',
+        'Feito com Phaser',
+      ];
+      this.items.push(
+        this.add
+          .rectangle(x - 16, y0 - 16, w + 32, lines.length * 22 + 110, 0x140f0a, 0.92)
+          .setOrigin(0)
+          .setStrokeStyle(2, 0x8a6a3a),
+        this.add.text(x, y0 - 6, 'Créditos', { fontFamily: TITLE_FONT, fontSize: '20px', color: '#e0b860' }),
+      );
+      lines.forEach((l, k) => {
+        this.items.push(
+          this.add.text(x, y0 + 30 + k * 22, l, {
+            ...TEXT,
+            fontSize: k === 0 ? '14px' : '12px',
+            color: k === 0 ? '#cdb98e' : '#e8d8b0',
+          }),
+        );
+      });
+      this.button(x, y0 + 40 + lines.length * 22, 140, 'Voltar  [Esc]', () => {
+        this.mode = 'main';
+        this.build();
+      });
       return;
     }
 
