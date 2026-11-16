@@ -187,7 +187,12 @@ export class Npc {
       this.attackCd -= dt;
       this.holding = this.data.weapon ?? null;
       if (this.data.order) this.raid(dt, world);
-      else this.live(dt, world);
+      else {
+        // Guarding a hideout: fight whoever comes close, stay near it.
+        const target = world.findHostile(this.data.faction, this.gx, this.gy, 6);
+        if (target && Math.hypot(target.gx - this.anchor.x, target.gy - this.anchor.y) < 9) this.fight(dt, world, target);
+        else this.live(dt, world);
+      }
       this.sync();
       return;
     }

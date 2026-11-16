@@ -168,6 +168,17 @@ export class FullMapUI {
       for (let dy = -r; dy <= r; dy++)
         for (let dx = -r; dx <= r; dx++) put(Math.round(c.x - this.origin.x + dx), Math.round(c.y - this.origin.y + dy / 2), rgb);
     }
+    // Ruins you've found: a gold mark (dim once looted).
+    w.map.dungeons.forEach((d, k) => {
+      const st = w.dungeons[k];
+      if (!st?.discovered) return;
+      const c = this.project(d.x + 0.5, d.y + 0.5);
+      const rgb: [number, number, number] = st.looted ? [130, 110, 70] : [255, 210, 80];
+      for (let dy = -3; dy <= 3; dy++)
+        for (let dx = -3; dx <= 3; dx++)
+          if (Math.abs(dx) + Math.abs(dy) <= 3)
+            put(Math.round(c.x - this.origin.x + dx), Math.round(c.y - this.origin.y + dy), rgb);
+    });
     ctx.putImageData(img, 0, 0);
     tex.refresh();
   }

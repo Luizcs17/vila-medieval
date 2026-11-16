@@ -2,6 +2,13 @@
 
 Each milestone from `docs/GDD.md` is a minor version.
 
+## 1.32.0: Milestone 42, dungeons
+
+- Five **ruins** stand on the map, far from every village: broken brick walls around a treasure chest, guarded by a wolf pack (3), two bears, or a bandit hideout (3 bandits who attack whoever comes close). Old saves get them too.
+- The chest stays shut while its guardians live ("Baú guardado"). Once they're gone, E opens it: 30–80 coins (more from bears), one or two pieces of good gear (iron sword, armour, axe or pick, leather armour), iron and leather. What doesn't fit in your bag drops at your feet.
+- Five days later, while you're away, the chest fills again and new guardians move in.
+- Ruins you find are announced and show on the full map (M) as gold marks (dim once looted).
+
 ## 1.31.0: Milestone 41, bandit hordes
 
 - Every 3 to 5 days a band of 2 to 4 **bandits** appears near the edge of the map and marches on a village picked at random: yours (once you have one) or a rival's. You get a warning when it's yours, from which direction.
