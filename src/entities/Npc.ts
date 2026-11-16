@@ -8,7 +8,7 @@ import type { Resource } from '../game/inventory';
 import type { ToolId } from '../game/items';
 import { isStarving } from '../game/needs';
 import { type NpcData, productivity, soldierDamage, TIER_COLOR } from '../game/npcs';
-import { engagement, stanceOf } from '../game/orders';
+import { engagement, pickFidgetTile, stanceOf } from '../game/orders';
 import { ensurePersonTextures } from '../gfx/people';
 import { gridToScreen } from '../iso';
 import { inBounds, isRoad, isWalkable, tileIndex, type WorldMap } from '../world/map';
@@ -464,11 +464,14 @@ export class Npc {
   private hold(dt: number, x: number, y: number): void {
     const d = Math.hypot(x + 0.5 - this.gx, y + 0.5 - this.gy);
     if (d <= 1.5) {
-      // On the spot or on a tile touching it (diagonals included).
+      // On the spot or on a tile touching it (diagonals included): shift about a little.
       this.status = 'Guardando a posição';
-      this.path = [];
-      this.stopWalking();
+      this.fidget(dt, x + 0.5, y + 0.5, 0, 1.45);
       return;
+    }
+    if (this.fidgeting) {
+      this.fidgeting = false;
+      this.path = [];
     }
     this.repath -= dt;
     if (this.path.length === 0) {
@@ -500,10 +503,14 @@ export class Npc {
       this.path = [];
       return;
     }
-    if (d <= 2.2) {
-      this.path = [];
-      this.stopWalking();
+    if (d <= 2.2 || (this.fidgeting && d <= 3.4)) {
+      // Close to you: stay around, now and then taking a step or looking about.
+      this.fidget(dt, x, y, 1, 2.2);
       return;
+    }
+    if (this.fidgeting) {
+      this.fidgeting = false;
+      this.path = [];
     }
     this.repath -= dt;
     const last = this.path.at(-1);
@@ -515,9 +522,46 @@ export class Npc {
     this.walk(dt * (d > 5 ? 2.3 : 1.6));
   }
 
+  /** Idle near an anchor: walking a short fidget path, or waiting for the next step. */
+  private fidgeting = false;
+  private fidgetWait = 2 + Math.random() * 4;
+
+  /**
+   * Standing near (ax, ay) with nothing to do: every few seconds either turn to look the other
+   * way or walk slowly to a tile between `minD` and `maxD` from the anchor, so people don't stand
+   * frozen in one spot.
+   */
+  private fidget(dt: number, ax: number, ay: number, minD: number, maxD: number): void {
+    if (this.fidgeting && this.path.length > 0) {
+      this.walk(dt * 0.6);
+      return;
+    }
+    if (this.fidgeting) {
+      this.fidgeting = false;
+      this.fidgetWait = 3 + Math.random() * 6;
+    }
+    this.path = [];
+    this.stopWalking();
+    this.fidgetWait -= dt;
+    if (this.fidgetWait > 0) return;
+    this.fidgetWait = 3 + Math.random() * 6;
+    if (Math.random() < 0.4) {
+      this.sprite.setFlipX(!this.sprite.flipX); // look about
+      return;
+    }
+    const t = pickFidgetTile(Math.random, ax, ay, minD, maxD, (x, y) => isWalkable(this.map, x, y));
+    if (!t) return;
+    const p = findPath(this.map, this.tile, (px, py) => px === t.x && py === t.y, t, 200);
+    if (p && p.length > 0 && p.length <= 4) {
+      this.path = p;
+      this.fidgeting = true;
+    }
+  }
+
   /** Close in on `target` and hit it on cooldown. */
   private fight(dt: number, world: NpcWorld, target: Target): void {
     this.status = 'Combatendo!';
+    this.fidgeting = false;
     const d = Math.hypot(target.gx - this.gx, target.gy - this.gy);
     // Close enough to strike (a little further when there's no way to get closer).
     if (d <= 0.95 || (d <= 1.6 && this.path.length === 0)) {

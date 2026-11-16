@@ -2,6 +2,10 @@
 
 Each milestone from `docs/GDD.md` is a minor version.
 
+## 1.23.0: Milestone 33, companions don't stand frozen
+
+- Companions (and soldiers under orders) standing by you, or holding a spot, now shift about: every few seconds they either turn to look the other way or walk slowly a step or two. Following you, they stay within about 2 tiles; holding a spot, within the tiles around it. Fighting and following you work as before.
+
 ## 1.22.1: the music is in
 
 - The six music tracks listed in `docs/CREDITS.md` are now included (title, two for the day, two for the night, battle), so the game has music. Each mood plays its tracks in turn.
