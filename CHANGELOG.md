@@ -2,6 +2,13 @@
 
 Each milestone from `docs/GDD.md` is a minor version.
 
+## 1.37.0: Milestone 47, smarter rival villages, guarded markets
+
+- **Rival village AI is now a utility planner** (`src/game/townAI.ts`): twice a day each village scores every building it could make by need (food, free beds, threats, wood and stone, tools, reach) times its own random personality (food, defence, growth, industry), builds the best it can afford (up to two), or saves up when the most urgent option is still too expensive. Farms are capped (one per 5 people, per 4 when hungry); lumberjacks and quarries grow with the village; a smithy comes once it's big and fed, then a mine. With food to spare, farm hands move to wood and stone. In a 10-day test one village grew from 10 to 24 people with a smithy and a mine, another to 13; growth differs by personality and land.
+- **Rival smithies make their tools**: a new smithy keeps 2 stone axes, 2 stone picks, 3 spears and 1 leather armour in stock by itself (recurring production). Workers and soldiers take tools and weapons from the warehouse; only villages without a smithy still improvise basic tools from materials.
+- **Markets keep what they need**: rival villages don't sell food while it lasts less than 4 days, wood or stone while they lack enough for a house, nor seeds; and some days they just won't sell a given good ("hoje não"). This applies to caravans and to trading in person.
+- Wanderers who give up waiting now always move to the nearest rival village with a free bed (it was half the time).
+
 ## 1.36.0: Milestone 46, ruins come and go
 
 - A looted ruin no longer fills up again. Three days after you open its chest (once you're away from it) it collapses and disappears, and a new guarded ruin appears somewhere else free on the map: nobody's land, dry, away from villages, other ruins (including the old spot) and you. Its guardians are picked at random (wolves, bears or bandits).

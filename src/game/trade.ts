@@ -123,7 +123,7 @@ export function planAiCaravan(home: Market): { cargo: Goods; shopping: Goods; co
 
 /** Buying one unit from a village's market with `purse` coins: the price, or why not. */
 export function quoteBuy(m: Market, g: Good, purse: number): { price: number } | { why: string } {
-  if (m.forSale(g) <= 0) return { why: `Não vendem ${goodLabel(g)} agora.` };
+  if (m.forSale(g) <= 0) return { why: `Não vendem ${goodLabel(g)} agora (precisam dele ou não querem).` };
   const price = buyPrice(g, m.have(g));
   if (purse < price) return { why: 'Moedas insuficientes.' };
   return { price };
