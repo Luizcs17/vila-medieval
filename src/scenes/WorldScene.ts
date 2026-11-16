@@ -112,7 +112,7 @@ import {
 } from '../game/npcs';
 import { type Command, type Stance, takesOrders } from '../game/orders';
 import { inAimCone, PER_LEVEL, PlayerStats, XP } from '../game/player';
-import { clearSave, readSave, SAVE_VERSION, type SaveData, writeSave } from '../game/save';
+import { readSave, SAVE_VERSION, type SaveData, type SlotId, slotName, writeSave } from '../game/save';
 import { SlotInventory } from '../game/slots';
 import { buildingStorage, type Storage, villageStorage } from '../game/storage';
 import { Territory } from '../game/territory';
@@ -207,10 +207,11 @@ export interface PopupEvent {
   color?: string;
 }
 
-/** Scene start data: load a specific save, or force a fresh game (otherwise the last save is loaded). */
+/** Scene start data: a save to load (and the slot it came from), or a fresh game. */
 export interface WorldInit {
   save?: SaveData | null;
   fresh?: boolean;
+  slot?: SlotId;
 }
 
 /** A diplomat's trip: going → talking → returning. */
@@ -301,7 +302,6 @@ export class WorldScene extends Phaser.Scene {
   private spawner!: WandererSpawner;
   private initData: WorldInit = {};
   private autosaveTimer = 0;
-  private lastSaveDay = 0;
   private selection!: Phaser.GameObjects.Graphics;
   private ghost!: Phaser.GameObjects.Image;
   private placeTile = { x: 0, y: 0 };
@@ -354,7 +354,8 @@ export class WorldScene extends Phaser.Scene {
 
   create(): void {
     createPlaceholderTextures(this);
-    const save = this.initData.fresh ? null : (this.initData.save ?? readSave());
+    const save = this.initData.fresh ? null : (this.initData.save ?? null);
+    this.currentSlot = save ? (this.initData.slot ?? null) : null;
     this.map = generateMap();
     if (save) {
       const generated = [...this.map.objects];
@@ -522,7 +523,6 @@ export class WorldScene extends Phaser.Scene {
           this.spawnVillagerEntity(n);
       }
     }
-    this.lastSaveDay = this.clock.day;
 
     const cam = this.cameras.main;
     const left = gridToScreen(0, this.map.h).x;
@@ -556,8 +556,11 @@ export class WorldScene extends Phaser.Scene {
 
   // ---------- save / load ----------
 
-  /** Writes the game to browser storage. `quiet` skips the toast (autosave on close). */
-  saveGame(quiet = false): boolean {
+  /** The manual slot this game was loaded from or last saved to (the save menu suggests it). */
+  currentSlot: SlotId | null = null;
+
+  /** Writes the game to a slot ('auto' for autosaves). `quiet` skips the toast. */
+  saveGame(quiet = false, slot: SlotId = 'auto'): boolean {
     const data: SaveData = {
       version: SAVE_VERSION,
       savedAt: new Date().toISOString(),
@@ -589,22 +592,31 @@ export class WorldScene extends Phaser.Scene {
       animals: this.wildlife.snapshot(),
       drops: this.drops.snapshot(),
     };
-    const ok = writeSave(data);
-    if (!quiet) this.toast(ok ? 'Jogo salvo.' : 'Não foi possível salvar neste navegador.', ok ? '#a8ffa8' : '#ff8a7a');
+    const ok = writeSave(data, slot);
+    if (ok && slot !== 'auto') this.currentSlot = slot;
+    if (!quiet)
+      this.toast(ok ? `Jogo salvo (${slotName(slot)}).` : 'Não foi possível salvar neste navegador.', ok ? '#a8ffa8' : '#ff8a7a');
     return ok;
   }
 
-  /** Restarts the world from a save (or the last saved game). */
-  loadGame(save: SaveData | null = readSave()): boolean {
+  /** Restarts the world from a slot. */
+  loadGame(slot: SlotId = 'auto'): boolean {
+    const save = readSave(slot);
     if (!save) return false;
-    this.scene.restart({ save } satisfies WorldInit);
+    this.scene.restart({ save, slot } satisfies WorldInit);
     return true;
   }
 
-  /** Discards the saved game and starts over. */
+  /** Starts over with nothing (saved slots are kept). */
   newGame(): void {
-    clearSave();
     this.scene.restart({ fresh: true } satisfies WorldInit);
+  }
+
+  /** Back to the title screen (the game is autosaved first). */
+  toTitle(): void {
+    this.saveGame(true);
+    this.scene.stop('UI');
+    this.scene.start('Title');
   }
 
   private applySave(save: SaveData): void {
@@ -644,14 +656,12 @@ export class WorldScene extends Phaser.Scene {
     this.territory.recompute(this.buildings.list);
   }
 
-  /** Autosave every few real minutes and at each new day. */
+  /** Every AUTOSAVE_SECONDS of real play, the game is saved to the Autosave slot (also when the page closes). */
   private autosave(dt: number): void {
     this.autosaveTimer += dt;
-    if (this.autosaveTimer >= AUTOSAVE_SECONDS || this.clock.day !== this.lastSaveDay) {
-      this.autosaveTimer = 0;
-      this.lastSaveDay = this.clock.day;
-      this.saveGame(true);
-    }
+    if (this.autosaveTimer < AUTOSAVE_SECONDS) return;
+    this.autosaveTimer = 0;
+    if (this.saveGame(true)) this.toast('Salvo automaticamente (Autosave).', '#8a9a7a');
   }
 
   update(_time: number, deltaMs: number): void {

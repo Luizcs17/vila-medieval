@@ -2,6 +2,14 @@
 
 Each milestone from `docs/GDD.md` is a minor version.
 
+## 1.21.0: Milestone 31, title screen, save slots, autosave
+
+- The game opens on a **title screen**: "Continuar" (Enter) loads the most recent save, "Novo jogo" starts from nothing, "Carregar jogo" lists every slot (with day, village and date) and can delete them (two clicks).
+- **Ten save slots** plus **Autosave**. In the Esc menu, "Salvar jogo…" picks a slot (overwriting another save asks for a second click), "Carregar jogo…" loads any slot, and "Menu inicial" goes back to the title screen (autosaving first).
+- **Autosave** overwrites only the Autosave slot, every 10 minutes of play and when the page is closed or hidden. It no longer saves at every new day.
+- Your current save (from before slots) becomes the Autosave slot the first time the game opens.
+- "Novo jogo" no longer deletes anything: your slots stay.
+
 ## 1.20.0: Milestone 30, shovel, armour slot, protected land
 
 - New tool **Pá** (Shovel; 3 wood, 1 stone, in the C menu or at the Ferreiro). With it selected, hold E on a stump or a sapling to dig it out: the ground is cleared and the tree never grows back.

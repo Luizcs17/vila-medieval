@@ -3,7 +3,19 @@ import { Buildings } from '../src/game/buildings';
 import { NODE_DEFS, ResourceNodes } from '../src/game/gathering';
 import { generateWanderer, Population } from '../src/game/npcs';
 import { PlayerStats } from '../src/game/player';
-import { clearSave, isSaveData, readSave, SAVE_VERSION, type SaveData, writeSave } from '../src/game/save';
+import {
+  deleteSave,
+  isSaveData,
+  latestSlot,
+  listSlots,
+  migrateLegacySave,
+  readSave,
+  SAVE_KEY,
+  SAVE_VERSION,
+  type SaveData,
+  slotKey,
+  writeSave,
+} from '../src/game/save';
 import { generateMap, Obj } from '../src/world/map';
 
 /** In-memory stand-in for localStorage. */
@@ -44,24 +56,47 @@ describe('save storage', () => {
   it('round-trips through storage', () => {
     const store = memoryStore();
     const data = sampleSave();
-    expect(writeSave(data, store)).toBe(true);
-    expect(readSave(store)).toEqual(data);
-    clearSave(store);
-    expect(readSave(store)).toBeNull();
+    expect(writeSave(data, 'auto', store)).toBe(true);
+    expect(readSave('auto', store)).toEqual(data);
+    deleteSave('auto', store);
+    expect(readSave('auto', store)).toBeNull();
   });
 
   it('ignores corrupt, foreign or outdated saves', () => {
     const store = memoryStore();
-    store.setItem('vila-medieval-save', '{not json');
-    expect(readSave(store)).toBeNull();
+    store.setItem(slotKey('auto'), '{not json');
+    expect(readSave('auto', store)).toBeNull();
     expect(isSaveData({ ...sampleSave(), version: SAVE_VERSION + 1 })).toBe(false);
     expect(isSaveData({ hello: 'world' })).toBe(false);
     expect(isSaveData(null)).toBe(false);
   });
 
   it('works without any storage (private mode)', () => {
-    expect(writeSave(sampleSave(), undefined)).toBe(false);
-    expect(readSave(undefined)).toBeNull();
+    expect(writeSave(sampleSave(), 'auto', undefined)).toBe(false);
+    expect(readSave('auto', undefined)).toBeNull();
+  });
+
+  it('keeps ten slots plus the autosave, and knows the latest', () => {
+    const store = memoryStore();
+    const a = { ...sampleSave(), savedAt: '2026-11-01T10:00:00.000Z' };
+    const b = { ...sampleSave(), savedAt: '2026-11-02T10:00:00.000Z', clock: 480 * 4 };
+    writeSave(a, 'auto', store);
+    writeSave(b, 7, store);
+    const slots = listSlots(480, store);
+    expect(slots).toHaveLength(11);
+    expect(slots.filter((s) => s.info).map((s) => s.slot)).toEqual(['auto', 7]);
+    expect(slots.find((s) => s.slot === 7)?.info?.day).toBe(5);
+    expect(latestSlot(480, store)).toBe(7);
+    deleteSave(7, store);
+    expect(latestSlot(480, store)).toBe('auto');
+  });
+
+  it('turns a save from before slots into the autosave', () => {
+    const store = memoryStore();
+    store.setItem(SAVE_KEY, JSON.stringify(sampleSave()));
+    migrateLegacySave(store);
+    expect(readSave('auto', store)?.clock).toBe(1234);
+    expect(store.getItem(SAVE_KEY)).toBeNull();
   });
 });
 
