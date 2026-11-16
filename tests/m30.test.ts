@@ -47,3 +47,13 @@ describe('the armour slot', () => {
     expect(inv.armor).toBeNull();
   });
 });
+
+describe('quarries and mines', () => {
+  it('work twice as far as before (18 tiles) and can be placed up to 12 tiles from their rock', async () => {
+    const { BUILDING_DEFS } = await import('../src/game/buildings');
+    for (const t of ['quarry', 'mine'] as const) {
+      expect(BUILDING_DEFS[t].job!.radius).toBe(18);
+      expect(BUILDING_DEFS[t].near!.radius).toBe(12);
+    }
+  });
+});
