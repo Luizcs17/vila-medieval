@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { rollLoot } from '../src/game/dungeons';
+import { pickRuinSite, placeRuin, removeRuin, rollLoot } from '../src/game/dungeons';
 import { DUNGEON_COUNT, generateMap, isWalkable, Obj } from '../src/world/map';
 
 describe('dungeons', () => {
@@ -28,5 +28,28 @@ describe('dungeons', () => {
       true,
     );
     expect(l.items.find((i) => i.item === 'iron')!.count).toBeGreaterThanOrEqual(5);
+  });
+});
+
+describe('ruins come and go', () => {
+  it('a looted ruin collapses and a new one is laid on free land far from villages', () => {
+    const map = generateMap();
+    const old = map.dungeons[0];
+    const changed = removeRuin(map, old);
+    expect(changed.length).toBeGreaterThan(5);
+    expect(map.objects[old.y * map.w + old.x]).toBe(Obj.None);
+    let seed = 7;
+    const rng = () => {
+      seed = (seed * 9301 + 49297) % 233280;
+      return seed / 233280;
+    };
+    const away = map.sites.map((s) => ({ x: s.x, y: s.y, r: 24 }));
+    const site = pickRuinSite(map, rng, () => -1, away)!;
+    expect(site).not.toBeNull();
+    for (const s of map.sites) expect(Math.hypot(s.x - site.x, s.y - site.y)).toBeGreaterThanOrEqual(24);
+    placeRuin(map, site, rng);
+    expect(map.objects[site.y * map.w + site.x]).toBe(Obj.Chest);
+    // Claimed land everywhere: nowhere to put it.
+    expect(pickRuinSite(map, rng, () => 1, away)).toBeNull();
   });
 });
